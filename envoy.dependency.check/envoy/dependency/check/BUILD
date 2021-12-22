@@ -1,0 +1,31 @@
+
+pytooling_library(
+    "envoy.dependency.check",
+    dependencies=[
+        "//deps:abstracts",
+        "//deps:aio.functional",
+        "//deps:aio.api.github",
+        "//deps:aio.tasks",
+        "//deps:envoy.base.checker",
+        "//deps:envoy.base.utils",
+        "//deps:jinja2",
+        "//deps:aiohttp",
+        "//deps:packaging",
+    ],
+    sources=[
+        "abstract/__init__.py",
+        "abstract/checker.py",
+        "abstract/cves/__init__.py",
+        "abstract/cves/cpe.py",
+        "abstract/cves/cve.py",
+        "abstract/cves/cves.py",
+        "abstract/cves/version_matcher.py",
+        "abstract/dependency.py",
+        "abstract/issues.py",
+        "abstract/release.py",
+        "checker.py",
+        "cmd.py",
+        "exceptions.py",
+        "typing.py",
+    ],
+)

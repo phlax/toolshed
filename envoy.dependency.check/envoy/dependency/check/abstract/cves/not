@@ -1,0 +1,32 @@
+
+    def parse_cve_json(
+            self,
+            cve_json: "typing.CVEJsonDict",
+            cves: "typing.CVEDict",
+            cpe_revmap: "typing.CPERevmapDict") -> None:
+        """Parse CVE JSON dictionary."""
+        for cve_item in cve_json['CVE_Items']:
+            cve = self.cve_class(cve_item, self.tracked_cpes)
+            if not self.include_cve(cve):
+                continue
+            cves[cve.id] = cve
+            for cve_cpe in cve.cpes:
+                cpe_revmap[cve_cpe.vendor_normalized].add(cve.id)
+
+    async def parse_cve_response(
+            self,
+            download: aiohttp.ClientResponse,
+            cves: "typing.CVEDict",
+            cpe_revmap: "typing.CPERevmapDict") -> None:
+        """Parse async gzipped HTTP response -> JSON."""
+        dl_exceptions = (
+            aiohttp.client_exceptions.ClientPayloadError,
+            gzip.BadGzipFile)
+        try:
+            self.parse_cve_json(
+                json.loads(gzip.decompress(await download.read())),
+                cves,
+                cpe_revmap)
+        except dl_exceptions as e:
+            raise exceptions.CVECheckError(
+                f"Error downloading from {download.url}: {e}")
