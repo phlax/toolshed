@@ -5,6 +5,7 @@ from .checker import (
     BazelChecker,
     Checker,
     CheckerSummary)
+from .decorators import preload
 
 
 __all__ = (
@@ -12,4 +13,5 @@ __all__ = (
     "BaseChecker",
     "BazelChecker",
     "Checker",
-    "CheckerSummary")
+    "CheckerSummary",
+    "preload")
