@@ -45,10 +45,29 @@ class BazelRunError(Exception):
     pass
 
 
+class BaseLogFilter(logging.Filter):
+
+    def __init__(self, app_logger: logging.Logger, *args, **kwargs) -> None:
+        self.app_logger = app_logger
+
+
+class RootLogFilter(BaseLogFilter):
+
+    def filter(self, record) -> bool:
+        return record.name != self.app_logger.name
+
+
+class AppLogFilter(BaseLogFilter):
+
+    def filter(self, record) -> bool:
+        return record.name == self.app_logger.name
+
+
 class BaseRunner:
 
     def __init__(self, *args):
         self._args = args
+        self.setup_logging()
 
     def __call__(self):
         return self.run()
@@ -78,17 +97,41 @@ class BaseRunner:
     @cached_property
     def log(self) -> verboselogs.VerboseLogger:
         """Instantiated logger."""
-        verboselogs.install()
-        logger = logging.getLogger(self.name)
-        logger.setLevel(self.log_level)
+        app_logger = verboselogs.VerboseLogger(self.name)
         coloredlogs.install(
             field_styles=self.log_field_styles,
             level_styles=self.log_level_styles,
             fmt=self.log_fmt,
-            level='DEBUG',
-            logger=logger,
+            level=self.verbosity,
+            logger=app_logger,
             isatty=True)
-        return logger
+        return app_logger
+
+    @cached_property
+    def root_logger(self) -> logging.Logger:
+        """Instantiated logger."""
+        root_logger = logging.getLogger()
+        root_logger.handlers[0].addFilter(AppLogFilter(self.log))
+        root_logger.addHandler(self.root_log_handler)
+        return root_logger
+
+    @cached_property
+    def root_log_handler(self) -> logging.Logger:
+        """Instantiated logger."""
+        root_handler = logging.StreamHandler()
+        root_handler.setLevel(self.log_level)
+        root_handler.addFilter(RootLogFilter(self.log))
+        root_handler.setFormatter(self.root_log_format)
+        return root_handler
+
+    @property
+    def root_log_format(self):
+        return logging.Formatter("%(name)s: %(levelname)s %(message)s")
+
+    def setup_logging(self):
+        logging.basicConfig(level=self.log_level)
+        self.root_logger.setLevel(self.log_level)
+        self.log.setLevel(self.verbosity)
 
     @cached_property
     def log_level(self) -> int:
@@ -134,14 +177,25 @@ class BaseRunner:
                 "decorated with `@runner.cleansup`")
         return tempfile.TemporaryDirectory()
 
+    @cached_property
+    def verbosity(self) -> int:
+        """Log level parsed from args."""
+        return dict(LOG_LEVELS)[self.args.verbosity]
+
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         """Override this method to add custom arguments to the arg parser."""
+        parser.add_argument(
+            "--verbosity",
+            "-v",
+            choices=[level[0] for level in LOG_LEVELS],
+            default="info",
+            help="Application log level")
         parser.add_argument(
             "--log-level",
             "-l",
             choices=[level[0] for level in LOG_LEVELS],
-            default="info",
-            help="Log level to display")
+            default="warn",
+            help="Log level for non-application logs")
 
     @property
     def _missing_cleanup(self) -> bool:
