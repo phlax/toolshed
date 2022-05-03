@@ -290,7 +290,7 @@ class Checker(runner.Runner):
     async def on_checks_begin(self) -> None:
         """Callback hook called before all checks."""
         # Set up preload tasks
-        asyncio.create_task(self.preload())
+        self._preloader = asyncio.create_task(self.preload())
         self._notify_checks()
         self._notify_preload()
 
@@ -387,6 +387,7 @@ class Checker(runner.Runner):
         for check in self.checks_to_run:
             if check not in self.preload_checks:
                 await self.check_queue.put(check)
+        await self._preloader
 
     async def on_preload(self, task: str) -> None:
         """Event fired after each preload task completes."""
@@ -471,8 +472,11 @@ class Checker(runner.Runner):
     async def run(self) -> int:
         await self.begin_checks()
         try:
+            print("RUN Q")
             await self._run_from_queue()
+            print("RUN Q COMPLETE")
         finally:
+            print("FINALLY")
             result = (
                 1
                 if self.exiting
@@ -512,11 +516,14 @@ class Checker(runner.Runner):
         while True:
             if not self.remaining_checks:
                 break
+            print(f"REMAINING: {self.remaining_checks}")
             check = await self.check_queue.get()
+            print(f"RUN: {check}")
             if check is _sentinel:
                 break
             await self._run_check(check)
             self.check_queue.task_done()
+            print(f"TASK COMPLETE: {check}")
             self.completed_checks.add(check)
 
     def _task_should_preload(
