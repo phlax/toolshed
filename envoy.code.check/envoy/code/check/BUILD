@@ -27,6 +27,7 @@ pytooling_library(
         "cmd.py",
         "exceptions.py",
         "interface.py",
+        "protobuf.py",
         "typing.py",
     ],
 )

@@ -28,9 +28,9 @@ from .checker import (
     RuntimeGuardsCheck,
     ShellcheckCheck,
     YapfCheck)
+from .protobuf import Protobuf
 from .cmd import run, main
-from . import checker, interface
-
+from . import checker, interface, protobuf
 
 __all__ = (
     "abstract",

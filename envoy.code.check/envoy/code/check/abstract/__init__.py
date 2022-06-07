@@ -8,6 +8,7 @@ from .checker import ACodeChecker
 from .extensions import AExtensionsCheck
 from .flake8 import AFlake8Check
 from .glint import AGlintCheck
+from .protobuf import AProtobuf
 from .rst import (
     ABackticksCheck,
     APunctuationCheck,
@@ -21,6 +22,7 @@ from . import (
     extensions,
     flake8,
     glint,
+    protobuf,
     shellcheck,
     changelog,
     yapf)
