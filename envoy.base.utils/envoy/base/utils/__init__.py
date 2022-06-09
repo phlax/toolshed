@@ -27,7 +27,7 @@ from .parallel_runner import ParallelRunner
 from .project import Changelog, ChangelogEntry, Changelogs, Project
 from .project_cmd import project_cmd
 from .project_runner import ProjectRunner
-from .protobuf import ProtobufSet, ProtobufValidator
+from .protobuf import ProtobufSet, ProtobufValidator, ProtocProtocol
 from .interface import IProject
 from .data_env import DataEnvironment
 from .data_env_cmd import data_env_cmd
@@ -37,6 +37,7 @@ from .jinja_env_cmd import jinja_env_cmd
 
 __all__ = (
     "async_list",
+    "bazel_worker_cmd",
     "cd_and_return",
     "Changelog",
     "ChangelogEntry",
@@ -67,6 +68,7 @@ __all__ = (
     "project_cmd",
     "ProtobufSet",
     "ProtobufValidator",
+    "ProtocProtocol",
     "typed",
     "untar",
     "TAR_EXTS",

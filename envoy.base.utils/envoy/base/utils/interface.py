@@ -1,19 +1,25 @@
 
 import pathlib
 from typing import (
-    AsyncGenerator, ItemsView, Iterator, KeysView, List,
+    AsyncGenerator, Dict, ItemsView, Iterator, KeysView, List,
     Optional, Set, Tuple, Type, Union, ValuesView)
 
 import aiohttp
-from google.protobuf import descriptor_pool
+from google.protobuf import descriptor_pool, descriptor_pb2
 from packaging import version as _version
 
 import abstracts
 
-from aio.api import github as _github
+from aio.api import bazel, github as _github
 from aio.core import directory as _directory, event
 
 from envoy.base.utils import typing
+
+
+class IProtocProtocol(
+        bazel.IBazelProcessProtocol,
+        metaclass=abstracts.Interface):
+    pass
 
 
 class IProtobufSet(metaclass=abstracts.Interface):
@@ -25,6 +31,11 @@ class IProtobufSet(metaclass=abstracts.Interface):
     @property  # type:ignore
     @abstracts.interfacemethod
     def descriptor_pool(self) -> descriptor_pool.DescriptorPool:
+        raise NotImplementedError
+
+    @property  # type:ignore
+    @abstracts.interfacemethod
+    def source_files(self) -> Dict[str, descriptor_pb2.FileDescriptorProto]:
         raise NotImplementedError
 
 
