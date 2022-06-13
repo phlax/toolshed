@@ -29,6 +29,8 @@ pypi: https://pypi.org/project/aio.api.bazel
 ##### requirements:
 
 - [abstracts](https://pypi.org/project/abstracts) >=0.0.12
+- [aio.core](https://pypi.org/project/aio.core) >=0.8.7
+- [aio.run.runner](https://pypi.org/project/aio.run.runner) >=0.3.3
 
 ---
 
