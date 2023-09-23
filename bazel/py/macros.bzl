@@ -50,10 +50,10 @@ def entry_point(
 
     py_binary(
         name = name,
-        srcs = [entry_point_wrapper, actual_entry_point],
+        srcs = [entry_point_wrapper],
         main = entry_point_py,
         args = (args or []),
         data = (data or []),
-        deps = (deps or []),
+        deps = (deps or []) + [actual_entry_point],
         visibility = (visibility or []),
     )
