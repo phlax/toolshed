@@ -61,6 +61,8 @@ def static_website(
         && if [ -e theme/css/extra ]; then cp -a theme/css/extra/* theme/css; fi \
         && if [ -e theme/images/extra ]; then cp -a theme/images/extra/* theme/images; fi \
         && if [ -e theme/templates/extra ]; then cp -a theme/templates/extra/* theme/templates; fi \
+        && mkdir -p theme/css theme/images theme/js theme/static \
+        && mv theme/css theme/images theme/js theme/static \
         && $(location %s) %s \
         && tar cfh $@ --exclude=external -C %s .
         """ % (expand, generator, content_path, output_path),
