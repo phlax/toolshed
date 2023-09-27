@@ -59,9 +59,9 @@ def static_website(
         cmd = """
         %s \
         && mkdir -p theme/static/css theme/static/images theme/static/js \
-        && if [ -e theme/css ]; then cp -a theme/css/extra/* theme/static/css; fi \
-        && if [ -e theme/hs ]; then cp -a theme/css/extra/* theme/static/js; fi \
-        && if [ -e theme/images ]; then cp -a theme/images/extra/* theme/static/images; fi \
+        && if [ -e theme/css ]; then cp -a theme/css/* theme/static/css; fi \
+        && if [ -e theme/js ]; then cp -a theme/js/* theme/static/js; fi \
+        && if [ -e theme/images ]; then cp -a theme/images/* theme/static/images; fi \
         && if [ -e theme/templates/extra ]; then cp -a theme/templates/extra/* theme/templates; fi \
         && $(location %s) %s \
         && tar cfh $@ --exclude=external -C %s .
