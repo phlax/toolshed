@@ -58,6 +58,9 @@ def static_website(
         name = name_website,
         cmd = """
         %s \
+        && if [ -e theme/css/extra ]; then cp -a theme/css/extra/* theme/css; fi \
+        && if [ -e theme/images/extra ]; then cp -a theme/images/extra/* theme/images; fi \
+        && if [ -e theme/templates/extra ]; then cp -a theme/templates/extra/* theme/templates; fi \
         && $(location %s) %s \
         && tar cfh $@ --exclude=external -C %s .
         """ % (expand, generator, content_path, output_path),
@@ -78,4 +81,48 @@ def static_website(
     native.alias(
         name = name,
         actual = name_html,
+    )
+
+def website_theme(
+        name,
+        css = "@envoy_toolshed//website/theme/css",
+        css_extra = None,
+        home = "@envoy_toolshed//website/theme:home",
+        images = "@envoy_toolshed//website/theme/images",
+        images_extra = None,
+        js = None,
+        templates = "@envoy_toolshed//website/theme/templates",
+        templates_extra = None,
+        visibility = ["//visibility:public"],
+):
+
+    name_home = "home_%s" % name
+    sources = [
+        css,
+        templates,
+    ]
+    if templates_extra:
+        sources += [templates_extra]
+    if css_extra:
+        sources += [css_extra]
+    if js:
+        sources += [js]
+    if images:
+        sources += [images]
+        if images_extra:
+            sources += [images_extra]
+
+    pkg_files(
+        name = name_home,
+        srcs = [home],
+        strip_prefix = "",
+        prefix = "theme/templates",
+    )
+
+    sources += [":%s" % name_home]
+
+    pkg_filegroup(
+        name = name,
+        srcs = sources,
+        visibility = visibility,
     )
