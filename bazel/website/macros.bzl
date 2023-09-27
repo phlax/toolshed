@@ -58,11 +58,11 @@ def static_website(
         name = name_website,
         cmd = """
         %s \
-        && if [ -e theme/css/extra ]; then cp -a theme/css/extra/* theme/css; fi \
-        && if [ -e theme/images/extra ]; then cp -a theme/images/extra/* theme/images; fi \
+        && mkdir -p theme/static/css theme/static/images theme/static/js \
+        && if [ -e theme/css ]; then cp -a theme/css/extra/* theme/static/css; fi \
+        && if [ -e theme/hs ]; then cp -a theme/css/extra/* theme/static/js; fi \
+        && if [ -e theme/images ]; then cp -a theme/images/extra/* theme/static/images; fi \
         && if [ -e theme/templates/extra ]; then cp -a theme/templates/extra/* theme/templates; fi \
-        && mkdir -p theme/css theme/images theme/js theme/static \
-        && mv theme/css theme/images theme/js theme/static \
         && $(location %s) %s \
         && tar cfh $@ --exclude=external -C %s .
         """ % (expand, generator, content_path, output_path),
