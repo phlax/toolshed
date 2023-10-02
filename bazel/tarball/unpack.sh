@@ -6,7 +6,7 @@ ZSTD="${ZSTD:-}"
 TARGET="${TARGET:-}"
 EXTRACT_PATH="$1"
 
-if [[ -z "$TARGET" ]]; then
+if [[ -z "$TARGET" || "$TARGET" == *NULL ]]; then
     echo "TARGET must be provided using a bazel flag." >&2
     exit 1
 fi
