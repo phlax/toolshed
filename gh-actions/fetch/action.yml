@@ -14,6 +14,7 @@ runs:
   using: "composite"
   steps:
   - run: |
+      URL="${URL%"${URL##*[![:space:]]}"}"
       if [[ -n "${{ inputs.path }}" ]]; then
           path="${{ inputs.path }}"
       else
@@ -21,9 +22,11 @@ runs:
       fi
       mkdir -p "$path"
       cd "$path"
-      curl -sLO "${{ inputs.url }}"
-      filepath="$(realpath "$(basename "${{ inputs.url }}")")"
+      curl -sLO "${URL}"
+      filepath="$(realpath "$(basename "${URL}")")"
       echo "path=${filepath}" >> $GITHUB_OUTPUT
       cd -
     shell: bash
     id: fetch
+    env:
+      URL: ${{ inputs.fetch }}
