@@ -14,7 +14,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/fetch@b154d9853a2037968e5eadd431ef3c60df2b8997
+  - uses: envoyproxy/toolshed/gh-actions/fetch@3d09e56314f6279a6a9c0c33ba8b4625568ffe63
     id: fetch
     with:
       url: ${{ inputs.url }}
@@ -22,4 +22,5 @@ runs:
       echo "Copy oci image: oci-archive:${{ steps.fetch.outputs.path }} docker-daemon:${{ inputs.image }}:${{ inputs.variant }}"
       skopeo copy -q "oci-archive:${{ steps.fetch.outputs.path }}" "docker-daemon:${{ inputs.image }}:${{ inputs.variant }}"
       rm ${{ steps.fetch.outputs.path }}
+    name: Load image
     shell: bash

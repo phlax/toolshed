@@ -27,6 +27,7 @@ runs:
       echo "path=${filepath}" >> $GITHUB_OUTPUT
       cd -
     shell: bash
+    name: Fetch
     id: fetch
     env:
       URL: ${{ inputs.fetch }}
