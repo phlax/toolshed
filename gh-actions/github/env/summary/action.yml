@@ -8,6 +8,9 @@ inputs:
   env-filter:
     type: string
     required: true
+  env-format:
+    type: string
+    required: true
   icon:
     type: string
     required: true
@@ -77,12 +80,18 @@ runs:
         </details>
 
     name: Summary
+
+  - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.36
+    id: env
+    with:
+      input: ${{ inputs.env }}
+      input-format: ${{ inputs.env-format }}
+      filter: ${{ inputs.env-filter }}
   - uses: envoyproxy/toolshed/gh-actions/json/table@actions-v0.1.36
     name: Environment summary
     id: table
     with:
-      json: ${{ inputs.env }}
-      filter: ${{ inputs.env-filter }}
+      json: ${{ steps.env.outputs.value }}
       title: Environment
       summary: Request variables
       collapse: true
