@@ -83,16 +83,16 @@ runs:
   steps:
   - if: ${{ fromJSON(inputs.diskspace-hack) }}
     name: Free diskspace
-    uses: envoyproxy/toolshed/gh-actions/diskspace@7c6f00639891aeb5373f565570bc57b5857677e5
+    uses: envoyproxy/toolshed/gh-actions/diskspace@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     with:
       to_remove: ${{ inputs.diskskpack-hack-paths }}
-  - uses: envoyproxy/toolshed/gh-actions/using/steps@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/using/steps@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Pre report
     if: ${{ inputs.report-pre }}
     with:
       steps: ${{ inputs.report-pre }}
       context: ${{ inputs.context }}
-  - uses: envoyproxy/toolshed/gh-actions/using/steps@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/using/steps@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Run pre steps
     if: ${{ inputs.steps-pre }}
     with:
@@ -140,7 +140,7 @@ runs:
       SOURCETMP: ${{ steps.source.outputs.file }}
     shell: bash
 
-  - uses: envoyproxy/toolshed/gh-actions/date@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/date@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     id: started
 
   - run: |
@@ -165,7 +165,7 @@ runs:
       COMMAND: ${{ steps.command.outputs.command }}
       SOURCETMP: ${{ steps.source.outputs.file }}
       TARGET_PATH: ${{ inputs.working-directory }}
-  - uses: envoyproxy/toolshed/gh-actions/date@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/date@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     id: completed
 
   - run: |
@@ -207,7 +207,7 @@ runs:
     env:
       TMP_STDERR: ${{ steps.run.outputs.stderr-path }}
 
-  - uses: envoyproxy/toolshed/gh-actions/jq@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/jq@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Generate run context
     id: context
     with:
@@ -218,14 +218,14 @@ runs:
         | {"run": .,
            "context": ${{ inputs.context }}}
 
-  - uses: envoyproxy/toolshed/gh-actions/using/steps@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/using/steps@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Run post steps
     if: ${{ inputs.steps-post }}
     with:
       name: ${{ inputs.steps-post-name }}
       steps: ${{ inputs.steps-post }}
       context: ${{ steps.context.outputs.value }}
-  - uses: envoyproxy/toolshed/gh-actions/using/steps@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/using/steps@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Post report
     if: ${{ inputs.report-post }}
     with:
@@ -237,7 +237,7 @@ runs:
     with:
       name: ${{ inputs.upload-name }}
       path: ${{ inputs.upload-path }}
-  - uses: envoyproxy/toolshed/gh-actions/using/steps@7c6f00639891aeb5373f565570bc57b5857677e5
+  - uses: envoyproxy/toolshed/gh-actions/using/steps@cfaf6a173b90962b5d9bc3c1abbe4a4b62f3eff0
     name: Job summary
     if: ${{ inputs.summary-post }}
     with:
