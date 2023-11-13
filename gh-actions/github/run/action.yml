@@ -134,7 +134,7 @@ runs:
       if [[ -e "$SOURCETMP" ]]; then
           cat $SOURCETMP
       fi
-    if: ${{ env.CI_DEBUG || env.RUNNER_DEBUG }}
+    # if: ${{ env.CI_DEBUG || env.RUNNER_DEBUG }}
     env:
       COMMAND: ${{ steps.command.outputs.command }}
       SOURCETMP: ${{ steps.source.outputs.file }}
