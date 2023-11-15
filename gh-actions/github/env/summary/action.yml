@@ -67,8 +67,21 @@ runs:
       sanitize-input: false
       filter: >-
         . as $message
-        | {"title": ($message | split("\n")[0]),
-           "body": ($message | "  > " + (split("\n")[1:] | join("\n  > ")))}
+        | ($message | split("\n")[0]) as $title
+        | ($message | "  > " + (split("\n")[1:] | join("\n  > ")))
+        | . as $input
+        | "☠❂⚓" as $seed
+        | "☠☠☠" as $marker
+        | ["%", "\\$"] as $replacements
+        | $replacements
+        | reduce .[] as $replacement ("";
+            (if (. == "") then $input else . end) as $string
+            | select($replacement != "")
+            | "\($marker)\($seed + $replacement + "{{" | @base64)\($marker)" as $placeholder
+            | ($placeholder | debug)
+            | $string
+            | gsub($placeholder; $replacement + "{{"))
+        | {"title": $title, "body": .}
 
   - uses: envoyproxy/toolshed/gh-actions/github/env/title@actions-v0.1.46
     id: title
