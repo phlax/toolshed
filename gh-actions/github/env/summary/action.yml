@@ -16,7 +16,7 @@ inputs:
   indent:
     type: number
     default: 0
-  inflate:
+  desanitize:
     type: boolean
     default: true
   link:
@@ -63,8 +63,8 @@ runs:
       length: 7
   - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.46
     name: Change
-    id: change-inflated
-    if: ${{ inputs.inflate }}
+    id: change-desanitized
+    if: ${{ fromJSON(inputs.desanitize) }}
     with:
       input: ${{ inputs.message }}
       options: -Rs
@@ -89,7 +89,7 @@ runs:
   - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.46
     name: Change
     id: change-raw
-    if: ${{ !inputs.inflate }}
+    if: ${{ ! fromJSON(inputs.desanitize) }}
     with:
       input: ${{ inputs.message }}
       options: -Rs
@@ -104,7 +104,7 @@ runs:
     name: Change
     id: change
     with:
-      input: ${{ steps.change-inflated.outputs.value || steps.change-raw.outputs.value }}
+      input: ${{ steps.change-desanitized.outputs.value || steps.change-raw.outputs.value }}
 
 
   - uses: envoyproxy/toolshed/gh-actions/github/env/title@actions-v0.1.46
