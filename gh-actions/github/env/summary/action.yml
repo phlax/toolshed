@@ -16,6 +16,9 @@ inputs:
   indent:
     type: number
     default: 0
+  inflate:
+    type: boolean
+    default: true
   link:
     type: string
     required: false
@@ -60,7 +63,8 @@ runs:
       length: 7
   - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.46
     name: Change
-    id: change
+    id: change-inflated
+    if: ${{ inputs.inflate }}
     with:
       input: ${{ inputs.message }}
       options: -Rs
@@ -82,6 +86,26 @@ runs:
             | $string
             | gsub($placeholder; $replacement + "{{"))
         | {"title": $title, "body": .}
+  - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.46
+    name: Change
+    id: change-raw
+    if: ${{ !inputs.inflate }}
+    with:
+      input: ${{ inputs.message }}
+      options: -Rs
+      sanitize-input: false
+      filter: >-
+        . as $message
+        | ($message | split("\n")[0]) as $title
+        | ($message | "  > " + (split("\n")[1:] | join("\n  > ")))
+        | {"title": $title, "body": .}
+
+  - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.46
+    name: Change
+    id: change
+    with:
+      input: ${{ steps.change-inflated.outputs.value || steps.change-raw.outputs.value }}
+
 
   - uses: envoyproxy/toolshed/gh-actions/github/env/title@actions-v0.1.46
     id: title
