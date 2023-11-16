@@ -24,6 +24,12 @@ outputs:
 runs:
   using: composite
   steps:
+  - id: context
+    if: ${{ ! fromJSON(inputs.isolated) }}
+    uses: envoyproxy/toolshed/gh-actions/str/sanitize@actions-v0.1.48
+    with:
+      string: ${{ inputs.context }}
+
   - id: create-steps
     shell: bash
     # This allows latebinding using `%{{ }}`
@@ -48,7 +54,7 @@ runs:
     uses: ./.tmp.action
     id: steps
     with:
-      context: ${{ !fromJSON(inputs.isolated) && inputs.context || '' }}
+      context: ${{ steps.context.outputs.string }}
       secret: ${{ !fromJSON(inputs.isolated) && inputs.secret || '' }}
   - name: Cleanup (.tmp.action)
     if: always()
