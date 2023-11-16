@@ -123,11 +123,18 @@ runs:
         </details>
 
     name: Summary
+
+  - uses: envoyproxy/toolshed/gh-actions/str/desanitize@actions-v0.1.48
+    name: Environment
+    id: env-desanitized
+    if: ${{ fromJSON(inputs.desanitize) }}
+    with:
+      string: ${{ inputs.env }}
   - uses: envoyproxy/toolshed/gh-actions/json/table@actions-v0.1.48
     name: Environment summary
     id: table
     with:
-      json: ${{ inputs.env }}
+      json: ${{ steps.env-desanitized.outputs.string || inputs.env }}
       filter: ${{ inputs.env-filter }}
       title: Environment
       summary: Request
