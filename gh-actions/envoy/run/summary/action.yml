@@ -96,7 +96,7 @@ runs:
   using: composite
   steps:
   - uses: envoyproxy/toolshed/gh-actions/jq@actions-v0.1.64
-    if: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
+    # if: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
     with:
       input: ${{ inputs.context }}
       print-result: true
