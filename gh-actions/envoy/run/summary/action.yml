@@ -165,7 +165,7 @@ runs:
           else
             gfm::fence("yaml") as $stepsPreCode
             | "${{ inputs.template-steps-pre }}"
-            | {title: "Pre-steps", content: .}
+            | {title: "Pre-steps", content: ., indent: 0}
             | gfm::collapse
           end
         | . as $stepsPre
@@ -175,7 +175,7 @@ runs:
           else
             gfm::fence("yaml") as $stepsPostCode
             | "${{ inputs.template-steps-post }}"
-            | {title: "Post-steps", content: .}
+            | {title: "Post-steps", content: ., indent: 0}
             | gfm::collapse
           end
         | . as $stepsPost
