@@ -126,7 +126,6 @@ runs:
       input: ${{ inputs.context }}
       options: -r
       output-path: GITHUB_STEP_SUMMARY
-      print-output: true
       # ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
       filter: |
         .context as $context
