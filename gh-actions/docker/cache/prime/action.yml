@@ -22,20 +22,20 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/appauth@5ff99e250807ec3b28f1adc1abeb04e283bed25d
+  - uses: envoyproxy/toolshed/gh-actions/appauth@e28dbe87945a9475411dee9144548008e8b6d4b4
     if: ${{ inputs.lock-app-id && inputs.lock-app-key }}
     name: Fetch app auth
     id: appauth
     with:
       app_id: ${{ inputs.lock-app-id }}
       key: ${{ inputs.lock-app-key }}
-  - uses: envoyproxy/toolshed/gh-actions/github/mutex@5ff99e250807ec3b28f1adc1abeb04e283bed25d
+  - uses: envoyproxy/toolshed/gh-actions/github/mutex@e28dbe87945a9475411dee9144548008e8b6d4b4
     if: ${{ steps.appauth.outputs.token || inputs.lock-token }}
     with:
       key: ${{ inputs.lock-id || inputs.image_tag }}
       repository: ${{ inputs.lock-repository }}
       token: ${{ steps.appauth.outputs.token || inputs.lock-token }}
-  - uses: envoyproxy/toolshed/gh-actions/cache/prime@5ff99e250807ec3b28f1adc1abeb04e283bed25d
+  - uses: envoyproxy/toolshed/gh-actions/cache/prime@e28dbe87945a9475411dee9144548008e8b6d4b4
     id: prime
     with:
       key: "${{ inputs.image_tag }}"
