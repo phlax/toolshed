@@ -160,7 +160,7 @@ runs:
         | .warning as $warning
         | .advice as $advice
         | $run["steps-pre"]
-        | if (. | type == "null") or (. == "") then
+        | if (. | type == "null") or (. == "") or (. == "\"\"") then
             ""
           else
             gfm::fence("yaml") as $stepsPreCode
@@ -170,7 +170,7 @@ runs:
           end
         | . as $stepsPre
         | $run["steps-post"]
-        | if (. | type == "null") or (. == "") then
+        | if (. | type == "null") or (. == "") or (. == "\"\"") then
             ""
           else
             gfm::fence("yaml") as $stepsPostCode
