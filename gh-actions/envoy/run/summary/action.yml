@@ -159,7 +159,7 @@ runs:
         | .conclusion as $conclusion
         | .warning as $warning
         | .advice as $advice
-        | $context["steps-pre"]
+        | $run["steps-pre"]
         | if (. | type == "null") or (. == "") then
             ""
           else
@@ -169,7 +169,7 @@ runs:
             | gfm::collapse
           end
         | . as $stepsPre
-        | $context["steps-post"]
+        | $run["steps-post"]
         | if (. | type == "null") or (. == "") then
             ""
           else
