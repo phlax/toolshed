@@ -329,6 +329,6 @@ runs:
         {"request": ${{ steps.pr-request.outputs.value || steps.push-request.outputs.value }},
          "run": ${{ steps.run.outputs.value }},
          "ci": {"agent-ubuntu": "${{ fromJSON(steps.config.outputs.value).agent-ubuntu }}"},
-         "checks": ${{ steps.checks-config.outputs.output }},
+         "checks": ${{ steps.checks-config.outputs.value }},
          "config": ${{ steps.config.outputs.value }}}
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
