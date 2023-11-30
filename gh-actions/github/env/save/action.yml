@@ -15,7 +15,7 @@ inputs:
 runs:
   using: composite
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/jq@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
+  - uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     name: Check proxy data
     id: env
     with:
@@ -23,7 +23,7 @@ runs:
         ${{ inputs.env }}
       input-format: ${{ inputs.env-format }}
       filter: ${{ inputs.env-filter || '.' }}
-  - uses: envoyproxy/toolshed/gh-actions/jq@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
+  - uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     name: Print check proxy data
     with:
       input: ${{ steps.env.outputs.value }}

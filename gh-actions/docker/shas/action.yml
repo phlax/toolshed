@@ -12,18 +12,18 @@ outputs:
 runs:
   using: composite
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/jq@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
+  - uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     id: yaml
     with:
       input: ${{ inputs.images }}
       input-format: yaml
-  - uses: envoyproxy/toolshed/gh-actions/jq@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
+  - uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     id: json_actions
     with:
       input: ${{ steps.yaml.outputs.json }}
       filter: |
         {runs: {using: "composite", steps: [to_entries[] | {
-          uses: "envoyproxy/toolshed/gh-actions/docker/sha@6f49ec4ef53ce7b22e076c6cae5f4742752ef040",
+          uses: "envoyproxy/toolshed/gh-actions/docker/sha@bc3a1413c467db0ef869a5b5adc7376379a558fb",
           id: .key,
           with: {
             image: .value,
