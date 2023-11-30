@@ -7,9 +7,6 @@ inputs:
   filter:
     type: string
     default: .
-  filter:
-    type: string
-    default: .
 
 outputs:
   exit-code:
