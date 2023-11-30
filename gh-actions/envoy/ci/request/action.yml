@@ -111,7 +111,7 @@ runs:
     with:
       input: "{}"
       filter: |
-        ${{ steps.merge-commit.outputs.sha || 'HEAD^1' }} as $them
+        "${{ steps.merge-commit.outputs.sha || 'HEAD^1' }}" as $them
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
         | "${{ inputs.template-script-diff }}"
         | split("\n")
