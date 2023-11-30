@@ -84,7 +84,7 @@ runs:
     with:
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
       input-format: yaml
-      input: ${{ steps.config-current-text.outputs.out }}
+      input: ${{ steps.config-current-text.outputs.output }}
   - uses: envoyproxy/toolshed/gh-actions/github/merge-commit@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     id: merge-commit
     if: ${{ startswith(github.event_name, 'pull_request') }}
