@@ -76,7 +76,7 @@ runs:
       filter: |
         "${{ inputs.config-file }}" as $filename
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
-        | "${{ inputs.template-script-diff }}"
+        | "${{ inputs.template-ref-file }}"
 
   - uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     name: Current config
