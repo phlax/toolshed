@@ -12,6 +12,15 @@ inputs:
     type: string
     default: |
       trigger-release-envoy[bot]
+  template-script-diff:
+    type: string
+    default: >-
+      git
+      diff
+      --name-only
+      \($them)
+      \($branch)
+
   vars:
     type: string
     required: true
@@ -58,7 +67,6 @@ runs:
       filter: |
         sub("^refs/pull/"; "")
         | sub("^refs/heads/"; "")
-
   - uses: envoyproxy/toolshed/gh-actions/shout@bc3a1413c467db0ef869a5b5adc7376379a558fb
     id: config-current-text
     with:
@@ -80,7 +88,6 @@ runs:
       repository: ${{ github.repository }}
       pr: ${{ github.event.number }}
       token: ${{ inputs.token }}
-
   ## WARNING: THIS IS A REQUEST ATTACK VECTOR
   - id: commit-message
     name: Get commit message from the github context
@@ -90,7 +97,6 @@ runs:
         ${{ toJSON(github.event) }}
       filter: |
         .head_commit.message // .pull_request.title + "\n" + .pull_request.body
-
   - uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     name: Validate given version string
     id: version-string
@@ -100,24 +106,14 @@ runs:
       input: VERSION.txt
       filter: |
         validate::version
-
-  - uses: envoyproxy/toolshed/gh-actions/shout@bc3a1413c467db0ef869a5b5adc7376379a558fb
-    id: diff
+  - uses: envoyproxy/toolshed/gh-actions/bson@bc3a1413c467db0ef869a5b5adc7376379a558fb
+    id: changed
     with:
-      sh: >-
-        git
-        diff
-        --name-only
-        ${{ steps.merge-commit.outputs.sha || 'HEAD^1' }}
-        origin/${{ steps.ref-name.outputs.value }}
-  - id: changed
-    uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
-    with:
-      options: -Rsc
-      input-format: text
-      input: ${{ steps.diff.outputs.out }}
       filter: |
-        split("\n")
+        ${{ steps.merge-commit.outputs.sha || 'HEAD^1' }} as $them
+        | "origin/${{ steps.ref-name.outputs.value }}" as $branch
+        | "${{ inputs.template-script-diff }}"
+        | split("\n")
   - id: version
     uses: envoyproxy/toolshed/gh-actions/jq@bc3a1413c467db0ef869a5b5adc7376379a558fb
     with:
