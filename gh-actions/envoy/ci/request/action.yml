@@ -70,13 +70,14 @@ runs:
         sub("^refs/pull/"; "")
         | sub("^refs/heads/"; "")
   - uses: envoyproxy/toolshed/gh-actions/bson@ced9da8529d19e8a4f687e94eaabc2a6130d987e
-    id: config
+    id: config-current-text
     with:
       input: "{}"
       filter: |
         "${{ inputs.config-file }}" as $filename
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
         | "${{ inputs.template-script-diff }}"
+
   - uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     name: Current config
     id: config
@@ -163,8 +164,8 @@ runs:
     with:
       input-format: yaml
       input: |
-        default: ${{ fromJSON(steps.config.outputs.output).build-image.repo }}:${{ fromJSON(steps.config.outputs.output).build-image.tag }}@sha256:${{ fromJSON(steps.config.outputs.value).build-image.sha }}
-        mobile: ${{ fromJSON(steps.config.outputs.output).build-image.repo }}:mobile-${{ fromJSON(steps.config.outputs.output).build-image.tag }}@sha256:${{ fromJSON(steps.config.outputs.output).build-image.mobile-sha }}
+        default: ${{ fromJSON(steps.config.outputs.value).build-image.repo }}:${{ fromJSON(steps.config.outputs.value).build-image.tag }}@sha256:${{ fromJSON(steps.config.outputs.value).build-image.sha }}
+        mobile: ${{ fromJSON(steps.config.outputs.value).build-image.repo }}:mobile-${{ fromJSON(steps.config.outputs.value).build-image.tag }}@sha256:${{ fromJSON(steps.config.outputs.value).build-image.mobile-sha }}
 
   - id: requested-build-images
     uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
@@ -222,7 +223,7 @@ runs:
     uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     with:
       input-format: yaml
-      input: ${{ toJSON(fromJSON(steps.config.outputs.output).run) }}
+      input: ${{ toJSON(fromJSON(steps.config.outputs.value).run) }}
   - uses: envoyproxy/toolshed/gh-actions/torun@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     id: torun
     with:
@@ -292,7 +293,7 @@ runs:
     id: checks-config
     with:
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
-      input: ${{ steps.config.outputs.output }}
+      input: ${{ steps.config.outputs.value }}
       filter: >-
         .checks as $checks
         | ${{ steps.run.outputs.value }} as $run
@@ -322,7 +323,7 @@ runs:
       input: |
         {"request": ${{ steps.pr-request.outputs.value || steps.push-request.outputs.value }},
          "run": ${{ steps.run.outputs.value }},
-         "ci": {"agent-ubuntu": "${{ fromJSON(steps.config.outputs.output).agent-ubuntu }}"},
+         "ci": {"agent-ubuntu": "${{ fromJSON(steps.config.outputs.value).agent-ubuntu }}"},
          "checks": ${{ steps.checks-config.outputs.output }},
-         "config": ${{ steps.config.outputs.output }}}
+         "config": ${{ steps.config.outputs.value }}}
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
