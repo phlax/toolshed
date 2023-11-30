@@ -21,14 +21,14 @@ runs:
   using: composite
   steps:
   - name: Print checks
-    uses: envoyproxy/toolshed/gh-actions/jq@30d0d11af4a5afc366097dfa4c239fd09913f469
+    uses: envoyproxy/toolshed/gh-actions/jq@fdd652c14d10afbc4a7acb5486d67622daef3499
     if: ${{ fromJSON(env.CI_DEBUG || 'false') || fromJSON(env.RUNNER_DEBUG || 'false') }}
     with:
       input: ${{ inputs.checks }}
       input-format: text
       options: -C
       print-result: true
-  - uses: envoyproxy/toolshed/gh-actions/appauth@30d0d11af4a5afc366097dfa4c239fd09913f469
+  - uses: envoyproxy/toolshed/gh-actions/appauth@fdd652c14d10afbc4a7acb5486d67622daef3499
     name: App auth
     if: ${{ inputs.app-id && inputs.app-key }}
     id: appauth
@@ -54,12 +54,12 @@ runs:
       GH_TOKEN: ${{ steps.appauth.outputs.token || inputs.token }}
       CHECKS: ${{ inputs.checks }}
 
-  - uses: envoyproxy/toolshed/gh-actions/jq@30d0d11af4a5afc366097dfa4c239fd09913f469
+  - uses: envoyproxy/toolshed/gh-actions/jq@fdd652c14d10afbc4a7acb5486d67622daef3499
     name: Started
     id: started
     with:
       input: ${{ toJSON(steps.start-checks.outputs) }}
-  - uses: envoyproxy/toolshed/gh-actions/jq@30d0d11af4a5afc366097dfa4c239fd09913f469
+  - uses: envoyproxy/toolshed/gh-actions/jq@fdd652c14d10afbc4a7acb5486d67622daef3499
     name: Checks
     id: checks
     with:
