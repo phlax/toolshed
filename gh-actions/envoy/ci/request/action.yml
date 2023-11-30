@@ -17,13 +17,17 @@ inputs:
     default: |
       # fetch \($branch):\($filename)
       RESPONSE=\"$(git show \($branch):\($filename))\"
-      printf 'output=%s\n' \"$RESPONSE\" >> $GITHUB_OUTPUT
+      echo "out<<EOF" >> $GITHUB_OUTPUT
+      printf "%s\n" "${OUTPUT}" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
   template-script-diff:
     type: string
     default: |
       # git diff changes from \($them)
-      RESPONSE=\"$(git diff --name-only \($them) \($branch))\"
-      printf 'output=%s\n' \"$RESPONSE\" >> $GITHUB_OUTPUT
+      OUTPUT=\"$(git diff --name-only \($them) \($branch))\"
+      echo "out<<EOF" >> $GITHUB_OUTPUT
+      printf "%s\n" "${OUTPUT}" >> $GITHUB_OUTPUT
+      echo "EOF" >> $GITHUB_OUTPUT
   vars:
     type: string
     required: true
