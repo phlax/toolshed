@@ -16,13 +16,14 @@ inputs:
     type: string
     default: |
       # fetch \($branch):\($filename)
-      git show \($branch):\($filename)
+      RESPONSE=\"$(git show \($branch):\($filename))\"
+      echo \"output=$RESPONSE\" >> $GITHUB_OUTPUT
   template-script-diff:
     type: string
     default: |
       # git diff changes from \($them)
-      git diff --name-only \($them) \($branch)
-
+      RESPONSE=\"$(git diff --name-only \($them) \($branch))\"
+      echo \"output=$RESPONSE\" >> $GITHUB_OUTPUT
   vars:
     type: string
     required: true
