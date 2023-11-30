@@ -159,7 +159,7 @@ runs:
     with:
       options: -Rsc
       filter: |
-        "${{ steps.version-current-string.outputs.out }}"
+        "${{ steps.version-current-string.outputs.output }}"
         | endswith("-dev") as $isdev
         | split(".")
         | {major: (.[0] | fromjson),
