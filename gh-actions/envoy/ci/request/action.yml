@@ -234,7 +234,7 @@ runs:
     with:
       branch: ${{ steps.ref-name.outputs.value }}
       event: ${{ github.event_name }}
-      config: ${{ steps.run-config.outputs.output }}
+      config: ${{ steps.run-config.outputs.value }}
       paths: ${{ startswith(github.event_name, 'pull_request') && steps.changed.outputs.value || '[]' }}
 
   # CI is only enabled if its the Envoy repo or specifically enabled in config
