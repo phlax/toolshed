@@ -31,6 +31,9 @@ inputs:
   vars:
     type: string
     required: true
+  version-file:
+    type: string
+    default: VERSION.txt
 
 outputs:
   data:
@@ -129,7 +132,6 @@ runs:
       input: ${{ steps.diff.outputs.value }}
       filter: |
         split("\n")
-
   - id: version
     uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     with:
@@ -144,13 +146,14 @@ runs:
            patch: (.[2] | rtrimstr("-dev") | fromjson),
            "dev": $isdev,
            "changed": $changed}
-  - uses: envoyproxy/toolshed/gh-actions/shout@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+  - uses: envoyproxy/toolshed/gh-actions/bson@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     id: version-current-string
     with:
-      sh: >-
-        git
-        show
-        origin/${{ steps.ref-name.outputs.value }}:VERSION.txt
+      input: "{}"
+      filter: |
+        "${{ inputs.version-file }}" as $filename
+        | "origin/${{ steps.ref-name.outputs.value }}" as $branch
+        | "${{ inputs.template-script-ref-file }}"
   - id: version-current
     uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     with:
