@@ -184,8 +184,8 @@ runs:
       filter: |
         .["build-image"].repo as $repo
         | (.["build-image"].tag | validate::sha(40)) as $tag
-        | (.["build-image"].sha | . as $r | test("^[0-9a-fA-F]{64}$") or error("sha is not 64-char sha") | $r) as $sha
-        | (.["build-image"]["mobile-sha"] | . as $r | test("^[0-9a-fA-F]{64}$") or error("mobile-sha is not 64-char sha") | $r) as $mobileSha
+        | (.["build-image"].sha | validate::sha(64)) as $sha
+        | (.["build-image"]["mobile-sha"] | validate::sha(64)) as $mobileSha
         | {"build-image": "\($repo):\($tag)@sha256:\($sha)",
            "build-image-mobile": "\($repo):mobile-\($tag)@sha256:\($mobileSha)"}
 
