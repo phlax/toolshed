@@ -16,7 +16,7 @@ runs:
   steps:
   - name: Download environment data
     id: download
-    uses: envoyproxy/toolshed/gh-actions/github/artifact/download@a0c75182670d732c1dabc21e19571df9a3560820
+    uses: envoyproxy/toolshed/gh-actions/github/artifact/download@c1f2adfdd7f45e07061db52c669cefb40c75b02e
     with:
       name: env
       path: ${{ runner.temp }}
@@ -27,7 +27,7 @@ runs:
       DATA=$(cat ${{ runner.temp }}/env.json)
       echo "data=${DATA}" >> $GITHUB_OUTPUT
     shell: bash
-  - uses: envoyproxy/toolshed/gh-actions/jq@a0c75182670d732c1dabc21e19571df9a3560820
+  - uses: envoyproxy/toolshed/gh-actions/jq@c1f2adfdd7f45e07061db52c669cefb40c75b02e
     id: toenv
     with:
       input: ${{ steps.data.outputs.data }}
