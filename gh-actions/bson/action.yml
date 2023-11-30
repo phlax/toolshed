@@ -1,8 +1,12 @@
+# TODO: fold this into jq action
 
 inputs:
   input:
     type: string
     required: true
+  filter:
+    type: string
+    default: .
   filter:
     type: string
     default: .

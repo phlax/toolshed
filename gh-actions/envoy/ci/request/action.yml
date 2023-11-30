@@ -12,10 +12,15 @@ inputs:
     type: string
     default: |
       trigger-release-envoy[bot]
+  template-script-ref-file:
+    type: string
+    default: |
+      # fetch \($branch):\($filename)
+      git show \($branch):\($filename)
   template-script-diff:
     type: string
     default: |
-      # Diff changes from \($them)
+      # git diff changes from \($them)
       git diff --name-only \($them) \($branch)
 
   vars:
@@ -64,13 +69,23 @@ runs:
       filter: |
         sub("^refs/pull/"; "")
         | sub("^refs/heads/"; "")
+
+  - uses: envoyproxy/toolshed/gh-actions/bson@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+    id: config
+    with:
+      input: "{}"
+      filter: |
+        "${{ inputs.config-file }}" as $filename
+        | "origin/${{ steps.ref-name.outputs.value }}" as $branch
+        | "${{ inputs.template-script-diff }}"
+
   - uses: envoyproxy/toolshed/gh-actions/shout@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     id: config-current-text
     with:
       sh: >-
         git
         show
-        origin/${{ steps.ref-name.outputs.value }}:${{ inputs.config-file }}
+        origin/
   - uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     name: Current config
     id: config
