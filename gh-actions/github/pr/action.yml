@@ -68,7 +68,7 @@ runs:
     working-directory: ${{ inputs.working-directory }}
     shell: bash
   - name: Upload diff
-    uses: envoyproxy/toolshed/gh-actions/upload/diff@bc3a1413c467db0ef869a5b5adc7376379a558fb
+    uses: envoyproxy/toolshed/gh-actions/upload/diff@ced9da8529d19e8a4f687e94eaabc2a6130d987e
     if: ${{ inputs.diff-upload }}
     with:
       diff: HEAD^1
