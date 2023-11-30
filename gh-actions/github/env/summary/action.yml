@@ -51,7 +51,7 @@ outputs:
 runs:
   using: composite
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/jq@474c797b657a4bd69c31276de7c8052c53b81d4d
+  - uses: envoyproxy/toolshed/gh-actions/jq@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
     id: title
     with:
       input: ${{ toJSON(inputs) }}
@@ -59,14 +59,14 @@ runs:
       filter: |
         .repository = "${{ github.repository }}"
         | gfm::event_title
-  - uses: envoyproxy/toolshed/gh-actions/jq@474c797b657a4bd69c31276de7c8052c53b81d4d
+  - uses: envoyproxy/toolshed/gh-actions/jq@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
     name: Tables
     id: tables
     with:
       input: ${{ inputs.tables }}
       input-format: yaml
 
-  - uses: envoyproxy/toolshed/gh-actions/foreach@474c797b657a4bd69c31276de7c8052c53b81d4d
+  - uses: envoyproxy/toolshed/gh-actions/foreach@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
     id: data-tables
     with:
       context: ${{ inputs.data }}
@@ -74,7 +74,7 @@ runs:
         {request}
       items: ${{ steps.tables.outputs.value }}
       steps: |
-        - uses: envoyproxy/toolshed/gh-actions/jq@474c797b657a4bd69c31276de7c8052c53b81d4d
+        - uses: envoyproxy/toolshed/gh-actions/jq@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
           id: context-$KEY
           with:
             input: >-
@@ -82,7 +82,7 @@ runs:
             filter: |
               .items["$KEY"]
             print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
-        - uses: envoyproxy/toolshed/gh-actions/json/table@474c797b657a4bd69c31276de7c8052c53b81d4d
+        - uses: envoyproxy/toolshed/gh-actions/json/table@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
           id: table-$KEY
           with:
             json: |
@@ -96,13 +96,13 @@ runs:
             collapse: >-
               %{{ fromJSON(steps.context-$KEY.outputs.value).collapse }}
 
-  - uses: envoyproxy/toolshed/gh-actions/jq@474c797b657a4bd69c31276de7c8052c53b81d4d
+  - uses: envoyproxy/toolshed/gh-actions/jq@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
     id: table-output
     with:
       input: ${{ toJSON(fromJSON(fromJSON(steps.data-tables.outputs.out)).*.outputs.summary) }}
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
 
-  - uses: envoyproxy/toolshed/gh-actions/jq@474c797b657a4bd69c31276de7c8052c53b81d4d
+  - uses: envoyproxy/toolshed/gh-actions/jq@dd0c20b6f9fd7edef45a0cd05016eaef06c71d08
     id: output
     with:
       input: ${{ toJSON(inputs) }}
