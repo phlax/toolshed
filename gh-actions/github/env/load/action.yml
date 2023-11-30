@@ -21,12 +21,12 @@ outputs:
 runs:
   using: composite
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/github/context@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+  - uses: envoyproxy/toolshed/gh-actions/github/context@e0ddd63d2326ec5f0d2acd8807a36e3b1eaa7d27
     name: Github context
     if: ${{ fromJSON(env.CI_DEBUG || false) || fromJSON(env.RUNNER_DEBUG || false) }}
   - name: Download environment data
     id: download
-    uses: envoyproxy/toolshed/gh-actions/github/artifact/download@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+    uses: envoyproxy/toolshed/gh-actions/github/artifact/download@e0ddd63d2326ec5f0d2acd8807a36e3b1eaa7d27
     with:
       name: ${{ inputs.name }}
       path: ${{ runner.temp }}
@@ -37,7 +37,7 @@ runs:
       DATA=$(cat ${{ runner.temp }}/${{ inputs.name }}.json)
       printf 'data=%s' "${DATA}" >> $GITHUB_OUTPUT
     shell: bash
-  - uses: envoyproxy/toolshed/gh-actions/jq@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+  - uses: envoyproxy/toolshed/gh-actions/jq@e0ddd63d2326ec5f0d2acd8807a36e3b1eaa7d27
     name: Print env data
     if: ${{ fromJSON(env.CI_DEBUG || false) || fromJSON(env.RUNNER_DEBUG || false) }}
     with:
@@ -45,7 +45,7 @@ runs:
       options: -C
       print-result: true
 
-  - uses: envoyproxy/toolshed/gh-actions/github/env/save@ced9da8529d19e8a4f687e94eaabc2a6130d987e
+  - uses: envoyproxy/toolshed/gh-actions/github/env/save@e0ddd63d2326ec5f0d2acd8807a36e3b1eaa7d27
     name: Save env
     if: ${{ inputs.check-name }}
     with:
