@@ -99,10 +99,7 @@ runs:
       options: -Rr
       input: VERSION.txt
       filter: |
-        . as $version
-        | test("^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?\\+?[0-9A-Za-z-]*$")
-          or error("Version string does not meet expectations")
-        | $version
+        validate::version
 
   - uses: envoyproxy/toolshed/gh-actions/shout@actions-v0.1.71
     id: diff
