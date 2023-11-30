@@ -35,7 +35,7 @@ runs:
   using: composite
   steps:
   # If the original check is already completed, we have been retested and we need to find the real one
-  - uses: envoyproxy/toolshed/gh-actions/bson@fdd652c14d10afbc4a7acb5486d67622daef3499
+  - uses: envoyproxy/toolshed/gh-actions/bson@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
     name: Find check
     if: ${{ fromJSON(inputs.data).status == 'completed' && github.run_attempt > 1 }}
     id: current-checks
@@ -50,7 +50,7 @@ runs:
     env:
       GH_TOKEN: ${{ inputs.token }}
   - name: Progress status check
-    uses: envoyproxy/toolshed/gh-actions/bson@fdd652c14d10afbc4a7acb5486d67622daef3499
+    uses: envoyproxy/toolshed/gh-actions/bson@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
     with:
       input: ${{ inputs.data }}
       filter: |
@@ -70,7 +70,7 @@ runs:
         | "${{ inputs.template-script-update }}"
     env:
       GH_TOKEN: ${{ inputs.token }}
-  - uses: envoyproxy/toolshed/gh-actions/jq@fdd652c14d10afbc4a7acb5486d67622daef3499
+  - uses: envoyproxy/toolshed/gh-actions/jq@6f49ec4ef53ce7b22e076c6cae5f4742752ef040
     name: Print check response
     id: checks
     with:
