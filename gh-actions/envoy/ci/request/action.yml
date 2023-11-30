@@ -22,9 +22,6 @@ inputs:
     default: |
       # git diff changes from \($them)
       OUTPUT=\"$(git diff --name-only \($them) \($branch))\"
-      echo \"output<<EOF\" >> $GITHUB_OUTPUT
-      printf \"%s\\n\" \"${OUTPUT}\" >> $GITHUB_OUTPUT
-      echo \"EOF\" >> $GITHUB_OUTPUT
   vars:
     type: string
     required: true
@@ -122,7 +119,7 @@ runs:
       filter: |
         "${{ steps.merge-commit.outputs.sha || 'HEAD^1' }}" as $them
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
-        | "${{ inputs.template-script-diff }}"
+        | ("${{ inputs.template-script-diff }}" | bash::output)
   - uses: envoyproxy/toolshed/gh-actions/jq@f9e295520598df1e185de8f85a2bb8c1b252aa7b
     id: changed
     with:
@@ -150,7 +147,7 @@ runs:
       filter: |
         "${{ inputs.version-file }}" as $filename
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
-        | "${{ inputs.template-script-ref-file }}"
+        | ("${{ inputs.template-script-ref-file }}" | bash::output)
   - id: version-current
     uses: envoyproxy/toolshed/gh-actions/jq@f9e295520598df1e185de8f85a2bb8c1b252aa7b
     with:
