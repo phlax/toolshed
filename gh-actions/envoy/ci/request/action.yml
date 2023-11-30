@@ -17,9 +17,6 @@ inputs:
     default: |
       # fetch \($branch):\($filename)
       OUTPUT=\"$(git show \($branch):\($filename))\"
-      echo \"output<<EOF\" >> $GITHUB_OUTPUT
-      printf \"%s\\n\" \"${OUTPUT}\" >> $GITHUB_OUTPUT
-      echo \"EOF\" >> $GITHUB_OUTPUT
   template-script-diff:
     type: string
     default: |
@@ -84,7 +81,7 @@ runs:
       filter: |
         "${{ inputs.config-file }}" as $filename
         | "origin/${{ steps.ref-name.outputs.value }}" as $branch
-        | "${{ inputs.template-script-ref-file }}"
+        | ("${{ inputs.template-script-ref-file }}" | bash::output)
 
   - uses: envoyproxy/toolshed/gh-actions/jq@a0c75182670d732c1dabc21e19571df9a3560820
     name: Current config
