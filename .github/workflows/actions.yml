@@ -13,6 +13,7 @@ jobs:
       matrix:
         include:
           - name: appauth
+          - name: cache/s3
           - name: dispatch
           - name: github/checks
           - name: github/mutex
