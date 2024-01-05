@@ -168,7 +168,7 @@ class GithubRetestCommand extends RetestCommand {
           + `  https://github.com/${this.env.owner}/${this.env.repo}/check-runs/${check.id}\n`)
       failedChecks.push({
         name: check.name || 'unknown',
-        url: `/repos/${this.env.owner}/${this.env.repo}/check-runs/${check.external_id}/rerun-failed-jobs`,
+        url: `/repos/${this.env.owner}/${this.env.repo}/check-runs/${check.id}/rerun-failed-jobs`,
         octokit: true,
       })
     })
