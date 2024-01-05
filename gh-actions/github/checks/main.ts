@@ -55,6 +55,7 @@ async function startChecks(
     output.text = textExtra === '' ? output.text : `${checkRequestConfig.output.text}\n${textExtra}`
     requests.push(createCheckRun(octokit, {...checkRequestConfig, id, name, owner, repo, output}))
   })
+  JSON.stringify(requests)
   const checkRunIds: [string, number][] = await Promise.all(requests)
   core.setOutput('checks', JSON.stringify(Object.fromEntries(checkRunIds), null, 0))
 }
