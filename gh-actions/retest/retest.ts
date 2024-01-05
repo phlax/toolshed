@@ -108,7 +108,6 @@ class RetestCommand {
   retestOctokit = async (pr: PR, check: Retest): Promise<number> => {
     const method = check.method || 'POST'
     const rerunURL = `${method} ${check.url}`
-    core.debug(`TESTNG DEBUG`)
     if (rerunURL.endsWith('rerun-failed-jobs')) {
       console.log(`Retesting failed job (pr #${pr.number}): ${check.name}`)
     } else {
@@ -162,11 +161,9 @@ class GithubRetestCommand extends RetestCommand {
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
         return
       }
-      if (this.env.debug) {
-        console.log(
+      core.debug(
           `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
           + `  https://github.com/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}\n`)
-      }
       failedChecks.push({
         name: check.name || 'unknown',
         url: `/repos/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}/rerun-failed-jobs`,
@@ -189,11 +186,9 @@ class GithubManagedRetestCommand extends GithubRetestCommand {
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
         return
       }
-      if (this.env.debug) {
-        console.log(
-          `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
+      core.debug(
+        `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
           + `  https://github.com/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}\n`)
-      }
       failedChecks.push({
         name: check.name || 'unknown',
         url: `/repos/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}/rerun-failed-jobs`,
@@ -270,11 +265,9 @@ class AZPRetestCommand extends RetestCommand {
         if (check.conclusion && check.conclusion !== 'success') {
           const [_, buildId, project] = checkId.split('|')
           const url = `https://dev.azure.com/${this.env.azpOrg}/${project}/_apis/build/builds/${buildId}?retry=true&api-version=6.0`
-          if (this.env.debug) {
-            console.log(
-              `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
-                + `  https://dev.azure.com/cncf/envoy/_build/results?buildId=${buildId}&view=results\n`)
-          }
+          core.debug(
+            `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
+              + `  https://dev.azure.com/cncf/envoy/_build/results?buildId=${buildId}&view=results\n`)
           retestables.push({
             url,
             name,
@@ -341,11 +334,9 @@ class RetestCommands {
     })
     const checks = response.data.check_runs
     if (!checks) return []
-    if (this.env.debug) {
-      checks.forEach((checkRun) => {
-        console.log(`Found check (${checkRun.id}/${checkRun.app?.slug}/${checkRun.conclusion || 'incomplete'}): ${checkRun.name}`);
-      });
-    }
+    checks.forEach((checkRun) => {
+      core.debug(`Found check (${checkRun.id}/${checkRun.app?.slug}/${checkRun.conclusion || 'incomplete'}): ${checkRun.name}`)
+    })
     return checks
   }
 
@@ -356,11 +347,7 @@ class RetestCommands {
     const response: OctokitResponse<any> = await this.env.octokit.request(this.env.pr)
     const data = response.data
     if (!data) return
-    if (this.env.debug) {
-      console.log(`Running /retest command for PR #${data.number}`)
-      console.log(`PR branch: ${data.head.ref}`)
-      console.log(`Latest PR commit: ${data.head.sha}`)
-    }
+    core.debug(`Running /retest command for PR #${data.number}`)
     return {
       number: data.number,
       branch: data.head.ref,
