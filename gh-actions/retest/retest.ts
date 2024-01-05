@@ -113,6 +113,7 @@ class RetestCommand {
     } else {
       console.log(`Restarting check (pr #${pr.number}): ${check.name}`)
     }
+    console.log(rerunURL)
     const rerunResponse = await this.env.octokit.request(rerunURL, check.config || {})
     if ([200, 201].includes(rerunResponse.status)) {
       if (rerunURL.endsWith('rerun-failed-jobs')) {
