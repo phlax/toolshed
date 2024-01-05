@@ -157,8 +157,8 @@ class GithubRetestCommand extends RetestCommand {
 
   getRetestables = async (): Promise<Array<Retest>> => {
     const failedChecks: any[] = []
-    console.log('IN GITHUB CLASS')
     this.checks.forEach(async (check: any) => {
+      console.log(check)
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
         return
       }
