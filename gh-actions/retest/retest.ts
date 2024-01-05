@@ -165,10 +165,10 @@ class GithubRetestCommand extends RetestCommand {
       console.log(JSON.stringify(check))
       core.debug(
           `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
-          + `  https://github.com/${this.env.owner}/${this.env.repo}/actions/runs/${check.id}\n`)
+          + `  ${check.url}\n`)
       failedChecks.push({
         name: check.name || 'unknown',
-        url: `/repos/${this.env.owner}/${this.env.repo}/actions/runs/${check.id}/rerun-failed-jobs`,
+        url: `${check.url}/rerun-failed-jobs`,
         octokit: true,
       })
     })
