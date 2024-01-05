@@ -108,6 +108,7 @@ class RetestCommand {
   retestOctokit = async (pr: PR, check: Retest): Promise<number> => {
     const method = check.method || 'POST'
     const rerunURL = `${method} ${check.url}`
+    core.debug(`TESTNG DEBUG`)
     if (rerunURL.endsWith('rerun-failed-jobs')) {
       console.log(`Retesting failed job (pr #${pr.number}): ${check.name}`)
     } else {

@@ -34,7 +34,9 @@ interface CheckConfigs {
 type OctokitType = InstanceType<typeof GitHub>
 
 async function createCheckRun(octokit: OctokitType, checkRun: RequestParameters): Promise<[string, number]> {
+  console.log(`getting run ${checkRun}`)
   const response = await octokit.checks.create(checkRun)
+  console.log(`got response ${checkRun}`)
   return [checkRun.id as string, response.data.id]
 }
 
