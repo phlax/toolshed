@@ -162,6 +162,7 @@ class GithubRetestCommand extends RetestCommand {
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
         return
       }
+      console.log(JSON.stringify(check))
       core.debug(
           `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
           + `  https://github.com/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}\n`)
