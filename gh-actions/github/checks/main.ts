@@ -55,8 +55,6 @@ async function startChecks(
     output.text = textExtra === '' ? output.text : `${checkRequestConfig.output.text}\n${textExtra}`
     requests.push(createCheckRun(octokit, {...checkRequestConfig, id, name, owner, repo, output}))
   })
-  console.log(JSON.stringify(requests))
-
   const checkRunIds: [string, number][] = await Promise.all(requests)
   core.setOutput('checks', JSON.stringify(Object.fromEntries(checkRunIds), null, 0))
 }
@@ -99,12 +97,15 @@ async function updateChecks(octokit: OctokitType, checks: CheckMap, textExtra: s
 
 const run = async (): Promise<void> => {
   try {
+    console.log('STARTING!')
     const action: string = core.getInput('action')
     const config: CheckConfigs = JSON.parse(core.getInput('config') || '{}')
     const checks: CheckMap = JSON.parse(core.getInput('checks'))
     const token = core.getInput('token')
     const textExtra = core.getInput('text-extra')
+    console.log('GETTING OCTOKIT!')
     const octokit = github.getOctokit(token)
+    console.log('GOT OCTOKIT')
     if (action === 'start') {
       await startChecks(octokit, checks, config, textExtra)
     } else if (action === 'update') {
