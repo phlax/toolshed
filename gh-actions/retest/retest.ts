@@ -158,7 +158,6 @@ class GithubRetestCommand extends RetestCommand {
   getRetestables = async (): Promise<Array<Retest>> => {
     const failedChecks: any[] = []
     this.checks.forEach(async (check: any) => {
-      console.log(check.conclusion)
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
         return
       }
@@ -171,6 +170,7 @@ class GithubRetestCommand extends RetestCommand {
         octokit: true,
       })
     })
+    console.log(JSON.stringify(failedChecks))
     return failedChecks
   }
 }
