@@ -28,12 +28,12 @@ inputs:
   comment-id:
     description: >-
       ID of comment for response
-    required: true
     type: number
+    default: ${{ github.event.comment.id }}
   pr-url:
     description: >-
       URL to fetch PR information
-    required: true
+    default: ${{ github.event.issue.pull_request.url }}
   args:
     description: >-
       Args passed to command (not currently used)
