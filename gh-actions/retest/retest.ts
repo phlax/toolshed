@@ -114,7 +114,6 @@ class RetestCommand {
     } else {
       console.log(`Restarting check (pr #${pr.number}): ${check.name}`)
     }
-    console.log(rerunURL, check.config)
     const rerunResponse = await this.env.octokit.request(rerunURL, check.config || {})
     if ([200, 201].includes(rerunResponse.status)) {
       if (rerunURL.endsWith('rerun-failed-jobs')) {
@@ -159,8 +158,32 @@ class GithubRetestCommand extends RetestCommand {
 
   getRetestables = async (): Promise<Array<Retest>> => {
     const failedChecks: any[] = []
+    this.checks.forEach(async (check: any) => {
+      if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
+        return
+      }
+      if (this.env.debug) {
+        console.log(
+          `Check ${check.conclusion}: ${check.name}\n\n  ${check.html_url}\n\n`
+          + `  https://github.com/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}\n`)
+      }
+      failedChecks.push({
+        name: check.name || 'unknown',
+        url: `/repos/${this.env.owner}/${this.env.repo}/actions/runs/${check.external_id}/rerun-failed-jobs`,
+        octokit: true,
+      })
+    })
+    return failedChecks
+  }
+}
+
+class GithubManagedRetestCommand extends GithubRetestCommand {
+  name = 'GithubManaged'
+
+  getRetestables = async (): Promise<Array<Retest>> => {
+    const failedChecks: any[] = []
     const checks = this.checks.filter((checkRun) => {
-      return (!this.env.appOwnerSlug || checkRun.app?.slug == this.env.appOwnerSlug)
+      return (checkRun.app?.slug == this.env.appOwnerSlug)
     })
     checks.forEach(async (check: any) => {
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
@@ -354,7 +377,12 @@ class RetestCommands {
       return []
     }
     const checks = await this.checks(pr)
-    const retesters: Array<RetestCommand> = [new GithubRetestCommand(this.env, pr, checks)]
+    const retesters: Array<RetestCommand> = []
+    if (this.env.appOwnerSlug) {
+      retesters.push(new GithubManagedRetestCommand(this.env, pr, checks))
+    } else {
+      retesters.push(new GithubRetestCommand(this.env, pr, checks))
+    }
     if (this.env.azpOrg) {
       retesters.push(new AZPRetestCommand(this.env, pr, checks))
     }
