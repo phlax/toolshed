@@ -114,21 +114,29 @@ class RetestCommand {
       console.log(`Restarting check (pr #${pr.number}): ${check.name}`)
     }
     console.log(rerunURL)
-    const rerunResponse = await this.env.octokit.request(rerunURL, check.config || {})
-    if ([200, 201].includes(rerunResponse.status)) {
-      if (rerunURL.endsWith('rerun-failed-jobs')) {
-        process.stdout.write(`::notice::Retry success: (${check.name})\n`)
+    try {
+      const rerunResponse = await this.env.octokit.request(rerunURL, check.config || {})
+      if ([200, 201].includes(rerunResponse.status)) {
+        if (rerunURL.endsWith('rerun-failed-jobs')) {
+          process.stdout.write(`::notice::Retry success: (${check.name})\n`)
+        } else {
+          process.stdout.write(`::notice::Check restarted: (${check.name})\n  ${rerunResponse.data.html_url}\n`)
+        }
+        return 0
       } else {
-        process.stdout.write(`::notice::Check restarted: (${check.name})\n  ${rerunResponse.data.html_url}\n`)
+        if (rerunURL.endsWith('rerun-failed-jobs')) {
+          core.error(`Retry failed: (${check.name}) ... ${rerunResponse.status}`)
+        } else {
+          core.error(`Failed restarting check: ${rerunResponse.status}`)
+        }
+        return 1
       }
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message)
+      }
+      core.setFailed(`retest-action failure: ${error}`)
       return 0
-    } else {
-      if (rerunURL.endsWith('rerun-failed-jobs')) {
-        core.error(`Retry failed: (${check.name}) ... ${rerunResponse.status}`)
-      } else {
-        core.error(`Failed restarting check: ${rerunResponse.status}`)
-      }
-      return 1
     }
   }
 
