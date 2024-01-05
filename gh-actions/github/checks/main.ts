@@ -72,6 +72,7 @@ async function updateCheckRun(octokit: OctokitType, checkConfig: Check, textExtr
     check_name: checkConfig.name,
     filter: 'latest',
   })
+  console.log(checkResponse)
   const text = checkResponse.data.check_runs[0].output.text
   checkConfig.id = checkResponse.data.check_runs[0].id
   output.text = `${output.text}\n### Check started by\n${text.split('### Check started by')[1]}`
