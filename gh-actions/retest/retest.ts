@@ -159,7 +159,7 @@ class GithubRetestCommand extends RetestCommand {
   getRetestables = async (): Promise<Array<Retest>> => {
     const failedChecks: any[] = []
     const checks = this.checks.filter((checkRun) => {
-      return (checkRun.app?.slug == this.env.appOwnerSlug)
+      return (!this.env.appOwnerSlug || checkRun.app?.slug == this.env.appOwnerSlug)
     })
     checks.forEach(async (check: any) => {
       if (check.conclusion !== 'failure' && check.conclusion !== 'cancelled') {
