@@ -172,7 +172,6 @@ def ci_profile(
         | to_entries
         | sort_by(.value.max_memory_kb)
         | reverse
-        | .[0:10]
         | from_entries
         """,
     )
@@ -202,7 +201,6 @@ def ci_profile(
         | to_entries
         | sort_by(.value.total_cpu_time_sec)
         | reverse
-        | .[0:10]
         | from_entries
         """,
     )
