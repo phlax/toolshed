@@ -90,15 +90,21 @@ def static_website(
         EXCLUDES="%s"
         %s
 
+        echo "Decompressing ($${DECOMPRESS_ARGS}): $${SOURCE}" >&2
+
         tar "$${DECOMPRESS_ARGS}" -xf $$SOURCE
 
         while IFS= read -r CMD; do
+            echo "Mapping: $${CMD}" >&2
             $$CMD
         done <<< "$$MAPPING"
 
-        $$GENERATOR "$$CONTENT"
+        echo "Generating ($${GENERATOR}): $${CONTENT}"
+        $$GENERATOR "$$CONTENT" >&2
 
+        echo "Compressing ($${EXCLUDES}): $${OUTPUT}" >&2
         tar cfh $@ $$EXCLUDES -C "$$OUTPUT" .
+        echo "Site generation complete" >&2
         """ % (name_sources, decompressor_args, generator, content_path, output_path, mapping_commands, exclude_args, url),
         outs = [name_website_tarball],
         srcs = extra_srcs,
