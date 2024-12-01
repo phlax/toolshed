@@ -68,7 +68,7 @@ def _run_tidy(
         arguments = [args],
         mnemonic = "ClangTidy",
         use_default_shell_env = True,
-        progress_message = "Run clang-tidy on {}".format(infile.short_path),
+        progress_message = "Run clang-tidy on {}".format(",".join([infile.short_path for infile in infiles]),
     )
     return outfile
 
