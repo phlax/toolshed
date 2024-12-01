@@ -13,9 +13,9 @@ def _run_tidy(
         config,
         flags,
         compilation_context,
-        infile,
+        infiles,
         discriminator):
-    direct_deps = [infile, config]
+    direct_deps = infiles + [config]
     if exe.files_to_run.executable:
         direct_deps.append(exe.files_to_run.executable)
     if additional_deps.files:
@@ -124,12 +124,10 @@ def _clang_tidy_aspect_impl(target, ctx):
             config,
             safe_flags[ACTION_NAMES.c_compile if src.extension == "c" else ACTION_NAMES.cpp_compile],
             compilation_context,
-            src,
+            _rule_sources(ctx),
             target.label.name,
         )
-        for src in _rule_sources(ctx)
     ]
-
     return [
         OutputGroupInfo(report = depset(direct = outputs))
     ]
