@@ -5,6 +5,9 @@ TARGET_EXTENSIONS = [
     "c", "cc", "cpp", "cxx", "c++", "C", "h", "hh", "hpp", "hxx", "inc", "inl", "H",
 ]
 
+def _infile(infile):
+    return infile.ext in TARGET_EXTENSIONS and infile.path
+
 def _run_tidy(
         ctx,
         wrapper,
@@ -37,9 +40,7 @@ def _run_tidy(
     args.add(config.path)
     args.add("--export-fixes", outfile.path)
     args.add("--quiet")
-    # add sources to check
-    for infile in infiles:
-        args.add(infile.path)
+    args.add_all(infiles, map_each=_infile)
 
     # start args passed to the compiler
     args.add("--")
@@ -64,13 +65,6 @@ def _run_tidy(
         progress_message = "Run clang-tidy on {}".format(infile.short_path),
     )
     return outfile
-
-def _rule_sources(ctx):
-    srcs = []
-    if hasattr(ctx.rule.attr, "srcs"):
-        for src in ctx.rule.attr.srcs:
-            srcs += [_src for _src in src.files.to_list() if _src.is_source and _src.extension in TARGET_EXTENSIONS]
-    return srcs
 
 def _toolchain_flags(ctx, action_name = ACTION_NAMES.cpp_compile):
     cc_toolchain = find_cpp_toolchain(ctx)
@@ -125,7 +119,7 @@ def _clang_tidy_aspect_impl(target, ctx):
             config,
             safe_flags[ACTION_NAMES.c_compile if src.extension == "c" else ACTION_NAMES.cpp_compile],
             compilation_context,
-            _rule_sources(ctx),
+            ctx.rule.attr.srcs,
             target.label.name,
         )
     ]
