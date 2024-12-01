@@ -5,6 +5,10 @@ TARGET_EXTENSIONS = [
     "c", "cc", "cpp", "cxx", "c++", "C", "h", "hh", "hpp", "hxx", "inc", "inl", "H",
 ]
 
+def _flags(ctx, target_type):
+    rule_flags = getattr(ctx.rule.attr, "copts", [])
+    return _safe_flags(_toolchain_flags(ctx, target_type) + rule_flags)
+
 def _infile(infile):
     return infile.ext in TARGET_EXTENSIONS and infile.path
 
@@ -45,7 +49,9 @@ def _run_tidy(
     # start args passed to the compiler
     args.add("--")
     # add args specified by the toolchain, on the command line and rule copts
-    args.add_all(flags)
+
+    # NOTE: this assumes cpp file!
+    args.add_all(_flags(ctx, ACTION_NAMES.cpp_compile))
     # add defines
     args.add_all(compilation_context.defines, before_each = "-D")
     args.add_all(compilation_context.local_defines, before_each = "-D")
@@ -104,12 +110,6 @@ def _clang_tidy_aspect_impl(target, ctx):
     additional_deps = ctx.attr._clang_tidy_additional_deps
     config = ctx.attr._clang_tidy_config.files.to_list()[0]
     compilation_context = target[CcInfo].compilation_context
-
-    rule_flags = ctx.rule.attr.copts if hasattr(ctx.rule.attr, "copts") else []
-    safe_flags = {
-        ACTION_NAMES.cpp_compile: _safe_flags(_toolchain_flags(ctx, ACTION_NAMES.cpp_compile) + rule_flags),
-        ACTION_NAMES.c_compile: _safe_flags(_toolchain_flags(ctx, ACTION_NAMES.c_compile) + rule_flags),
-    }
     outputs = [
         _run_tidy(
             ctx,
@@ -117,7 +117,6 @@ def _clang_tidy_aspect_impl(target, ctx):
             exe,
             additional_deps,
             config,
-            safe_flags[ACTION_NAMES.c_compile if src.extension == "c" else ACTION_NAMES.cpp_compile],
             compilation_context,
             ctx.rule.attr.srcs,
             target.label.name,
