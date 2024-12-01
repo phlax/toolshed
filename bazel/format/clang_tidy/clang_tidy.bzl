@@ -36,7 +36,7 @@ def _run_tidy(
 
     # specify the output file - twice
     outfile = ctx.actions.declare_file(
-        "bazel_clang_tidy_%s.%s.clang-tidy.yaml" % (infile.path, discriminator)
+        "bazel_clang_tidy_%s.%s.clang-tidy.yaml" % (infiles.to_list()[0].path, discriminator)
     )
 
     args.add(exe.files_to_run.executable if exe.files else "clang-tidy")
