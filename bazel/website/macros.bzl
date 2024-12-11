@@ -105,6 +105,8 @@ def static_website(
         tools = tools,
     )
 
+    print([name_website] + (deps or []))
+
     pkg_tar(
         name = name_html,
         deps = [name_website] + (deps or []),
