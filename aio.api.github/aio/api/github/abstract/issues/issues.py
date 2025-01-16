@@ -88,9 +88,7 @@ class AGithubIssues(metaclass=abstracts.Abstraction):
                 "called with one.")
         kwargs["title"] = title
         try:
-            breakpoint()
             data = await repo.post("issues", data=kwargs)
-            breakpoint()
         except gidgethub.GitHubException as e:
             raise exceptions.IssueCreateError(
                 f"Failed to create issue '{title}' in {repo.name}\n"
