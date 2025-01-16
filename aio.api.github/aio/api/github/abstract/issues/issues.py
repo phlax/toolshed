@@ -88,7 +88,7 @@ class AGithubIssues(metaclass=abstracts.Abstraction):
                 "called with one.")
         kwargs["title"] = title
         try:
-            kwargs.pop("assignees")
+            breakpoint()
             data = await repo.post("issues", data=kwargs)
             breakpoint()
         except gidgethub.GitHubException as e:
