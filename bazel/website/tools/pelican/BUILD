@@ -13,6 +13,8 @@ py_console_script_binary(
         requirement("pelican-webassets"),
         requirement("packaging"),
         requirement("pyyaml"),
+        requirement("pelican-yaml-metadata"),
+        requirement("pelican-jinja2content"),
     ],
     visibility = ["//visibility:public"],
 )
