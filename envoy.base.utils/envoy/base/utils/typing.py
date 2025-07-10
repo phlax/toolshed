@@ -15,13 +15,13 @@ class Change(str):
 class SourceChangeDict(TypedDict):
     area: str
     change: str
-    prs: NotRequired[list[str]]  # Optional PR references
+    prs: NotRequired[list[int]]  # Optional PR references
 
 
 class ChangeDict(TypedDict):
     area: str
     change: Change
-    prs: NotRequired[list[str]]  # Optional PR references
+    prs: NotRequired[list[int]]  # Optional PR references
 
 
 ChangeList = list[ChangeDict]
