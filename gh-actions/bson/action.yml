@@ -60,6 +60,7 @@ runs:
 
   - id: run
     run: |
+      cat $TMPFILE
       # ${{ inputs.title || 'Run generated script' }}
       EXIT_CODE=0
       bash --noprofile --norc -e -o pipefail "$TMPFILE" || {
