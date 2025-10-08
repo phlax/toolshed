@@ -12,7 +12,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-  - uses: envoyproxy/toolshed/gh-actions/cache/restore@actions-v0.3.26
+  - uses: envoyproxy/toolshed/gh-actions/cache/restore@4458dd4bff05f2aa975c407f9ad75fb05077f875
     with:
       key: ${{ inputs.image-tag }}${{ inputs.key-suffix }}
       command: |
@@ -24,7 +24,9 @@ runs:
         mkdir -p /var/lib/docker
         ls -alh docker.tar.zst
         df -h
+        free
         zstd --stdout -d docker.tar.zst | tar -xf - -C /var/lib/docker
+        echo "Restored docker"
         systemctl start docker
       mount-tmpfs: ${{ inputs.mount-tmpfs }}
       run-as-sudo: true
