@@ -16,10 +16,14 @@ runs:
     with:
       key: ${{ inputs.image-tag }}${{ inputs.key-suffix }}
       command: |
+        echo "Replacing system docker"
+        df -h
         systemctl stop docker docker.socket
         mv /var/lib/docker /var/lib/docker.orig
         sudo rm -rf /var/lib/docker.orig &
         mkdir -p /var/lib/docker
+        ls -alh docker.tar.zst
+        df -h
         zstd --stdout -d docker.tar.zst | tar -xf - -C /var/lib/docker
         systemctl start docker
       mount-tmpfs: ${{ inputs.mount-tmpfs }}
