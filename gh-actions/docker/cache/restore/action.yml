@@ -50,7 +50,10 @@ runs:
             mount -o bind "${{ inputs.bind-mount }}" /var/lib/docker
         fi
         zstd --stdout -d docker.tar.zst | tar -xf - -C /var/lib/docker
-        systemctl start docker
+        systemctl start docker || {
+            systemctl status docker.service
+            journalctl -xeu docker.service
+        }
       mount-tmpfs: ${{ inputs.mount-tmpfs }}
       run-as-sudo: true
   - if: >-
