@@ -22,7 +22,11 @@ runs:
     with:
       key: ${{ inputs.image-tag }}${{ inputs.key-suffix }}
       command: |
-        systemctl stop docker docker.socket
+        echo "STOPPING DOCKER"
+        systemctl stop docker docker.socket || {
+            systemctl status docker.service
+            journalctl -xeu docker.service
+        }
         if mountpoint -q /var/lib/docker; then
             MOUNT_SOURCE=$(findmnt -n -o SOURCE --mountpoint /var/lib/docker)
             MOUNT_SOURCE=$(echo "$MOUNT_SOURCE" | sed -E 's/.*\[([^]]+)\].*/\1/')
