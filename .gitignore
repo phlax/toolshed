@@ -184,3 +184,7 @@ $RECYCLE.BIN/
 MODULE.bazel.lock
 
 bazel-*
+
+# Fuzzing
+rust/*/fuzz/corpus/
+rust/*/fuzz/artifacts/
