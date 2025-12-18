@@ -5,7 +5,7 @@ inputs:
   jq-pre-filter:
     type: string
     default: >-
-      {workflow_runs: [.workflow_runs[] | select(.name | IN(\"Bazel CI\", \"Rust CI\")) | {name, id, conclusion, created_at, status}]}
+      {workflow_runs: [.workflow_runs[] | select(.name | IN(\($wf_names))) | {name, id, conclusion, created_at, status}]}
   max-results:
     type: number
     default: 200
@@ -69,6 +69,7 @@ runs:
       filter: |
         .
         | "2" as $page
+        | "\"Bazel CI\", \"Rust CI\"" as $wf_names
         | "${{ inputs.jq-pre-filter }}" as $jq
         | ("${{ inputs.template-script }}" | bash::output)
       result-format: json
