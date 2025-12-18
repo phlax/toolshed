@@ -69,7 +69,7 @@ runs:
       filter: |
         .
         | "2" as $page
-        | "\"Bazel CI\", \"Rust CI\"" as $wf_names
+        | (.workflows | tojson | .[1:-1]) as $wf_names
         | "${{ inputs.jq-pre-filter }}" as $jq
         | ("${{ inputs.template-script }}" | bash::output)
       result-format: json
