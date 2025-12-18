@@ -76,7 +76,7 @@ runs:
       input-format: yaml
       filter: |
         .
-        | "2" as $page
+        | "2" as $max_pages
         | (.workflows | tojson | .[1:-1]) as $wf_names
         | "${{ inputs.jq-pre-filter }}" as $jq
         | ("${{ inputs.template-script }}" | bash::output)
