@@ -32,9 +32,8 @@ inputs:
       PAGE=\"\($page)\"
       HEAD_SHA=\"\(.sha)\"
       PER_PAGE=\"\(.per_page)\"
-      if [[ \"foo\" == \"foo\" ]]; then
-          OUTPUT=$(gh api --jq '\($jq)' \"/repos/\(.repo)/actions/runs?page=\($page)&head_sha=\(.sha)&status=completed&per_page=\(.per_page)\")
-      fi
+      REPO='\(.repo)'
+      OUTPUT=$(gh api --jq '\($jq)' \"/repos/${REPO}/actions/runs?page=\($page)&head_sha=\(.sha)&status=completed&per_page=\(.per_page)\")
 
 
 outputs:
