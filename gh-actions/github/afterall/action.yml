@@ -28,7 +28,7 @@ inputs:
   template-script:
     type: string
     default: |
-      OUTPUT=$(gh api --jq '\(.jq)' \"/repos/\(.repo)/actions/runs?page=\($page)&head_sha=\(.sha)&status=completed&per_page=\(.per_page)\")
+      OUTPUT=$(gh api --jq '\($jq)' \"/repos/\(.repo)/actions/runs?page=\($page)&head_sha=\(.sha)&per_page=\(.per_page)\")
 
 
 outputs:
@@ -61,7 +61,6 @@ runs:
       GH_TOKEN: ${{ inputs.token }}
     with:
       input: |
-        jq: "${{ inputs.jq-pre-filter }}"
         per_page: ${{ inputs.max-results }}
         repo: ${{ inputs.repo }}
         sha: ${{ inputs.sha }}
@@ -70,6 +69,9 @@ runs:
       filter: |
         .
         | "2" as $page
+        # | (.workflows | tojson) as $wf_names
+        | "\"Bazel CI\", \"Rust CI\"" as $wf_names
+        | "${{ inputs.jq-pre-filter }}" as $jq
         | ("${{ inputs.template-script }}" | bash::output)
       result-format: json
       result-filter-options: "-c"
