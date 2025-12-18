@@ -28,7 +28,7 @@ inputs:
   template-script:
     type: string
     default: |
-      if [[ "foo" == "foo" ]]; then
+      if [[ \"foo\" == \"foo\" ]]; then
           OUTPUT=$(gh api --jq '\($jq)' \"/repos/\(.repo)/actions/runs?page=\($page)&head_sha=\(.sha)&status=completed&per_page=\(.per_page)\")
       fi
 
