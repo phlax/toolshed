@@ -28,7 +28,7 @@ inputs:
   template-script:
     type: string
     default: |
-      SCRIPT_JQ=\"\($jq)\"
+      # SCRIPT_JQ=\"\($jq)\"
       PAGE=\"\($page)\"
       HEAD_SHA=\"\(.sha)\"
       PER_PAGE=\"\(.per_page)\"
