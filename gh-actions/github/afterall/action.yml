@@ -35,7 +35,7 @@ inputs:
       export REPO='\(.repo)'
       export OUTPUT=\"[]\"
       export PAGE=\"2\"
-      OUTPUT=$(${GITHUB_ACTION_PATH}/check-runs.sh)
+      OUTPUT=$(${AFTERALL_ACTION_PATH}/check-runs.sh)
 
 
 outputs:
@@ -66,6 +66,7 @@ runs:
     id: check-workflows
     env:
       GH_TOKEN: ${{ inputs.token }}
+      AFTERALL_ACTION_PATH: ${GITHUB_ACTION_PATH}
     with:
       input: |
         per_page: ${{ inputs.max-results }}
