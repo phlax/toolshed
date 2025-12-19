@@ -32,7 +32,7 @@ inputs:
     type: string
     default: |
       export SCRIPT_JQ='\($jq)'
-      export MAX_PAGES='\($max_pages)'
+      export MAX_PAGES='\(.max_pages)'
       export HEAD_SHA='\(.sha)'
       export PER_PAGE='\(.per_page)'
       export REPO='\(.repo)'
