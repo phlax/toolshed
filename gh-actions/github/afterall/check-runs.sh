@@ -4,7 +4,7 @@ set -e -o pipefail
 
 OUTPUT='{"workflow_runs": []}'
 
-echo "$WF_NAMES"
+echo "$WF_NAMES" >&2
 
 for PAGE in $(seq 1 "${MAX_PAGES}"); do
     PAGE_OUTPUT=$(gh api --jq "${SCRIPT_JQ}" "/repos/${REPO}/actions/runs?page=${PAGE}&head_sha=${HEAD_SHA}&per_page=${PER_PAGE}")
