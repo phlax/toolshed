@@ -6,7 +6,10 @@ inputs:
     type: string
     default: >-
       {workflow_runs: [.workflow_runs[] | select(.name | IN(\($wf_names))) | {name, id, conclusion, created_at, status}]}
-  max-results:
+  max-pages:
+    type: number
+    default: 5
+  per-page:
     type: number
     default: 200
   repo:
@@ -69,14 +72,14 @@ runs:
       AFTERALL_ACTION_PATH: ${{ github.action_path }}
     with:
       input: |
-        per_page: ${{ inputs.max-results }}
+        max_pages: ${{ inputs.max-pages }}
+        per_page: ${{ inputs.per-page }}
         repo: ${{ inputs.repo }}
         sha: ${{ inputs.sha }}
         workflows: ${{ steps.workflows.outputs.value }}
       input-format: yaml
       filter: |
         .
-        | "5" as $max_pages
         | (.workflows | tojson | .[1:-1]) as $wf_names
         | "${{ inputs.jq-pre-filter }}" as $jq
         | ("${{ inputs.template-script }}" | bash::output)
