@@ -35,7 +35,7 @@ inputs:
       export REPO='\(.repo)'
       export OUTPUT=\"[]\"
       export PAGE=\"2\"
-      OUTPUT=$(${{ github.action_path }}/check-runs.sh)
+      OUTPUT=$(${GITHUB_ACTION_PATH}/check-runs.sh)
 
 
 outputs:
