@@ -66,7 +66,7 @@ runs:
     id: check-workflows
     env:
       GH_TOKEN: ${{ inputs.token }}
-      AFTERALL_ACTION_PATH: ${GITHUB_ACTION_PATH}
+      AFTERALL_ACTION_PATH: ${{ github.action_path }}
     with:
       input: |
         per_page: ${{ inputs.max-results }}
