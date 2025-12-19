@@ -34,7 +34,6 @@ inputs:
       export PER_PAGE='\(.per_page)'
       export REPO='\(.repo)'
       export OUTPUT=\"[]\"
-      export PAGE=\"2\"
       OUTPUT=$(${AFTERALL_ACTION_PATH}/check-runs.sh)
 
 
