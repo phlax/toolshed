@@ -8,7 +8,7 @@ echo "$WF_NAMES" >&2
 
 JQ_CHECK='
     ($names | split(",") | map(gsub("^\"|\"$"; "") | gsub("^ +| +$"; ""))) as $required
-    | [. workflow_runs[].name] as $actual
+    | [.workflow_runs[].name] as $actual
     | ($required - $actual)
     | length == 0'
 
