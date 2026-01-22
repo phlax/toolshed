@@ -40,7 +40,7 @@ jobs:
       versions: ${{ steps.versions.outputs.value }}
     steps:
     - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/jq@f77da65c9bfd6fcf909614b3c834b1ff18149de6
       id: versions
       with:
         input: ${{ inputs.modules-root }}/modules/${{ inputs.module }}/${{ inputs.metadata }}
@@ -62,12 +62,12 @@ jobs:
         version: ${{ fromJSON(needs.module.outputs.versions) }}
     steps:
     - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/jq@f77da65c9bfd6fcf909614b3c834b1ff18149de6
       with:
         input: ${{ inputs.modules-root }}/modules/${{ inputs.module }}/${{ matrix.version }}/${{ inputs.source }}
         input-format: json-path
         print-result: true
-    - uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/bson@f77da65c9bfd6fcf909614b3c834b1ff18149de6
       id: source
       with:
         input: ${{ inputs.modules-root }}/modules/${{ inputs.module }}/${{ matrix.version }}/${{ inputs.source }}
@@ -84,7 +84,7 @@ jobs:
           split("\n")
           | map(select(length > 0) | split(" ") | {key: .[0], value: .[1]})
           | from_entries
-    - uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/bson@f77da65c9bfd6fcf909614b3c834b1ff18149de6
       with:
         input: ${{ inputs.modules-root }}/modules/${{ inputs.module }}/${{ matrix.version }}/${{ inputs.source }}
         input-format: json-path
