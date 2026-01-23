@@ -1,0 +1,40 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# Note: This is a simplified BUILD file for the crypto_mb library.
+# The full implementation uses glob patterns to include all 218+ source files
+# from sources/ippcp/crypto_mb/src/**/*.c. This approach is necessary due to
+# the large number of source files and complex directory structure.
+# The glob patterns work with the versioned tarball to ensure deterministic builds.
+
+cc_library(
+    name = "crypto_mb",
+    srcs = glob([
+        "sources/ippcp/crypto_mb/src/**/*.c",
+    ]),
+    hdrs = glob([
+        "sources/ippcp/crypto_mb/include/**/*.h",
+    ]),
+    strip_include_prefix = "sources/ippcp/crypto_mb/include",
+    visibility = ["//visibility:public"],
+    deps = [
+        # IMPORTANT: The following external dependency MUST be provided by
+        # the consuming workspace using bazel_dep() or similar mechanisms:
+        # - "@boringssl//:crypto_internal" (BoringSSL internal crypto library)
+    ],
+    copts = [
+        "-O3",
+        "-fPIC",
+        "-mavx512f",
+        "-mavx512dq",
+        "-mavx512ifma",
+        "-DSIMD_LEN=512",
+    ],
+    local_defines = [
+        "_K1",
+        "USE_AMS_5x",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
