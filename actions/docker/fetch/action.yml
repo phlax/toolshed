@@ -13,7 +13,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-  - uses: envoyproxy/toolshed/actions/fetch@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/fetch@dfb4f75c051e0908e92a6df8bee2959304f43452
     id: fetch
     with:
       url: ${{ inputs.url }}
