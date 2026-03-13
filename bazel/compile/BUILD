@@ -2,11 +2,11 @@ load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
 load("@rules_pkg//pkg:pkg.bzl", "pkg_tar")
-load("//:versions.bzl", "VERSIONS")
+load("//:versions.bzl", "SUPPORTED_ARCHES", "VERSIONS")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["sanitizer_libs.bzl", "extensions.bzl"])
+exports_files(["sanitizer_libs.bzl", "libcxx_libs.bzl", "extensions.bzl"])
 
 # Build setting to control which toolchain to use
 # This can be set with --//compile:use_gcc_toolchain=true
@@ -164,3 +164,43 @@ pkg_tar(
     extension = "tar.xz",
     package_file_name = "tsan-llvm%s-x86_64.tar.xz" % VERSIONS["llvm"],
 )
+
+[
+    (
+        pkg_files(
+            name = "libcxx_%s_lib_files" % arch,
+            srcs = [
+                "@llvm_libcxx_%s//:libcxx" % arch,
+            ],
+            prefix = "lib",
+            strip_prefix = ".",
+        ),
+        pkg_files(
+            name = "libcxx_%s_compiler_rt_files" % arch,
+            srcs = [
+                "@llvm_libcxx_%s//:compiler_rt" % arch,
+            ],
+            prefix = "lib",
+            strip_prefix = ".",
+        ),
+        pkg_files(
+            name = "libcxx_%s_include_files" % arch,
+            srcs = [
+                "@llvm_libcxx_%s//:config_site" % arch,
+            ],
+            prefix = "include",
+            strip_prefix = ".",
+        ),
+        pkg_tar(
+            name = "libcxx_%s" % arch,
+            srcs = [
+                ":libcxx_%s_lib_files" % arch,
+                ":libcxx_%s_compiler_rt_files" % arch,
+                ":libcxx_%s_include_files" % arch,
+            ],
+            extension = "tar.xz",
+            package_file_name = "libcxx-llvm%s-%s.tar.xz" % (VERSIONS["llvm"], arch),
+        ),
+    )
+    for arch in SUPPORTED_ARCHES
+]
