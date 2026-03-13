@@ -170,6 +170,16 @@ cc_binary(
     copts = ["-Werror"],
 )
 
+# Same binary but explicitly forces the platform default runtime (-rtlib=platform) so that
+# clang does not auto-discover libclang_rt.builtins.a from its resource directory even when
+# the file has been physically overlaid there.  Used by the negative compiler-rt tests.
+cc_binary(
+    name = "test_compiler_rt_no_rt",
+    srcs = ["test_compiler_rt.cc"],
+    copts = ["-Werror"],
+    linkopts = ["-rtlib=platform"],
+)
+
 # Cross-compilation compiler-rt tests.
 # These tests verify that the test_compiler_rt binary has libclang_rt.builtins.a
 # statically linked by checking for the defined __divti3 symbol (via llvm-nm)
@@ -229,12 +239,12 @@ sh_test(
     size = "small",
     srcs = ["check_compiler_rt.sh"],
     data = [
-        ":test_compiler_rt",
+        ":test_compiler_rt_no_rt",
         "@llvm_toolchain_llvm//:nm",
         "@llvm_toolchain_llvm//:readelf",
     ],
     env = {
-        "BINARY": "$(rootpath :test_compiler_rt)",
+        "BINARY": "$(rootpath :test_compiler_rt_no_rt)",
         "EXPECT_COMPILER_RT": "false",
         "EXPECTED_ARCH": "AArch64",
         "LLVM_NM": "$(rootpath @llvm_toolchain_llvm//:nm)",
@@ -252,12 +262,12 @@ sh_test(
     size = "small",
     srcs = ["check_compiler_rt.sh"],
     data = [
-        ":test_compiler_rt",
+        ":test_compiler_rt_no_rt",
         "@llvm_toolchain_llvm//:nm",
         "@llvm_toolchain_llvm//:readelf",
     ],
     env = {
-        "BINARY": "$(rootpath :test_compiler_rt)",
+        "BINARY": "$(rootpath :test_compiler_rt_no_rt)",
         "EXPECT_COMPILER_RT": "false",
         "EXPECTED_ARCH": "X86-64",
         "LLVM_NM": "$(rootpath @llvm_toolchain_llvm//:nm)",
