@@ -22,7 +22,7 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.run }}
     steps:
-    - uses: envoyproxy/toolshed/actions/github/should-run@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/github/should-run@5ad2e9bddabad409b4afb5501d266292c9e88d40
       id: filter
       with:
         config: |
@@ -45,19 +45,19 @@ jobs:
       github.repository_owner == 'envoyproxy'
       && fromJSON(needs.request.outputs.run)
     steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
       with:
         python-version: "3.12"
     - name: Initialize Pants
-      uses: pantsbuild/actions/init-pants@ab362158088bb31685015e7f5728a4c1df3c0e6e  # v10
+      uses: pantsbuild/actions/init-pants@0aaef864bd133c4055feb6adad0bfdce0de1c2e4  # v11
       with:
         gha-cache-key: "v0-${{ runner.os }}"
         named-caches-hash: "${{ hashFiles('pants*toml') }}"
     - name: Run pants test
       run: "pants --colors test ::"
     - name: Archive code coverage results
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: coverage
         path: dist/coverage/python/htmlcov/
@@ -68,12 +68,12 @@ jobs:
     if: >-
       fromJSON(needs.request.outputs.run)
     steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
       with:
         python-version: "3.12"
     - name: Initialize Pants
-      uses: pantsbuild/actions/init-pants@ab362158088bb31685015e7f5728a4c1df3c0e6e  # v10
+      uses: pantsbuild/actions/init-pants@0aaef864bd133c4055feb6adad0bfdce0de1c2e4  # v11
       with:
         gha-cache-key: "v0-${{ runner.os }}"
         named-caches-hash: "${{ hashFiles('pants*toml') }}"
@@ -86,12 +86,12 @@ jobs:
     if: >-
       fromJSON(needs.request.outputs.run)
     steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
       with:
         python-version: "3.12"
     - name: Initialize Pants
-      uses: pantsbuild/actions/init-pants@ab362158088bb31685015e7f5728a4c1df3c0e6e  # v10
+      uses: pantsbuild/actions/init-pants@0aaef864bd133c4055feb6adad0bfdce0de1c2e4  # v11
       with:
         gha-cache-key: "v0-${{ runner.os }}"
         named-caches-hash: "${{ hashFiles('pants*toml') }}"
@@ -102,12 +102,12 @@ jobs:
     # TODO: reenable once plugin is fixed
     if: false
     steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
       with:
         python-version: "3.12"
     - name: Initialize Pants
-      uses: pantsbuild/actions/init-pants@ab362158088bb31685015e7f5728a4c1df3c0e6e  # v10
+      uses: pantsbuild/actions/init-pants@0aaef864bd133c4055feb6adad0bfdce0de1c2e4  # v11
       with:
         gha-cache-key: "v0-${{ runner.os }}"
         named-caches-hash: "${{ hashFiles('pants*toml') }}"
@@ -125,19 +125,19 @@ jobs:
     if: >-
       fromJSON(needs.request.outputs.run)
     steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
       with:
         python-version: "3.12"
     - name: Initialize Pants
-      uses: pantsbuild/actions/init-pants@ab362158088bb31685015e7f5728a4c1df3c0e6e  # v10
+      uses: pantsbuild/actions/init-pants@0aaef864bd133c4055feb6adad0bfdce0de1c2e4  # v11
       with:
         gha-cache-key: "v0-${{ runner.os }}"
         named-caches-hash: "${{ hashFiles('pants*toml') }}"
     - name: Run pants package
       run: "pants --colors package ::"
     - name: Archive created packages
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: python-artifacts
         path: dist/*whl
