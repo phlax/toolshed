@@ -251,6 +251,7 @@ install_libstdcc () {
     echo "Step 4: Installing libstdc++..."
 
     local ppa_url="https://api.launchpad.net/1.0/~ubuntu-toolchain-r/+archive/ubuntu/test"
+    local ppa_web_url="https://launchpad.net/~ubuntu-toolchain-r/+archive/ubuntu/test"
     local distro_arch_series="https://api.launchpad.net/1.0/ubuntu/${PPA_TOOLCHAIN}/${ARCH}"
     local tmp_dir
     tmp_dir=$(mktemp -d)
@@ -272,7 +273,8 @@ install_libstdcc () {
         # quotes the API silently returns total_size:0). Booleans are not quoted.
         # --data-urlencode URL-encodes the quotes as part of the value; the server
         # decodes them back, so the API receives e.g. binary_name="libstdc++-13-dev".
-        retry 5 10 curl -sG "$ppa_url" \
+        # -f makes curl fail on HTTP errors so retry actually retries; -S shows errors.
+        retry 5 10 curl -fsSG "$ppa_url" \
             --data-urlencode "ws.op=getPublishedBinaries" \
             --data-urlencode "binary_name=\"${pkg}\"" \
             --data-urlencode "distro_arch_series=${distro_arch_series}" \
@@ -281,35 +283,49 @@ install_libstdcc () {
             --data-urlencode "order_by_date=true" \
             -o "$meta_file"
 
+        # Parse JSON response; dump raw content first on jq failure (e.g. HTML error page)
         local self_link pkg_version
-        self_link=$(jq -r '.entries[0].self_link' "$meta_file")
-        pkg_version=$(jq -r '.entries[0].binary_package_version' "$meta_file")
+        if ! self_link=$(jq -r '.entries[0].self_link' "$meta_file") \
+           || ! pkg_version=$(jq -r '.entries[0].binary_package_version' "$meta_file"); then
+            echo "Error: Failed to parse API response for ${pkg}" >&2
+            echo "First 2048 bytes of API response:" >&2
+            head -c 2048 "$meta_file" >&2
+            exit 1
+        fi
+
+        local total_size display_name
+        total_size=$(jq -r '.total_size // "n/a"' "$meta_file")
+        display_name=$(jq -r '.entries[0].display_name // "n/a"' "$meta_file")
+        echo "  API response: total_size=${total_size}, first entry display_name=${display_name}"
 
         if [[ -z "$self_link" ]] || [[ "$self_link" == "null" ]]; then
-            echo "Error: Could not find published binary for ${pkg}"
-            echo "API response:"
-            cat "$meta_file"
+            echo "Error: Could not find published binary for ${pkg}" >&2
+            echo "First 2048 bytes of API response:" >&2
+            head -c 2048 "$meta_file" >&2
             exit 1
         fi
 
         echo "  Found ${pkg} ${pkg_version}"
 
-        # Resolve the direct download URL via the Launchpad librarian API
-        local url_file="${tmp_dir}/${pkg}.url"
-        retry 5 10 curl -sG "${self_link}" \
-            --data-urlencode "ws.op=getDownloadUrl" \
-            -o "$url_file"
+        # Resolve the librarian URL via the +files/<filename> HTTP redirect.
+        # getDownloadUrl is not a public op on BinaryPackagePublishingHistory;
+        # the correct approach is the +files/<filename> redirect on the archive URL.
+        # -I does HEAD (no body), -L follows the redirect, -w prints the final URL.
+        local deb_filename="${pkg}_${pkg_version}_${ARCH}.deb"
         local download_url
-        download_url=$(jq -r '.' "$url_file")
+        download_url=$(retry 5 10 curl -fsSIL \
+            -w '%{url_effective}' \
+            -o /dev/null \
+            "${ppa_web_url}/+files/${deb_filename}")
 
-        if [[ -z "$download_url" ]] || [[ "$download_url" == "null" ]]; then
-            echo "Error: Could not get download URL for ${pkg}"
+        if [[ "$download_url" != https://launchpadlibrarian.net/* ]]; then
+            echo "Error: Unexpected librarian URL for ${pkg}: ${download_url}" >&2
             exit 1
         fi
 
         echo "  Downloading ${download_url}"
-        local deb_file="${tmp_dir}/${pkg}_${pkg_version}_${ARCH}.deb"
-        retry 5 10 curl -sL -o "$deb_file" "$download_url"
+        local deb_file="${tmp_dir}/${deb_filename}"
+        retry 5 10 curl -fsSL -o "$deb_file" "$download_url"
 
         # Log the Depends field of the -dev package so dep-closure changes are visible
         if [[ "$pkg" == "libstdc++-${STDCC_VERSION}-dev" ]]; then
