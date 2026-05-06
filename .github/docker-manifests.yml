@@ -7,6 +7,14 @@ manifests:
   - amd64
   - arm64
   artifact-pattern: oci-debian-{arch}/debian-worker-{sha}-{arch}.tar
+# worker (gcr)
+- name: envoy-build
+  tag: worker-{sha}
+  registry: gcr.io/envoy-ci
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/debian-worker-{sha}-{arch}.tar
 # ci
 - name: envoy-build
   tag: ci-{sha}
@@ -19,6 +27,14 @@ manifests:
 - name: envoy-build
   tag: gcc-{sha}
   registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/debian-gcc-{sha}-{arch}.tar
+# gcc (gcr)
+- name: envoy-build
+  tag: gcc-{sha}
+  registry: gcr.io/envoy-ci
   architectures:
   - amd64
   - arm64

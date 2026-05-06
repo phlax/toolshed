@@ -140,7 +140,9 @@ jobs:
           | map(. + {
               tag: (.tag | gsub("{sha}"; "${{ steps.docker-sha.outputs.sha }}")),
               "artifact-pattern": (.["artifact-pattern"] | gsub("{sha}"; "${{ steps.docker-sha.outputs.sha }}")),
-              "additional-tags": (if .["additional-tags"] then .["additional-tags"] | map(gsub("{sha}"; "${{ steps.docker-sha.outputs.sha }}")) else null end)
+              "additional-tags": (if .["additional-tags"] then
+              .["additional-tags"] | map(gsub("{sha}"; "${{ steps.docker-sha.outputs.sha }}"))
+              else null end)
             })
           | {manifests: .}
 
@@ -151,6 +153,7 @@ jobs:
         dry-run: ${{ github.event_name == 'pull_request' }}
         dockerhub-username: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.DOCKERHUB_USERNAME || '' }}
         dockerhub-password: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.DOCKERHUB_PASSWORD || '' }}
+        gcr-key: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.GCP_SERVICE_ACCOUNT_KEY || '' }}
 
   status:
     runs-on: ubuntu-24.04
