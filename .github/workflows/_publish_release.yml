@@ -8,6 +8,9 @@ on:
     secrets:
       app-id:
       app-key:
+      dockerhub-username:
+      dockerhub-password:
+      gcr-key:
       gpg-key:
       gpg-password:
 
@@ -197,3 +200,56 @@ jobs:
         dry-run: ${{ fromJSON(inputs.dry-run) || fromJSON(inputs.pypi-dry-run) }}
         packages-dir: artifacts/publish
         repository-url: ${{ inputs.pypi-repository-url }}
+
+  # Pushes multi-arch Docker manifests to docker.io/envoyproxy and gcr.io/envoy-ci.
+  # Runs as a separate job so that docker registry credentials are scoped to this job only.
+  docker_publish:
+    needs: release
+    name: Docker publish (${{ inputs.name }})
+    if: >-
+      inputs.name == 'docker'
+      && fromJSON(needs.release.outputs.continue)
+      && needs.release.outputs.version != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+    - name: Download OCI artifacts
+      uses: envoyproxy/toolshed/actions/github/release/artifacts@094549c1d217c1d0b28b0570431c71e8602dc0f0
+      with:
+        dry-run: ${{ inputs.dry-run }}
+        run-ids: ${{ needs.release.outputs.run-ids }}
+        template-artifacts: |
+          oci-debian-*
+        workflows: ${{ inputs.artifact-workflows }}
+
+    - name: Generate manifest configuration
+      id: manifest-config
+      uses: envoyproxy/toolshed/actions/jq@094549c1d217c1d0b28b0570431c71e8602dc0f0
+      with:
+        input: .github/docker-manifests.yml
+        input-format: yaml-path
+        filter: >-
+          .manifests
+          | map(. + {
+              tag: (.tag | gsub("{sha}"; "${{ inputs.sha }}")),
+              "artifact-pattern": (.["artifact-pattern"] | gsub("{sha}"; "${{ inputs.sha }}")),
+              "additional-tags": (if .["additional-tags"] then
+              .["additional-tags"] | map(gsub("{sha}"; "${{ inputs.sha }}"))
+              else null end)
+            })
+          | {manifests: .}
+
+    - name: Collect and push OCI artifacts
+      uses: envoyproxy/toolshed/actions/oci/collector@094549c1d217c1d0b28b0570431c71e8602dc0f0
+      with:
+        manifest-config: ${{ steps.manifest-config.outputs.value }}
+        artifacts-path: ./artifacts/publish
+        dry-run: ${{ inputs.dry-run }}
+        dockerhub-username: ${{ secrets.dockerhub-username }}
+        dockerhub-password: ${{ secrets.dockerhub-password }}
+        gcr-key: ${{ secrets.gcr-key }}

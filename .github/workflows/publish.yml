@@ -7,6 +7,7 @@ on:
   workflow_run:
     workflows:
     - Bazel CI
+    - Docker CI
     - Github/actions CI
     - Python CI
     - Rust CI
@@ -26,6 +27,9 @@ jobs:
       app-key: ${{ secrets.ENVOY_CI_PUBLISH_APP_KEY }}
       gpg-key: ${{ secrets.ENVOY_GPG_MAINTAINER_KEY }}
       gpg-password: ${{ secrets.ENVOY_GPG_MAINTAINER_KEY_PASSWORD }}
+      dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub-password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      gcr-key: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
     uses: ./.github/workflows/_publish.yml
     with:
       committer-email: "140627008+publish-envoy[bot]@users.noreply.github.com"
