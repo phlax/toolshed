@@ -10,6 +10,7 @@ python_tests(
         # dev resolve lockfile for Check B
         "//py/deps:dev_requirements",
         # per-package setup.cfg + publish-requirements.in for Checks A & B
+        "//py/_test_publish_pkg:build_artefacts",
         "//py/abstracts:build_artefacts",
         "//py/aio.api.bazel:build_artefacts",
         "//py/aio.api.github:build_artefacts",
@@ -36,5 +37,17 @@ python_tests(
         "//py/pytest-abstracts:build_artefacts",
         "//py/pytest-iters:build_artefacts",
         "//py/pytest-patches:build_artefacts",
+    ],
+)
+
+python_tests(
+    name="publish_wheel_metadata_check",
+    sources=["test_publish_wheel_metadata.py"],
+    skip_mypy=True,
+    runtime_package_dependencies=["//py/_test_publish_pkg:package"],
+    dependencies=[
+        "//py/deps:reqs#packaging",
+        "//py/deps:reqs#pytest",
+        "//py/deps:reqs#pytest-asyncio",
     ],
 )
