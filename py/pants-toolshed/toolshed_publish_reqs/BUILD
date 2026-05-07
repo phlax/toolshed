@@ -4,7 +4,6 @@ python_tests(
     skip_mypy=True,
     dependencies=[
         "//py/pants-toolshed/toolshed_publish_reqs",
-        "//py/pants-toolshed/toolshed_setup_cfg",
         "//py/deps:reqs#packaging",
         "//py/deps:reqs#pytest",
     ],
