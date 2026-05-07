@@ -20,8 +20,9 @@ import glob
 import os
 import pathlib
 import zipfile
+from email.message import Message
 from email.parser import Parser
-from typing import List
+from typing import List, Tuple
 
 import pytest
 from packaging.requirements import Requirement
@@ -86,7 +87,7 @@ def _find_wheel() -> pathlib.Path:
     return pathlib.Path(whl_files[0])
 
 
-def _read_metadata(wheel_path: pathlib.Path):
+def _read_metadata(wheel_path: pathlib.Path) -> Tuple[Message, List[str]]:
     """Open the wheel zip and return the parsed METADATA Message."""
     with zipfile.ZipFile(wheel_path) as zf:
         metadata_names = [
@@ -154,7 +155,7 @@ def test_wheel_requires_dist_loose_ranges() -> None:
         if "; extra ==" not in r
     ]
 
-    installed: dict = {
+    actual_requires: dict = {
         canonicalize_name(Requirement(r).name): Requirement(r)
         for r in main_requires
     }
@@ -163,12 +164,12 @@ def test_wheel_requires_dist_loose_ranges() -> None:
         expected = Requirement(expected_str)
         canon = canonicalize_name(expected.name)
 
-        assert canon in installed, (
+        assert canon in actual_requires, (
             f"Expected {expected_str!r} in Requires-Dist (unconditional) "
             f"but not found.\n"
             f"All Requires-Dist:\n{full_block}")
 
-        actual = installed[canon]
+        actual = actual_requires[canon]
 
         # Check the specifier matches the loose range, not a pin.
         if str(expected.specifier):

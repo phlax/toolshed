@@ -7,3 +7,4 @@ Do not use or publish this package.
 
 def main() -> None:
     """Entry point for the toolshed-test-publish-pkg console script."""
+    pass
