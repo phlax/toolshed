@@ -1,3 +1,5 @@
+from typing import Self
+
 import abstracts
 
 
@@ -65,7 +67,10 @@ class Implementer(type):
             methods)
 
     @classmethod
-    def add_docs(cls, clsdict: dict, klass: "Implementer") -> None:
+    def add_docs(
+            cls,
+            clsdict: dict,
+            klass: Self) -> None:  # type: ignore[misc]
         """Add docs to the implementation class.
 
         If the implementation class has no docstring, then a docstring is
@@ -99,10 +104,11 @@ class Implementer(type):
                 method.__doc__ = getattr(
                     abstract_klass, abstract_method).__doc__
 
-    @staticmethod
+    @classmethod
     def add_interfaces(
+            cls,
             ifaces: tuple,
-            klass: "Implementer") -> None:
+            klass: Self) -> None:  # type: ignore[misc]
         for iface in ifaces:
             if issubclass(klass, iface):
                 continue
@@ -184,9 +190,10 @@ class Implementer(type):
                 abstract_docs[name] = docs
         return abstract_docs, abstract_methods
 
-    @staticmethod
+    @classmethod
     def is_interface(
-            klass: "abstracts.Interface | Implementer") -> bool:
+            cls,
+            klass: abstracts.Interface | Self) -> bool:  # type: ignore[misc]
         return (
             isinstance(klass, abstracts.Interface)
             and not isinstance(klass, abstracts.Abstraction))
@@ -195,7 +202,7 @@ class Implementer(type):
             cls,
             clsname: str,
             bases: tuple[type, ...],
-            clsdict: dict) -> "Implementer":
+            clsdict: dict) -> Self:  # type: ignore[misc]
         """Create a new Implementer class."""
         if "__implements__" not in clsdict:
             klass = super().__new__(cls, clsname, bases, clsdict)

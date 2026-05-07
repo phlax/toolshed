@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, cast
+from typing import cast
 
 from abstracts.implements import Implementer
 
@@ -32,9 +32,9 @@ def implementer[T](
         implements = (implements,)
 
     def wrapper(klass: type[T]) -> type[T]:
-        dynamic_base: type[Any] = cast(type[Any], klass)
-
-        class Implementation(dynamic_base, metaclass=Implementer):
+        class Implementation(
+                klass,  # type: ignore[misc, valid-type]
+                metaclass=Implementer):
             __implements__ = implements
             __doc__ = klass.__doc__
 
