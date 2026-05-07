@@ -30,25 +30,58 @@ def toolshed_package(
         setup_kwargs=None,  # Optional[Dict] = None,
         **kwargs) -> None:
     """Namespaced distribution package"""
-    dependencies = (
+
+    # Per-package, range-only requirements. These are what pants will
+    # walk transitively from the `python_distribution` and embed as the
+    # wheel's install_requires. They mirror setup.cfg's install_requires.
+    python_requirements(
+        name="publish_reqs",
+        source="publish-requirements.in",
+        resolve="publish",
+    )
+
+    # Source target deps remain whatever was passed in (tests / dev use
+    # the pinned //py/deps:reqs#* set as before).
+    library_dependencies = (
         _dep_on_myself(namespace)
         + (dependencies or []))
+
     resources(
         name="build_artefacts",
-        sources=["VERSION", "setup.cfg"])
+        sources=["VERSION", "setup.cfg", "publish-requirements.in"])
+
     python_sources(
         skip_mypy=True,
-        dependencies=dependencies,
-        **library_kwargs or {})
+        dependencies=library_dependencies,
+        **(library_kwargs or {}))
+
+    # The python_distribution depends on:
+    #   - the in-repo source target for this package (so its .py files
+    #     are bundled), AND
+    #   - the per-package publish_reqs (which become install_requires
+    #     in the wheel).
+    #
+    # NOTE: pants will also walk the inner python_sources's transitive
+    # deps when computing install_requires, which currently includes
+    # the pinned //py/deps:reqs#* set for tests. Whether those leak
+    # into the wheel METADATA is what the wheel METADATA test in
+    # //py/_test_publish_pkg is responsible for catching. The structural
+    # fix (if needed) is to stop attaching pinned reqs to the inner
+    # python_sources and put them on the test target only.
+    _inner = _dep_on_myself(namespace)[0]
     toolshed_distribution(
         name="package",
-        dependencies=dependencies,
+        dependencies=[
+            _inner,
+            ":publish_reqs",
+        ],
         provides=setup_py(
             name=namespace,
-            **setup_kwargs or {}),
+            **(setup_kwargs or {})),
         wheel=True,
         sdist=True,
         **kwargs)
+
     readme_snippet(
         name="package_snippet",
         artefacts=[
