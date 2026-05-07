@@ -7,6 +7,5 @@ python_tests(
         "//py/pants-toolshed/toolshed_setup_cfg",
         "//py/deps:reqs#packaging",
         "//py/deps:reqs#pytest",
-        "//py/deps:reqs#pytest-asyncio",
     ],
 )

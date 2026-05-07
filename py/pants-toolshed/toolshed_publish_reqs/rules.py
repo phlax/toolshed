@@ -22,11 +22,8 @@ Analogous Pants core examples:
 
 import configparser
 import os
-import re
 from dataclasses import dataclass
 
-from packaging.requirements import Requirement
-from packaging.utils import canonicalize_name
 from pants.engine.fs import PathGlobs
 from pants.engine.internals.synthetic_targets import (
     SyntheticAddressMaps,
@@ -43,26 +40,35 @@ from pants.engine.unions import UnionRule
 
 from toolshed_setup_cfg import parse_options
 
+from .names import _publish_req_target_name
+
 
 @dataclass(frozen=True)
 class ToolshedPublishReqsRequest(SyntheticTargetsRequest):
     path: str = SyntheticTargetsRequest.SINGLE_REQUEST_FOR_ALL_TARGETS
 
 
-def _publish_req_target_name(req_str: str) -> str:
-    canonical = canonicalize_name(Requirement(req_str).name).replace("-", "_")
-    sanitized = re.sub(r"[^a-z0-9_]", "_", canonical)
-    collapsed = []
-    saw_underscore = False
-    for char in sanitized:
-        if char == "_":
-            if not saw_underscore:
-                collapsed.append(char)
-            saw_underscore = True
-            continue
-        collapsed.append(char)
-        saw_underscore = False
-    return f"_publish__{''.join(collapsed)}"
+def _adaptors_for_install_requires(
+        package_dir: str,
+        install_requires: list[str]) -> tuple[TargetAdaptor, ...]:
+    adaptors: list[TargetAdaptor] = []
+    for req_str in install_requires:
+        try:
+            name = _publish_req_target_name(req_str)
+        except Exception as exc:
+            raise ValueError(
+                f"Invalid requirement {req_str!r} in "
+                f"{package_dir}/setup.cfg") from exc
+        adaptors.append(
+            TargetAdaptor(
+                "python_requirement",
+                name=name,
+                requirements=[req_str],
+                resolve="publish",
+                __description_of_origin__=f"{package_dir}/setup.cfg",
+            )
+        )
+    return tuple(adaptors)
 
 
 @rule
@@ -82,16 +88,7 @@ async def toolshed_publish_reqs(
 
         install_requires = parse_options(config, package_dir).get(
             "install_requires", [])
-        adaptors = tuple(
-            TargetAdaptor(
-                "python_requirement",
-                name=_publish_req_target_name(req_str),
-                requirements=[req_str],
-                resolve="publish",
-                __description_of_origin__=f"{package_dir}/setup.cfg",
-            )
-            for req_str in install_requires
-        )
+        adaptors = _adaptors_for_install_requires(package_dir, install_requires)
         if adaptors:
             address_maps.append(
                 (f"{package_dir}/BUILD.publish-reqs", adaptors))

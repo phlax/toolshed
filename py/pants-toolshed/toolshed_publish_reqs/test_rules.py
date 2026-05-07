@@ -23,7 +23,13 @@ def _install_pants_stubs() -> None:
     synthetic_targets.SyntheticAddressMaps = _SyntheticAddressMaps
     synthetic_targets.SyntheticTargetsRequest = _SyntheticTargetsRequest
     target_adaptor = types.ModuleType("pants.engine.internals.target_adaptor")
-    target_adaptor.TargetAdaptor = object
+
+    class _FakeTargetAdaptor:
+        def __init__(self, type_alias, **kwargs):
+            self.type_alias = type_alias
+            self.kwargs = kwargs
+
+    target_adaptor.TargetAdaptor = _FakeTargetAdaptor
     intrinsics = types.ModuleType("pants.engine.intrinsics")
     intrinsics.digest_to_snapshot = None
     intrinsics.get_digest_contents = None
@@ -46,10 +52,12 @@ def _install_pants_stubs() -> None:
 
 
 try:
-    from toolshed_publish_reqs.rules import _publish_req_target_name
+    import pants  # noqa: F401
 except ModuleNotFoundError:
     _install_pants_stubs()
-    from toolshed_publish_reqs.rules import _publish_req_target_name
+
+from toolshed_publish_reqs.names import _publish_req_target_name  # noqa: E402
+from toolshed_publish_reqs.rules import _adaptors_for_install_requires  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -67,3 +75,27 @@ except ModuleNotFoundError:
 )
 def test_publish_req_target_name(req_str: str, expected: str):
     assert _publish_req_target_name(req_str) == expected
+
+
+def test_adaptors_for_install_requires_basic():
+    result = _adaptors_for_install_requires("py/foo", ["aiohttp>=3.8.1", "PyYAML"])
+    assert len(result) == 2
+    assert result[0].type_alias == "python_requirement"
+    assert result[0].kwargs["name"] == "_publish__aiohttp"
+    assert result[0].kwargs["requirements"] == ["aiohttp>=3.8.1"]
+    assert result[0].kwargs["resolve"] == "publish"
+    assert result[0].kwargs["__description_of_origin__"] == "py/foo/setup.cfg"
+    assert result[1].kwargs["name"] == "_publish__pyyaml"
+
+
+def test_adaptors_for_install_requires_empty():
+    result = _adaptors_for_install_requires("py/foo", [])
+    assert result == ()
+
+
+def test_adaptors_for_install_requires_invalid():
+    with pytest.raises(ValueError) as exc_info:
+        _adaptors_for_install_requires("py/foo", ["@@not-a-valid-requirement@@"])
+    assert "@@not-a-valid-requirement@@" in str(exc_info.value)
+    assert "py/foo/setup.cfg" in str(exc_info.value)
+
