@@ -7,14 +7,15 @@ sandbox is created) then cracks it open and asserts that:
 
 - Name, Version, Summary, Requires-Python match setup.cfg exactly.
 - Classifier lines include the expected values.
-- Requires-Dist contains the **loose** specifiers from publish-requirements.in,
-  NOT the pinned ``==`` versions from the dev resolve.
+- Requires-Dist contains the **loose** specifiers from setup.cfg
+  ``install_requires`` via synthetic publish requirement targets, NOT the
+  pinned ``==`` versions from the dev resolve.
 - No extra packages leak in from the dev resolve (count check).
 - The ``dev`` extras_require group appears as Provides-Extra / Requires-Dist.
 - entry_points.txt in the dist-info has the expected console_scripts entry.
 
 The test intentionally fails if the toolshed_package macro wires pinned dev
-deps into the wheel instead of the per-package publish-requirements.in ranges.
+deps into the wheel instead of the per-package setup.cfg ranges.
 """
 
 import glob
@@ -141,7 +142,8 @@ def test_wheel_requires_dist_loose_ranges() -> None:
 
     This is the key test: if the toolshed_package macro mistakenly wires
     the pinned //py/deps:reqs#* targets into the wheel instead of (or in
-    addition to) the per-package :publish_reqs targets, the Requires-Dist
+    addition to) the synthetic per-package publish requirement targets, the
+    Requires-Dist
     will contain ``==`` specifiers and this test will fail.
     """
     wheel_path = _find_wheel()
@@ -186,13 +188,14 @@ def test_wheel_requires_dist_loose_ranges() -> None:
                 f"Wheel has pinned dep {actual.name}{actual.specifier} "
                 f"(operator ==) — expected a loose range.\n"
                 f"This indicates the toolshed_package macro is walking "
-                f"pinned dev deps into the wheel instead of publish_reqs.\n"
+                f"pinned dev deps into the wheel instead of "
+                f"setup.cfg ranges.\n"
                 f"All Requires-Dist:\n{full_block}")
 
 
 def test_wheel_requires_dist_no_extra_packages() -> None:
-    """Main Requires-Dist must contain exactly the packages in publish-
-    requirements.in.
+    """Main Requires-Dist must contain exactly the setup.cfg install_requires
+    packages.
 
     No extra packages from the dev resolve should leak into the wheel.
     """

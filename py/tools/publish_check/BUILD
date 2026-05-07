@@ -9,7 +9,7 @@ python_tests(
         "//py/deps:reqs#pytest-asyncio",
         # dev resolve lockfile for Check B
         "//py/deps:dev_requirements",
-        # per-package setup.cfg + publish-requirements.in for Checks A & B
+        # per-package setup.cfg (via build_artefacts resources) for Check B
         "//py/_test_publish_pkg:build_artefacts",
         "//py/abstracts:build_artefacts",
         "//py/aio.api.bazel:build_artefacts",

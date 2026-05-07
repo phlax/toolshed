@@ -3,8 +3,8 @@
 # The dev_deps target groups the pinned dependencies used for development
 # and testing.  The toolshed_distribution in the outer BUILD depends on
 # "!_inner:dev_deps" so these pinned versions are excluded from the wheel's
-# Requires-Dist.  The loose ranges in ../publish-requirements.in are
-# included instead via the :publish_reqs target.
+# Requires-Dist. Loose ranges from setup.cfg install_requires are included
+# instead via synthetic publish requirement targets.
 
 target(
     name="dev_deps",

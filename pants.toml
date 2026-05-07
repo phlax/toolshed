@@ -7,6 +7,7 @@ backend_packages = [
     "pants.backend.python.lint.flake8",
     "pants.backend.python.typecheck.mypy",
     "toolshed_distribution",
+    "toolshed_publish_reqs",
     "toolshed_readme"]
 pants_ignore = ["not", "/bazel/", "/bazel-registry/"]
 build_file_prelude_globs = [

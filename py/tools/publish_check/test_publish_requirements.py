@@ -1,16 +1,11 @@
-"""Validation tests for publish-requirements.in consistency.
+"""Validation tests for setup.cfg publish requirement ranges.
 
-Check A: setup.cfg install_requires ↔ publish-requirements.in agreement.
-For each publishable package, parse both files and assert the
-requirement   strings match exactly (same names, same specifiers, same
-order).
-
-Check B: dev resolve ⊆ published ranges.   Parse
-py/deps/requirements.txt to get a map of name → resolved version.   For
-each entry in every package's publish-requirements.in, look up the
-corresponding resolved version and assert it satisfies the range.
-Toolshed packages (published under py/) are skipped since they are not
-pinned in requirements.txt with a single canonical dev version.
+Check B: dev resolve ⊆ published ranges. Parse py/deps/requirements.txt
+to get a map of name → resolved version. For each entry in every
+package's setup.cfg ``install_requires``, look up the corresponding
+resolved version and assert it satisfies the range. Toolshed packages
+(published under py/) are skipped since they are not pinned in
+requirements.txt with a single canonical dev version.
 """
 
 import configparser
@@ -32,21 +27,13 @@ _REPO_ROOT = pathlib.Path(__file__).parent.parent.parent.parent
 
 
 def _find_publishable_packages() -> List[pathlib.Path]:
-    """Return directories under py/ that have a publish-requirements.in."""
+    """Return package dirs under py/ with install_requires in setup.cfg."""
     py_dir = _REPO_ROOT / "py"
-    return sorted(
-        p.parent
-        for p in py_dir.glob("*/publish-requirements.in"))
-
-
-def _read_publish_reqs(pkg_dir: pathlib.Path) -> List[str]:
-    """Return the non-empty, non-comment lines from publish-requirements.in."""
-    req_file = pkg_dir / "publish-requirements.in"
-    lines = req_file.read_text().splitlines()
-    return [
-        line.strip()
-        for line in lines
-        if line.strip() and not line.strip().startswith("#")]
+    publishable = []
+    for pkg_dir in sorted(p for p in py_dir.glob("*") if p.is_dir()):
+        if _read_setup_cfg_install_requires(pkg_dir):
+            publishable.append(pkg_dir)
+    return publishable
 
 
 def _read_setup_cfg_install_requires(
@@ -89,37 +76,14 @@ _TOOLSHED_CANONICAL_NAMES = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# Check A: setup.cfg install_requires == publish-requirements.in
-# ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize(
-    "pkg_dir",
-    _PUBLISHABLE_PACKAGES,
-    ids=lambda p: p.name)
-def test_publish_reqs_match_setup_cfg(pkg_dir: pathlib.Path) -> None:
-    """publish-requirements.in must mirror setup.cfg install_requires
-    exactly."""
-    publish_reqs = _read_publish_reqs(pkg_dir)
-    setup_reqs = _read_setup_cfg_install_requires(pkg_dir)
-
-    assert publish_reqs == setup_reqs, (
-        f"{pkg_dir.relative_to(_REPO_ROOT)}: "
-        f"publish-requirements.in and setup.cfg install_requires differ.\n"
-        f"  publish-requirements.in: {publish_reqs}\n"
-        f"  setup.cfg install_requires: {setup_reqs}\n"
-        f"Edit the two files to agree (setup.cfg is the source of truth)."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Check B: dev resolve ⊆ published ranges
+# Check B: dev resolve ⊆ setup.cfg published ranges
 # ---------------------------------------------------------------------------
 
 def _check_b_cases() -> List[Tuple[pathlib.Path, str]]:
     """Collect (pkg_dir, req_str) pairs to parametrize Check B."""
     cases = []
     for pkg_dir in _PUBLISHABLE_PACKAGES:
-        for req_str in _read_publish_reqs(pkg_dir):
+        for req_str in _read_setup_cfg_install_requires(pkg_dir):
             req = Requirement(req_str)
             if canonicalize_name(req.name) not in _TOOLSHED_CANONICAL_NAMES:
                 cases.append((pkg_dir, req_str))
@@ -147,7 +111,7 @@ def test_dev_resolve_satisfies_publish_range(
 
     assert dev_version in req.specifier, (
         f"{pkg_dir.relative_to(_REPO_ROOT)}: "
-        f"publish-requirements.in declares {req_str!r} but "
+        f"setup.cfg install_requires declares {req_str!r} but "
         f"dev resolve has {req.name}=={dev_version}, "
         f"which does not satisfy the range. "
         f"Either loosen the publish range or bump the dev pin."
