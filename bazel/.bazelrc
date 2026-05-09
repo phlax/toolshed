@@ -46,6 +46,15 @@ common:engflow-common --experimental_remote_cache_eviction_retries=5
 common:rbe --config=remote-cache
 common:rbe --config=remote-exec
 
+# Override the default RBE platforms to use the gcc worker container.
+# Use alongside --config=rbe and --config=gcc for gcc RBE builds.
+common:rbe-gcc --host_platform=//platforms/rbe:linux_x64_gcc
+common:rbe-gcc --extra_execution_platforms=//platforms/rbe:linux_x64_gcc,//platforms/rbe:linux_arm64_gcc
+
+# Remote cache + BES only (no remote execution); suitable for macOS builds.
+common:rbe-cache-only --config=remote-cache
+common:rbe-cache-only --config=bes
+
 common:remote-cache --config=engflow-common
 common:remote-cache --remote_cache=grpcs://mordenite.cluster.engflow.com
 common:remote-cache --experimental_remote_downloader=grpcs://mordenite.cluster.engflow.com

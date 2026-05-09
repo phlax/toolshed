@@ -1,0 +1,53 @@
+name: Bazel RBE setup
+description: >-
+  Checks EngFlow RBE authorization and decides which Bazel flags to append.
+  Outputs the flags string (or empty) based on event type and auth result.
+
+inputs:
+  flags:
+    description: Bazel flags to append when RBE auth is authorized
+    required: true
+  enabled:
+    description: Whether to attempt RBE auth (set to 'false' to skip entirely)
+    required: false
+    default: 'true'
+
+outputs:
+  bazel-args:
+    description: Bazel args to append (empty string when skipped)
+    value: ${{ steps.decide.outputs.bazel-args }}
+
+
+runs:
+  using: composite
+  steps:
+  - name: RBE auth check
+    id: auth
+    if: inputs.enabled == 'true'
+    uses: ./actions/github/container/auth
+    with:
+      container: hello-world
+  - name: Decide RBE flags
+    id: decide
+    shell: bash
+    run: |
+      enabled="${{ inputs.enabled }}"
+      authorized="${{ steps.auth.outputs.authorized }}"
+      event="${{ github.event_name }}"
+      flags="${{ inputs.flags }}"
+
+      if [[ "${enabled}" != "true" ]]; then
+          echo "bazel-args=" >> "$GITHUB_OUTPUT"
+          exit 0
+      fi
+      if [[ "${event}" == "pull_request" ]]; then
+          echo "::notice::Skipping RBE (${flags}): pull_request event"
+          echo "bazel-args=" >> "$GITHUB_OUTPUT"
+          exit 0
+      fi
+      if [[ "${authorized}" != "true" ]]; then
+          echo "::notice::Skipping RBE (${flags}): auth check did not pass"
+          echo "bazel-args=" >> "$GITHUB_OUTPUT"
+          exit 0
+      fi
+      echo "bazel-args=${flags}" >> "$GITHUB_OUTPUT"

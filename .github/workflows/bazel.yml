@@ -44,12 +44,12 @@ jobs:
       action: test
       bazel-args: >-
         --config=ci
-        --config=rbe
         ${{ matrix.mode == 'bzlmod'
             && '--enable_bzlmod'
             || '' }}
       bazel-mode: ${{ matrix.mode }}
       bazel-path: bazel
+      rbe: true
       targets: >-
         //...
         //sysroot:sysroots
@@ -79,12 +79,12 @@ jobs:
           sysroot/sysroot-*.tar.xz
       bazel-args: >-
         --config=ci
-        --config=rbe
         ${{ matrix.mode == 'bzlmod'
             && '--enable_bzlmod'
             || '' }}
       bazel-path: bazel
       bazel-mode: ${{ matrix.mode }}
+      rbe: true
       targets: >-
         //...
         //sysroot:sysroots
@@ -110,11 +110,13 @@ jobs:
       bazel-args: >-
         --config=ci
         --config=gcc
+        --config=rbe-gcc
         ${{ matrix.mode == 'bzlmod'
             && '--enable_bzlmod'
             || '' }}
       bazel-mode: ${{ matrix.mode }}-gcc
       bazel-path: bazel
+      rbe: true
       targets: >-
         //...
     strategy:
@@ -144,14 +146,22 @@ jobs:
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
     - name: Setup Bazel
       uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2  # v3
+    - name: Bazel RBE setup (cache only)
+      id: rbe
+      uses: ./actions/bazel/rbe
+      with:
+        flags: --config=rbe-cache-only
     - name: Bazel targets (build/${{ matrix.mode }}-macos)
       run: |
         exec bazel build \
           --config=ci \
           --config=macos \
+          ${{ steps.rbe.outputs.bazel-args }} \
           ${{ matrix.mode == 'bzlmod' && '--enable_bzlmod' || '' }} \
           //...
       working-directory: bazel
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
 
   status:
     runs-on: ubuntu-24.04
