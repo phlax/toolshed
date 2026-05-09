@@ -32,6 +32,9 @@ jobs:
           - .github/workflows/_bazel.yml
 
   test:
+    permissions:
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -41,6 +44,7 @@ jobs:
       action: test
       bazel-args: >-
         --config=ci
+        --config=rbe
         ${{ matrix.mode == 'bzlmod'
             && '--enable_bzlmod'
             || '' }}
@@ -58,7 +62,8 @@ jobs:
 
   build:
     permissions:
-      contents: write
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -74,6 +79,7 @@ jobs:
           sysroot/sysroot-*.tar.xz
       bazel-args: >-
         --config=ci
+        --config=rbe
         ${{ matrix.mode == 'bzlmod'
             && '--enable_bzlmod'
             || '' }}
@@ -91,6 +97,9 @@ jobs:
         - bzlmod
 
   test-gcc:
+    permissions:
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -116,6 +125,9 @@ jobs:
         - bzlmod
 
   test-macos:
+    permissions:
+      contents: read
+      packages: read
     runs-on: macos-14
     needs: request
     if: >-
