@@ -1604,19 +1604,26 @@ async def test_distrotest_cleanup_swallows_docker_error(patches):
             {}])
 
 
-async def test_distrotest_cleanup_propagates_non_docker_error(patches):
+async def test_distrotest_cleanup_swallows_non_docker_error(patches):
     check = checker.Checker()
     dtest = distrotest.DistroTest(
         check, "CONFIG", "NAME", "IMAGE", "INSTALLABLE")
     patched = patches(
         ("DistroTest.docker", dict(new_callable=PropertyMock)),
+        ("DistroTest.log", dict(new_callable=PropertyMock)),
+        ("DistroTest.name", dict(new_callable=PropertyMock)),
         prefix="envoy.distribution.distrotest.distrotest")
 
-    with patched as (m_docker, ):
+    with patched as (m_docker, m_log, m_name):
         m_docker.return_value.containers.get.side_effect = OSError(
             "AN ERROR OCCURRED")
-        with pytest.raises(OSError):
-            await dtest.cleanup()
+        assert not await dtest.cleanup()
+
+    assert (
+        m_log.return_value.warning.call_args
+        == [(f"Cleanup failed for {m_name.return_value}: "
+             f"{OSError('AN ERROR OCCURRED')}",),
+            {}])
 
 
 @pytest.mark.parametrize(

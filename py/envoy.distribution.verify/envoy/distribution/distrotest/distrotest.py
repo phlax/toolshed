@@ -578,12 +578,12 @@ class DistroTest(object):
     async def cleanup(self) -> None:
         """Attempt to kill the test container.
 
-        As this is cleanup code, run when system is exiting, ignore
-        Docker errors but let unexpected exceptions propagate.
+        As this is cleanup code, run when system is exiting, log and
+        catch errors.
         """
         try:
             await self.stop(await self.docker.containers.get(self.name))
-        except aiodocker.exceptions.DockerError as e:
+        except Exception as e:
             self.log.warning(f"Cleanup failed for {self.name}: {e}")
 
     async def create(self) -> aiodocker.containers.DockerContainer:
