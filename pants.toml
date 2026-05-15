@@ -52,6 +52,14 @@ install_from_resolve = "flake8"
 
 [mypy]
 install_from_resolve = "mypy"
+requirements = [
+     "mypy",
+     "mypy-abstracts",
+     "types-aiofiles",
+     "types-docutils",
+     "types-Pygments",
+     "types-protobuf",
+     "types-pyyaml"]
 config = "mypy.ini"
 args = [
      "--explicit-package-bases",

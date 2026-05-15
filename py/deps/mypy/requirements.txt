@@ -1,2 +1,7 @@
-mypy==2.1.0
+mypy==2.0.0
 mypy-abstracts>=0.1.0
+types-aiofiles
+types-docutils
+types-Pygments
+types-protobuf
+types-pyyaml
