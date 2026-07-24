@@ -1,7 +1,29 @@
 diff -Naur orig/toolchain/cc_toolchain_config.bzl work/toolchain/cc_toolchain_config.bzl
 --- a/toolchain/cc_toolchain_config.bzl	2026-07-24 08:44:03.916217356 +0000
 +++ b/toolchain/cc_toolchain_config.bzl	2026-07-24 08:44:03.927217518 +0000
-@@ -586,7 +586,12 @@
+@@ -451,9 +451,7 @@
+         stdlib = "stdc++-" + stdlib[len("dynamic-stdc++-"):]
+ 
+     if stdlib == "builtin-libc++":
+-        cxx_flags.extend([
+-            "-stdlib=libc++",
+-        ])
++        link_flags.append("-stdlib=libc++")
+         system_includes.append(toolchain_builtin_include)
+         if is_darwin_exec_and_target:
+             # On macOS, use the SDK's libc++ entirely (headers + linking).
+@@ -511,9 +509,7 @@
+             ]
+ 
+     elif stdlib == "libc++":
+-        cxx_flags.extend([
+-            "-stdlib=libc++",
+-        ])
++        link_flags.append("-stdlib=libc++")
+ 
+         stdlib_link_libs.extend([
+             "-l:libc++.a",
+@@ -586,7 +582,12 @@
          else:
              fail("Invalid stdlib: " + stdlib)
      elif stdlib == "libc":
