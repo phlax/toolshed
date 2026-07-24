@@ -1,5 +1,5 @@
---- a/toolchain/extensions/llvm.bzl	2026-06-12 05:29:59.000000000 +0000
-+++ b/toolchain/extensions/llvm.bzl	2026-07-24 08:03:41.016624279 +0000
+--- a/toolchain/extensions/llvm.bzl
++++ b/toolchain/extensions/llvm.bzl
 @@ -77,11 +77,21 @@
                  name,
              )
@@ -54,8 +54,8 @@
 +        ),
      },
  )
---- a/toolchain/internal/configure.bzl	2026-06-12 05:29:59.000000000 +0000
-+++ b/toolchain/internal/configure.bzl	2026-07-24 08:07:46.562129804 +0000
+--- a/toolchain/internal/configure.bzl
++++ b/toolchain/internal/configure.bzl
 @@ -256,6 +256,57 @@
          use_absolute_paths_sysroot,
      )
@@ -197,8 +197,8 @@
          extra_exec_compatible_with_specific = toolchain_info.extra_exec_compatible_with.get(target_pair, []),
          extra_target_compatible_with_specific = toolchain_info.extra_target_compatible_with.get(target_pair, []),
          extra_exec_compatible_with_all_targets = toolchain_info.extra_exec_compatible_with.get("", []),
---- a/toolchain/internal/repo.bzl	2026-06-12 05:29:59.000000000 +0000
-+++ b/toolchain/internal/repo.bzl	2026-07-24 08:05:26.501671743 +0000
+--- a/toolchain/internal/repo.bzl
++++ b/toolchain/internal/repo.bzl
 @@ -153,6 +153,15 @@
                 "containing the files and the sysroot path will be taken as the path to the " +
                 "package of this label."),
@@ -215,8 +215,8 @@
      "multiarch": attr.string_dict(
          mandatory = False,
          doc = ("Multiarch triple used to construct sysroot include and library paths " +
---- a/toolchain/cc_toolchain_config.bzl	2026-06-12 05:29:59.000000000 +0000
-+++ b/toolchain/cc_toolchain_config.bzl	2026-07-24 08:05:36.288769105 +0000
+--- a/toolchain/cc_toolchain_config.bzl
++++ b/toolchain/cc_toolchain_config.bzl
 @@ -586,7 +586,12 @@
          else:
              fail("Invalid stdlib: " + stdlib)
