@@ -101,8 +101,8 @@ VERSIONS = {
     "bazel_skylib": {
         "type": "github_archive",
         "repo": "bazelbuild/bazel-skylib",
-        "version": "1.4.2",
-        "sha256": "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+        "version": "1.9.2",
+        "sha256": "37cdfbc6faefea94f7b37760a305c98c08981116c2bc9e821e3b423221fad8c8",
         "url": "https://github.com/{repo}/releases/download/{version}/bazel-skylib-{version}.tar.gz",
     },
     "llvm_libcxx_aarch64": {
@@ -195,8 +195,8 @@ VERSIONS = {
         "patch_args": ["-p1"],
         "patches": ["@envoy_toolshed//:patches/toolchains_llvm.patch"],
         "repo": "bazel-contrib/toolchains_llvm",
-        "version": "1.6.0",
-        "sha256": "2b298a1d7ea99679f5edf8af09367363e64cb9fbc46e0b7c1b1ba2b1b1b51058",
+        "version": "1.8.0",
+        "sha256": "3b05826f256040f91c24dcaad673eb1c91e4cc93f4043d0205f2512327640205",
         "url": "https://github.com/{repo}/releases/download/v{version}/{name}-v{version}.tar.gz",
         "strip_prefix": "{name}-v{version}",
     },
