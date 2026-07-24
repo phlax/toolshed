@@ -48,6 +48,23 @@ SANITIZER_ENV = select({
     "//conditions:default": LLVM_SANITIZER_ENV,
 })
 
+# toolchains_llvm (>= 1.8.0) wires the toolchain's libc++ headers/libs through
+# an always-on `<config>_nomsan_stdlib` cc_feature that emits explicit
+# `-nostdinc++ -cxx-isystem <toolchain libc++>` compile flags. rules_foreign_cc
+# copies the full compile command line into CMAKE_CXX_FLAGS_INIT, so those
+# explicit header paths leak into the libc++ CMake sub-builds below and shadow
+# the in-tree generated libc++ headers, breaking `#include_next` resolution
+# (e.g. `uintptr_t` never gets defined, so libc++abi's `__type_name_t` falls
+# back to `int`). Unlike the implicit paths added by `-stdlib=libc++`, explicit
+# `-cxx-isystem` dirs are NOT suppressed by the `-nostdinc++` we pass in
+# CXXFLAGS, so disable the feature outright for these self-hosting stdlib
+# builds. Disabling a feature that does not exist is a no-op, so listing both
+# host arches (and running under toolchains without this feature) is harmless.
+LIBCXX_BUILD_FEATURES = [
+    "-local-x86_64-linux_nomsan_stdlib",
+    "-local-aarch64-linux_nomsan_stdlib",
+]
+
 # Linker flags that differ between LLVM (lld) and GCC (default linker)
 LLVM_LINKER_FLAGS = {
     "LLVM_USE_LINKER": "lld",
@@ -101,6 +118,7 @@ cmake(
         "LLVM_USE_SANITIZER": "MemoryWithOrigins",
     },
     env = SANITIZER_ENV,
+    features = LIBCXX_BUILD_FEATURES,
     lib_source = "@llvm_source//:all",
     out_static_libs = [
         "libc++.a",
@@ -121,6 +139,7 @@ cmake(
         "LLVM_USE_SANITIZER": "Thread",
     },
     env = SANITIZER_ENV,
+    features = LIBCXX_BUILD_FEATURES,
     lib_source = "@llvm_source//:all",
     out_static_libs = [
         "libc++.a",
