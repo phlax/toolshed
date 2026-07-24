@@ -75,7 +75,7 @@ diff -Naur orig/toolchain/extensions/llvm.bzl work/toolchain/extensions/llvm.bzl
 diff -Naur orig/toolchain/internal/configure.bzl work/toolchain/internal/configure.bzl
 --- a/toolchain/internal/configure.bzl	2026-07-24 08:44:03.916217356 +0000
 +++ b/toolchain/internal/configure.bzl	2026-07-24 08:44:03.926217503 +0000
-@@ -256,6 +256,57 @@
+@@ -256,6 +256,58 @@
          use_absolute_paths_sysroot,
      )
  
@@ -118,17 +118,18 @@ diff -Naur orig/toolchain/internal/configure.bzl work/toolchain/internal/configu
 +    for k, v in cxx_cross_lib_cxx_flags.items():
 +        merged_extra_cxx_flags[k] = merged_extra_cxx_flags.get(k, []) + v
 +
-+    # Auto-set stdlib to "libc++" for target pairs that have cxx_cross_lib configured
-+    # but no explicit stdlib override. This prevents the builtin-libc++ ->
++    # Auto-set stdlib to "libc" for non-exec target pairs that have cxx_cross_lib
++    # configured but no explicit stdlib override. This prevents the builtin-libc++ ->
 +    # stdc++ cross-compile fallback in cc_toolchain_config.bzl from kicking in,
 +    # since the user has provided the actual libc++ libraries via cxx_cross_lib.
++    # The exec (host) pair is left at the toolchain default (builtin-libc++) so that
++    # -stdlib=libc++ is not injected into host compile actions.
 +    merged_stdlib = dict(rctx.attr.stdlib)
 +    for target_pair in rctx.attr.cxx_cross_lib.keys():
++        if target_pair == exec_pair:
++            continue
 +        if target_pair not in merged_stdlib:
-+            if target_pair == exec_pair:
-+                merged_stdlib[target_pair] = "libc++"
-+            else:
-+                merged_stdlib[target_pair] = "libc"
++            merged_stdlib[target_pair] = "libc"
 +
      workspace_name = rctx.name
      toolchain_info = struct(
