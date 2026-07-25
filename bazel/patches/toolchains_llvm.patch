@@ -97,7 +97,7 @@ diff -Naur orig/toolchain/extensions/llvm.bzl work/toolchain/extensions/llvm.bzl
 diff -Naur orig/toolchain/internal/configure.bzl work/toolchain/internal/configure.bzl
 --- a/toolchain/internal/configure.bzl	2026-07-24 08:44:03.916217356 +0000
 +++ b/toolchain/internal/configure.bzl	2026-07-24 08:44:03.926217503 +0000
-@@ -256,6 +256,58 @@
+@@ -256,6 +256,63 @@
          use_absolute_paths_sysroot,
      )
  
@@ -105,9 +105,13 @@ diff -Naur orig/toolchain/internal/configure.bzl work/toolchain/internal/configu
 +    cxx_cross_lib_include_dirs = {}
 +    cxx_cross_lib_link_flags = {}
 +    cxx_cross_lib_cxx_flags = {}
-+    exec_pair = _os_arch_pair(os, arch)
++    target_os_arch_pairs = {
++        _os_arch_pair(target_os, target_arch): (target_os, target_arch)
++        for (target_os, target_arch) in _supported_targets
++    }
 +    for target_pair, cxx_cross_lib_label_str in rctx.attr.cxx_cross_lib.items():
-+        if target_pair == exec_pair:
++        target_os, target_arch = target_os_arch_pairs.get(target_pair, ("", ""))
++        if target_os == os and target_arch == arch:
 +            continue
 +        cxx_cross_lib_label = Label(cxx_cross_lib_label_str)
 +        cxx_cross_lib_path = _pkg_path_from_label(cxx_cross_lib_label)
@@ -148,7 +152,8 @@ diff -Naur orig/toolchain/internal/configure.bzl work/toolchain/internal/configu
 +    # -stdlib=libc++ is not injected into host compile actions.
 +    merged_stdlib = dict(rctx.attr.stdlib)
 +    for target_pair in rctx.attr.cxx_cross_lib.keys():
-+        if target_pair == exec_pair:
++        target_os, target_arch = target_os_arch_pairs.get(target_pair, ("", ""))
++        if target_os == os and target_arch == arch:
 +            continue
 +        if target_pair not in merged_stdlib:
 +            merged_stdlib[target_pair] = "libc"
