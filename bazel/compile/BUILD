@@ -3,7 +3,7 @@ load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:pkg.bzl", "pkg_tar")
 load("//:versions.bzl", "LLVM_VERSION", "SUPPORTED_ARCHES", "VERSIONS")
-load(":llvm_minimal.bzl", "LLVM_MINIMAL_BINS")
+load(":llvm_minimal.bzl", "LLVM_MINIMAL_BINS", "llvm_minimal_strip_bins")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -268,48 +268,17 @@ _LLVM_MINIMAL_MACOS_ONLY_BINS = [
 _LLVM_MINIMAL_HOST_STRIPPER = "@llvm_tarball_linux_x86_64//:bin/llvm-strip"
 _LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
 
-_LLVM_MINIMAL_STRIP_SCRIPT = """
-set -euo pipefail
-mkdir -p "__OUT_DIR__"
-STRIPPER=__STRIPPER__
-READOBJ=__READOBJ__
-
-for spec in __BIN_SPECS__; do
-    src=$${spec%%:*}
-    out_rel=$${spec#*:}
-    out="$(RULEDIR)/$${out_rel}"
-    mkdir -p "$$(dirname "$$out")"
-    if [ -L "$$src" ]; then
-        cp -P "$$src" "$$out"
-        continue
-    fi
-    cp "$$src" "$$out"
-    if "$$READOBJ" --file-headers "$$out" > /dev/null 2>&1; then
-        "$$STRIPPER" "$$out"
-    fi
-done
-"""
-
 [
     (
-        genrule(
+        llvm_minimal_strip_bins(
             name = "llvm_minimal_%s_strip_bins" % repo_suffix,
-            srcs = ["@llvm_tarball_%s//:bin/%s" % (repo_suffix, tool) for tool in bins],
-            tools = [_LLVM_MINIMAL_HOST_STRIPPER, _LLVM_MINIMAL_HOST_READOBJ],
-            outs = ["llvm_minimal_%s/bin/%s" % (repo_suffix, tool) for tool in bins],
-            cmd = (
-                _LLVM_MINIMAL_STRIP_SCRIPT
-                    .replace("__OUT_DIR__", "$(RULEDIR)/llvm_minimal_%s/bin" % repo_suffix)
-                    .replace("__STRIPPER__", "$(location %s)" % _LLVM_MINIMAL_HOST_STRIPPER)
-                    .replace("__READOBJ__", "$(location %s)" % _LLVM_MINIMAL_HOST_READOBJ)
-                    .replace("__BIN_SPECS__", " ".join([
-                        "$(location @llvm_tarball_%s//:bin/%s):llvm_minimal_%s/bin/%s" % (repo_suffix, tool, repo_suffix, tool)
-                        for tool in bins
-                    ]))
-            ),
-            message = "Stripping LLVM minimal bins for %s" % platform,
+            bin_all = "@llvm_tarball_%s//:bin_all" % repo_suffix,
+            bins = bins,
+            stripper = _LLVM_MINIMAL_HOST_STRIPPER,
+            readobj = _LLVM_MINIMAL_HOST_READOBJ,
+            repo_suffix = repo_suffix,
+            platform = platform,
             tags = ["manual"],
-            local = 1,
         ),
         pkg_files(
             name = "llvm_minimal_%s_bins_files" % repo_suffix,

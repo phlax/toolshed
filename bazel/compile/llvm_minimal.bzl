@@ -144,6 +144,11 @@ filegroup(
 )
 
 filegroup(
+    name = "bin_all",
+    srcs = glob(["bin/**"], allow_empty = True),
+)
+
+filegroup(
     name = "minimal_libs",
     srcs = glob({lib_globs}, allow_empty = True),
 )
@@ -173,6 +178,135 @@ llvm_tarball = repository_rule(
         ),
     },
     doc = "Downloads and extracts an upstream LLVM tarball for hermetic minimal LLVM artifact builds.",
+)
+
+# =============================================================================
+# Build rule: assemble and strip the minimal bin/ tree
+# =============================================================================
+
+# Two-pass script:
+#   Pass 1 — copy all allowlisted bins into DEST, preserving symlinks but also
+#             copying each symlink's real target so no symlink is dangling.
+#   Pass 2 — walk DEST, skip symlinks, probe each real file with llvm-readobj;
+#             strip ELF/Mach-O objects (fatal on strip error) and skip scripts
+#             like git-clang-format that are not valid object files.
+#
+# Portability note: readlink -f is GNU-only; use a portable loop to resolve
+# the symlink chain without depending on GNU coreutils.
+_LLVM_STRIP_BINS_SCRIPT = """
+set -euo pipefail
+DEST="$1"
+SRCDIR="$2"
+STRIPPER="$3"
+READOBJ="$4"
+shift 4
+
+# Pass 1: copy allowlisted bins; for symlinks also copy their real targets.
+for name in "$@"; do
+    src="$SRCDIR/$name"
+    # Skip tools absent from this tarball (e.g. macOS-only tools on Linux builds)
+    [ -e "$src" ] || [ -L "$src" ] || continue
+    if [ -L "$src" ]; then
+        cp -P "$src" "$DEST/$name"
+        # Portable readlink -f: walk the chain to the real file.
+        real="$src"
+        while [ -L "$real" ]; do
+            target="$(readlink "$real")"
+            case "$target" in
+                /*) real="$target" ;;
+                *)  real="$(dirname "$real")/$target" ;;
+            esac
+        done
+        realbase="$(basename "$real")"
+        if [ ! -e "$DEST/$realbase" ]; then
+            cp "$real" "$DEST/$realbase"
+        fi
+    else
+        cp "$src" "$DEST/$name"
+    fi
+done
+
+# Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects
+# (e.g. git-clang-format is a Python script — llvm-readobj probe fails → skip).
+for f in "$DEST/"*; do
+    [ -L "$f" ] && continue
+    [ -f "$f" ] || continue
+    if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
+        "$STRIPPER" "$f"
+    fi
+done
+"""
+
+def _llvm_minimal_strip_bins_impl(ctx):
+    """Assembles and strips the minimal LLVM bin/ tree into a directory artifact.
+
+    Uses declare_directory so that symlinks (e.g. clang → clang-22) AND their
+    real targets (clang-22) are both preserved in the output tree; genrule outs
+    cannot declare undeclared extra files, but a tree artifact contains all
+    files created inside it.
+    """
+    out_dir = ctx.actions.declare_directory(
+        "llvm_minimal_%s/bin" % ctx.attr.repo_suffix,
+    )
+    bin_files = ctx.files.bin_all
+    stripper = ctx.file.stripper
+    readobj = ctx.file.readobj
+
+    if not bin_files:
+        fail("bin_all has no files for repo_suffix=" + ctx.attr.repo_suffix)
+
+    # All files from bin_all are direct children of the tarball's bin/ directory
+    # (LLVM's bin/ has no subdirectories), so every file shares the same dirname.
+    srcdir = bin_files[0].dirname
+
+    ctx.actions.run_shell(
+        inputs = depset(bin_files + [stripper, readobj]),
+        outputs = [out_dir],
+        command = _LLVM_STRIP_BINS_SCRIPT,
+        arguments = [out_dir.path, srcdir, stripper.path, readobj.path] + ctx.attr.bins,
+        mnemonic = "LlvmMinimalStripBins",
+        progress_message = "Stripping LLVM minimal bins for " + ctx.attr.platform,
+        # Force local execution: these actions download and strip multi-GB LLVM
+        # tarballs.  Running them on RBE workers exhausts remote-worker disk
+        # quota.  local = 1 keeps them on the Bazel host alongside the tarball
+        # fetch, matching the genrule local = 1 they replace.
+        execution_requirements = {"local": "1"},
+    )
+
+    return [DefaultInfo(files = depset([out_dir]))]
+
+llvm_minimal_strip_bins = rule(
+    implementation = _llvm_minimal_strip_bins_impl,
+    attrs = {
+        "bin_all": attr.label(
+            mandatory = True,
+            allow_files = True,
+            doc = "Filegroup containing all files under bin/ of the LLVM tarball repo.",
+        ),
+        "bins": attr.string_list(
+            mandatory = True,
+            doc = "Allowlisted bin/ tool names to copy into the output tree.",
+        ),
+        "stripper": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+            doc = "Host-executable llvm-strip binary (from the Linux-X64 tarball).",
+        ),
+        "readobj": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+            doc = "Host-executable llvm-readobj binary (from the Linux-X64 tarball).",
+        ),
+        "repo_suffix": attr.string(
+            mandatory = True,
+            doc = "Suffix identifying the tarball repo (e.g. 'linux_x86_64').",
+        ),
+        "platform": attr.string(
+            mandatory = True,
+            doc = "Human-readable platform name used in progress messages.",
+        ),
+    },
+    doc = "Assembles and strips the minimal LLVM bin/ tree for one platform.",
 )
 
 def setup_llvm_minimal_build():
