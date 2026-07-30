@@ -193,19 +193,25 @@ llvm_tarball = repository_rule(
 #
 # Portability note: readlink -f is GNU-only; use a portable loop to resolve
 # the symlink chain without depending on GNU coreutils.
+#
+# Arguments: DEST STRIPPER READOBJ [name:src_path ...]
+#   name     — output filename (e.g. "clang")
+#   src_path — full path to the source file from bin_all inputs
+#
+# Symlink resolution is done entirely from $src (its dirname is the bin/
+# directory, so the relative target resolves correctly inside the sandbox
+# without requiring an explicit SRCDIR argument).
 _LLVM_STRIP_BINS_SCRIPT = """
 set -euo pipefail
 DEST="$1"
-SRCDIR="$2"
-STRIPPER="$3"
-READOBJ="$4"
-shift 4
+STRIPPER="$2"
+READOBJ="$3"
+shift 3
 
 # Pass 1: copy allowlisted bins; for symlinks also copy their real targets.
-for name in "$@"; do
-    src="$SRCDIR/$name"
-    # Skip tools absent from this tarball (e.g. macOS-only tools on Linux builds)
-    [ -e "$src" ] || [ -L "$src" ] || continue
+for spec in "$@"; do
+    name="${spec%%:*}"
+    src="${spec#*:}"
     if [ -L "$src" ]; then
         cp -P "$src" "$DEST/$name"
         # Portable readlink -f: walk the chain to the real file.
@@ -244,6 +250,10 @@ def _llvm_minimal_strip_bins_impl(ctx):
     real targets (clang-22) are both preserved in the output tree; genrule outs
     cannot declare undeclared extra files, but a tree artifact contains all
     files created inside it.
+
+    local = 1 keeps this action on the Bazel host: the action fetches and
+    processes multi-GB LLVM tarballs; running it on RBE workers would exhaust
+    their disk quota.
     """
     out_dir = ctx.actions.declare_directory(
         "llvm_minimal_%s/bin" % ctx.attr.repo_suffix,
@@ -255,21 +265,23 @@ def _llvm_minimal_strip_bins_impl(ctx):
     if not bin_files:
         fail("bin_all has no files for repo_suffix=" + ctx.attr.repo_suffix)
 
-    # All files from bin_all are direct children of the tarball's bin/ directory
-    # (LLVM's bin/ has no subdirectories), so every file shares the same dirname.
-    srcdir = bin_files[0].dirname
+    # Build a name → File map so we can pass explicit src_path per tool.
+    # Tools absent from this tarball (e.g. macOS-only tools on a Linux tarball)
+    # are simply not emitted in specs and are silently absent from the output.
+    bin_by_name = {f.basename: f for f in bin_files}
+    specs = [
+        "%s:%s" % (name, bin_by_name[name].path)
+        for name in ctx.attr.bins
+        if name in bin_by_name
+    ]
 
     ctx.actions.run_shell(
         inputs = depset(bin_files + [stripper, readobj]),
         outputs = [out_dir],
         command = _LLVM_STRIP_BINS_SCRIPT,
-        arguments = [out_dir.path, srcdir, stripper.path, readobj.path] + ctx.attr.bins,
+        arguments = [out_dir.path, stripper.path, readobj.path] + specs,
         mnemonic = "LlvmMinimalStripBins",
         progress_message = "Stripping LLVM minimal bins for " + ctx.attr.platform,
-        # Force local execution: these actions download and strip multi-GB LLVM
-        # tarballs.  Running them on RBE workers exhausts remote-worker disk
-        # quota.  local = 1 keeps them on the Bazel host alongside the tarball
-        # fetch, matching the genrule local = 1 they replace.
         execution_requirements = {"local": "1"},
     )
 
@@ -281,7 +293,8 @@ llvm_minimal_strip_bins = rule(
         "bin_all": attr.label(
             mandatory = True,
             allow_files = True,
-            doc = "Filegroup containing all files under bin/ of the LLVM tarball repo.",
+            doc = "Filegroup containing all files under bin/ of the LLVM tarball repo, " +
+                  "including symlink targets (e.g. clang-22) not in the allowlist.",
         ),
         "bins": attr.string_list(
             mandatory = True,
