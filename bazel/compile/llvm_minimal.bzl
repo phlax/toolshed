@@ -260,9 +260,10 @@ def _llvm_minimal_strip_bins_impl(ctx):
     cannot declare undeclared extra files, but a tree artifact contains all
     files created inside it.
 
-    local = 1 keeps this action on the Bazel host: the action fetches and
-    processes multi-GB LLVM tarballs; running it on RBE workers would exhaust
-    their disk quota.
+    local = 1 keeps this action on the Bazel host: the strip pass reads and
+    writes multi-GB LLVM tarballs already present on the host; offloading to
+    RBE workers would cause large unnecessary data transfers and risk
+    exhausting remote-worker disk quota.
     """
     out_dir = ctx.actions.declare_directory(
         "llvm_minimal_%s/bin" % ctx.attr.repo_suffix,
