@@ -261,16 +261,18 @@ _LLVM_MINIMAL_MACOS_ONLY_BINS = [
     "llvm-install-name-tool",
 ]
 
-# Use the host-runnable Linux-X64 llvm-strip for all minimal artifact variants.
-# This keeps stripping hermetic even when assembling Linux-ARM64 or macOS-ARM64
-# trees on Linux RBE workers (their own llvm-strip binaries are not executable
-# on Linux x86_64 hosts).
+# Use the host-runnable Linux-X64 llvm-strip/llvm-readobj for all minimal artifact
+# variants.  This keeps stripping hermetic even when assembling Linux-ARM64 or
+# macOS-ARM64 trees on Linux RBE workers (their own binaries are not executable on
+# Linux x86_64 hosts).
 _LLVM_MINIMAL_HOST_STRIPPER = "@llvm_tarball_linux_x86_64//:bin/llvm-strip"
+_LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
 
 _LLVM_MINIMAL_STRIP_SCRIPT = """
 set -euo pipefail
 mkdir -p "__OUT_DIR__"
 STRIPPER=__STRIPPER__
+READOBJ=__READOBJ__
 
 for spec in __BIN_SPECS__; do
     src=$${spec%%:*}
@@ -282,7 +284,9 @@ for spec in __BIN_SPECS__; do
         continue
     fi
     cp "$$src" "$$out"
-    "$$STRIPPER" "$$out"
+    if "$$READOBJ" --file-headers "$$out" > /dev/null 2>&1; then
+        "$$STRIPPER" "$$out"
+    fi
 done
 """
 
@@ -291,12 +295,13 @@ done
         genrule(
             name = "llvm_minimal_%s_strip_bins" % repo_suffix,
             srcs = ["@llvm_tarball_%s//:bin/%s" % (repo_suffix, tool) for tool in bins],
-            tools = [_LLVM_MINIMAL_HOST_STRIPPER],
+            tools = [_LLVM_MINIMAL_HOST_STRIPPER, _LLVM_MINIMAL_HOST_READOBJ],
             outs = ["llvm_minimal_%s/bin/%s" % (repo_suffix, tool) for tool in bins],
             cmd = (
                 _LLVM_MINIMAL_STRIP_SCRIPT
                     .replace("__OUT_DIR__", "$(RULEDIR)/llvm_minimal_%s/bin" % repo_suffix)
                     .replace("__STRIPPER__", "$(location %s)" % _LLVM_MINIMAL_HOST_STRIPPER)
+                    .replace("__READOBJ__", "$(location %s)" % _LLVM_MINIMAL_HOST_READOBJ)
                     .replace("__BIN_SPECS__", " ".join([
                         "$(location @llvm_tarball_%s//:bin/%s):llvm_minimal_%s/bin/%s" % (repo_suffix, tool, repo_suffix, tool)
                         for tool in bins
