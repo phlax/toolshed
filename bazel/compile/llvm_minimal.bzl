@@ -98,24 +98,59 @@ LLVM_MINIMAL_PLATFORMS = {
 }
 
 # =============================================================================
-# Repository rule: raw tarball download (for building minimal artifacts)
+# Repository rule: extracted LLVM tree (for building minimal artifacts)
 # =============================================================================
 
-def _llvm_tarball_impl(ctx):
-    """Downloads a raw LLVM upstream tarball without extracting it.
+def _lib_glob_to_repo_globs(pattern):
+    """Convert one allowlist entry to file-matching repo BUILD glob patterns."""
+    if "*" in pattern:
+        return [pattern]
+    return [pattern + "/**/*"]
 
-    The tarball is exposed as a file target so genrule build targets can take
-    it as an input and process it (filter, strip, repack).
+def _quoted_list(values):
+    """Render a list literal safely for generated BUILD file content."""
+    return repr(values)
+
+def _llvm_tarball_impl(ctx):
+    """Downloads and extracts an LLVM upstream tarball hermetically.
+
+    The extracted tree is exposed via filegroups so build rules can consume it
+    directly without shelling out to tar/xz on the executor.
     """
-    ctx.download(
-        url = ctx.attr.url,
-        output = ctx.attr.filename,
-        sha256 = ctx.attr.sha256,
+    strip_prefix = "LLVM-{version}-{platform}".format(
+        version = ctx.attr.version,
+        platform = ctx.attr.platform,
     )
+    ctx.download_and_extract(
+        url = ctx.attr.url,
+        sha256 = ctx.attr.sha256,
+        stripPrefix = strip_prefix,
+    )
+    lib_globs = []
+    for pattern in LLVM_MINIMAL_LIB_GLOBS:
+        lib_globs.extend(_lib_glob_to_repo_globs(pattern))
+    bin_globs = ["bin/{}".format(tool) for tool in LLVM_MINIMAL_BINS]
     ctx.file("BUILD.bazel", """
 package(default_visibility = ["//visibility:public"])
-exports_files(["{filename}"])
-""".format(filename = ctx.attr.filename))
+
+filegroup(
+    name = "all",
+    srcs = glob(["**/*"], allow_empty = True),
+)
+
+filegroup(
+    name = "minimal_bins",
+    srcs = glob({bin_globs}, allow_empty = True),
+)
+
+filegroup(
+    name = "minimal_libs",
+    srcs = glob({lib_globs}, allow_empty = True),
+)
+""".format(
+        bin_globs = _quoted_list(bin_globs),
+        lib_globs = _quoted_list(lib_globs),
+    ))
 
 llvm_tarball = repository_rule(
     implementation = _llvm_tarball_impl,
@@ -128,23 +163,27 @@ llvm_tarball = repository_rule(
             mandatory = True,
             doc = "SHA256 hash of the LLVM tarball",
         ),
-        "filename": attr.string(
+        "version": attr.string(
             mandatory = True,
-            doc = "Local filename to save the tarball as",
+            doc = "LLVM version used in the upstream strip prefix",
+        ),
+        "platform": attr.string(
+            mandatory = True,
+            doc = "LLVM platform suffix used in the upstream strip prefix",
         ),
     },
-    doc = "Downloads a raw upstream LLVM tarball for use as a genrule input when building minimal LLVM artifacts.",
+    doc = "Downloads and extracts an upstream LLVM tarball for hermetic minimal LLVM artifact builds.",
 )
 
 def setup_llvm_minimal_build():
     """Set up llvm_tarball_* repos needed to build the minimal LLVM artifacts.
 
     Creates three repositories:
-      @llvm_tarball_linux_x86_64 — raw Linux-X64 LLVM tarball
-      @llvm_tarball_linux_arm64  — raw Linux-ARM64 LLVM tarball
-      @llvm_tarball_macos_arm64  — raw macOS-ARM64 LLVM tarball
+      @llvm_tarball_linux_x86_64 — extracted Linux-X64 LLVM tree
+      @llvm_tarball_linux_arm64  — extracted Linux-ARM64 LLVM tree
+      @llvm_tarball_macos_arm64  — extracted macOS-ARM64 LLVM tree
 
-    These are consumed by the //compile:llvm_minimal_* genrule targets.
+    These are consumed by the //compile:llvm_minimal_* build targets.
     """
     _platform_to_repo = {
         "Linux-X64": "llvm_tarball_linux_x86_64",
@@ -162,7 +201,8 @@ def setup_llvm_minimal_build():
             name = repo_name,
             url = url,
             sha256 = sha256,
-            filename = filename,
+            version = LLVM_VERSION,
+            platform = platform,
         )
 
 # =============================================================================

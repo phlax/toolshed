@@ -1,9 +1,9 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:pkg.bzl", "pkg_tar")
 load("//:versions.bzl", "LLVM_VERSION", "SUPPORTED_ARCHES", "VERSIONS")
-load(":llvm_minimal.bzl", "LLVM_MINIMAL_BINS", "LLVM_MINIMAL_PLATFORMS")
+load(":llvm_minimal.bzl", "LLVM_MINIMAL_BINS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -254,162 +254,93 @@ pkg_tar(
 
 # =============================================================================
 # Minimal LLVM extraction targets
-#
-# These genrule targets take the upstream LLVM release tarballs (downloaded via
-# llvm_tarball_* repository rules) and produce stripped, minimal .tar.xz
-# artifacts containing only the tools and libraries in the allowlist defined in
-# llvm_minimal.bzl.
-#
-# Build all three platforms:
-#   bazel build //compile:llvm_minimal_linux_x86_64
-#   bazel build //compile:llvm_minimal_linux_arm64
-#   bazel build //compile:llvm_minimal_macos_arm64
-#
-# Prerequisites: the llvm_tarball_* repos must be available (see
-# setup_llvm_minimal_build() in llvm_minimal.bzl, wired via
-# llvm_minimal_build_extension in extensions.bzl).
 # =============================================================================
 
-# Extraction script template.  Uses sentinel tokens (replaced via .replace())
-# so that shell ${var} syntax does not conflict with any template mechanism.
-# $$-escaping is required for Bazel genrule cmd (each $$ becomes $ in the shell).
-_LLVM_MINIMAL_EXTRACT_CMD = """
+_LLVM_MINIMAL_MACOS_ONLY_BINS = [
+    "llvm-libtool-darwin",
+    "llvm-install-name-tool",
+]
+
+# Use the host-runnable Linux-X64 llvm-strip for all minimal artifact variants.
+# This keeps stripping hermetic even when assembling Linux-ARM64 or macOS-ARM64
+# trees on Linux RBE workers (their own llvm-strip binaries are not executable
+# on Linux x86_64 hosts).
+_LLVM_MINIMAL_HOST_STRIPPER = "@llvm_tarball_linux_x86_64//:bin/llvm-strip"
+
+_LLVM_MINIMAL_STRIP_SCRIPT = """
 set -euo pipefail
-TARBALL=$<
-OUTFILE=$@
-PLATFORM="__PLATFORM__"
-VERSION="__VERSION__"
-STRIP_PREFIX="LLVM-__VERSION__-__PLATFORM__"
+mkdir -p "__OUT_DIR__"
+STRIPPER=__STRIPPER__
 
-WORK=$$(mktemp -d)
-trap "rm -rf $$WORK" EXIT
-
-# ---------------------------------------------------------------------------
-# 1. Extract upstream LLVM tarball
-# ---------------------------------------------------------------------------
-echo "Extracting $$STRIP_PREFIX ..."
-tar xf "$$TARBALL" -C "$$WORK"
-SRC="$$WORK/$$STRIP_PREFIX"
-OUT_NAME="llvm-minimal-$$VERSION-$$PLATFORM"
-DEST="$$WORK/out/$$OUT_NAME"
-mkdir -p "$$DEST/bin" "$$DEST/lib" "$$DEST/include"
-
-# ---------------------------------------------------------------------------
-# 2. Copy bin/ tools (preserving symlinks so clang/lld are not duplicated)
-# ---------------------------------------------------------------------------
-for tool in __BINS__; do
-    src="$$SRC/bin/$$tool"
+for spec in __BIN_SPECS__; do
+    src=$${spec%%:*}
+    out_rel=$${spec#*:}
+    out="$(RULEDIR)/$${out_rel}"
+    mkdir -p "$$(dirname "$$out")"
     if [ -L "$$src" ]; then
-        # Symlink: preserve as-is (cp -P keeps the symlink, not the target)
-        cp -P "$$src" "$$DEST/bin/" 2>/dev/null || true
-    elif [ -f "$$src" ]; then
-        cp "$$src" "$$DEST/bin/"
+        cp -P "$$src" "$$out"
+        continue
     fi
+    cp "$$src" "$$out"
+    "$$STRIPPER" "$$out"
 done
-
-# ---------------------------------------------------------------------------
-# 3. Strip non-symlink binaries / shared objects (best-effort, never fatal)
-#    ELF  -> strip --strip-unneeded
-#    Mach-O -> strip -x  (native on macOS; may be skipped on Linux cross, ok)
-# ---------------------------------------------------------------------------
-for f in "$$DEST/bin/"*; do
-    [ -L "$$f" ] && continue
-    [ -f "$$f" ] || continue
-    ftype=$$(file "$$f" 2>/dev/null || echo "unknown")
-    if echo "$$ftype" | grep -q "ELF"; then
-        strip --strip-unneeded "$$f" 2>/dev/null || true
-    elif echo "$$ftype" | grep -q "Mach-O"; then
-        strip -x "$$f" 2>/dev/null || true
-    fi
-done
-
-# ---------------------------------------------------------------------------
-# 4. Copy lib/clang/{ver}/{include,lib,share} in full
-#    Keeps builtin headers, compiler-rt runtimes, sanitizer ignorelists.
-# ---------------------------------------------------------------------------
-if [ -d "$$SRC/lib/clang" ]; then
-    mkdir -p "$$DEST/lib/clang"
-    for clang_ver_dir in "$$SRC/lib/clang"/*/; do
-        [ -d "$$clang_ver_dir" ] || continue
-        ver=$$(basename "$$clang_ver_dir")
-        mkdir -p "$$DEST/lib/clang/$$ver"
-        for subdir in include lib share; do
-            if [ -d "$${clang_ver_dir}$${subdir}" ]; then
-                cp -r "$${clang_ver_dir}$${subdir}" "$$DEST/lib/clang/$$ver/"
-            fi
-        done
-    done
-fi
-
-# ---------------------------------------------------------------------------
-# 5. Copy include/c++ (libc++ headers)
-# ---------------------------------------------------------------------------
-if [ -d "$$SRC/include/c++" ]; then
-    cp -r "$$SRC/include/c++" "$$DEST/include/"
-fi
-
-# ---------------------------------------------------------------------------
-# 6. Copy per-triple include/{triple}/c++/v1/__config_site
-# ---------------------------------------------------------------------------
-if [ -d "$$SRC/include" ]; then
-    find "$$SRC/include" -path "*/c++/v1/__config_site" | while IFS= read -r f; do
-        case "$$f" in "$${SRC}/include/c++/"*) continue ;; esac
-        relpath="$${f#$${SRC}/}"
-        mkdir -p "$$DEST/$$(dirname "$$relpath")"
-        cp "$$f" "$$DEST/$$relpath"
-    done
-fi
-
-# ---------------------------------------------------------------------------
-# 7. Copy lib/ static archives: libc++*.a, libc++abi*.a, libunwind*.a
-# ---------------------------------------------------------------------------
-find "$$SRC/lib" \\( -name "libc++*.a" -o -name "libunwind*.a" \\) | while IFS= read -r f; do
-    relpath="$${f#$${SRC}/}"
-    mkdir -p "$$DEST/$$(dirname "$$relpath")"
-    cp "$$f" "$$DEST/$$relpath"
-done
-
-# ---------------------------------------------------------------------------
-# 8. Copy lib/ shared libunwind (so* / dylib)
-# ---------------------------------------------------------------------------
-find "$$SRC/lib" \\( -name "libunwind*.so*" -o -name "libunwind*.dylib" \\) 2>/dev/null | while IFS= read -r f; do
-    relpath="$${f#$${SRC}/}"
-    mkdir -p "$$DEST/$$(dirname "$$relpath")"
-    cp -P "$$f" "$$DEST/$$relpath"
-done
-
-# ---------------------------------------------------------------------------
-# 9. Copy lib/libclang-cpp.so.* or lib/libclang-cpp*.dylib
-# ---------------------------------------------------------------------------
-find "$$SRC/lib" -maxdepth 1 \\( -name "libclang-cpp.so*" -o -name "libclang-cpp*.dylib" \\) 2>/dev/null | while IFS= read -r f; do
-    relpath="$${f#$${SRC}/}"
-    cp -P "$$f" "$$DEST/$$relpath"
-done
-
-# ---------------------------------------------------------------------------
-# 10. Pack minimal tarball
-# ---------------------------------------------------------------------------
-echo "Creating llvm-minimal-$$VERSION-$$PLATFORM.tar.xz ..."
-tar -c -C "$$WORK/out" "$$OUT_NAME" | xz -T0 > "$$OUTFILE"
-echo "Done. Output: $$OUTFILE"
 """
 
 [
-    genrule(
-        name = "llvm_minimal_%s" % repo_suffix,
-        srcs = ["@llvm_tarball_%s//:%s" % (repo_suffix, tarball_filename)],
-        outs = ["llvm-minimal-%s-%s.tar.xz" % (LLVM_VERSION, platform)],
-        cmd = (
-            _LLVM_MINIMAL_EXTRACT_CMD
-                .replace("__PLATFORM__", platform)
-                .replace("__VERSION__", LLVM_VERSION)
-                .replace("__BINS__", " ".join(LLVM_MINIMAL_BINS))
+    (
+        genrule(
+            name = "llvm_minimal_%s_strip_bins" % repo_suffix,
+            srcs = ["@llvm_tarball_%s//:bin/%s" % (repo_suffix, tool) for tool in bins],
+            tools = [_LLVM_MINIMAL_HOST_STRIPPER],
+            outs = ["llvm_minimal_%s/bin/%s" % (repo_suffix, tool) for tool in bins],
+            cmd = (
+                _LLVM_MINIMAL_STRIP_SCRIPT
+                    .replace("__OUT_DIR__", "$(RULEDIR)/llvm_minimal_%s/bin" % repo_suffix)
+                    .replace("__STRIPPER__", "$(location %s)" % _LLVM_MINIMAL_HOST_STRIPPER)
+                    .replace("__BIN_SPECS__", " ".join([
+                        "$(location @llvm_tarball_%s//:bin/%s):llvm_minimal_%s/bin/%s" % (repo_suffix, tool, repo_suffix, tool)
+                        for tool in bins
+                    ]))
+            ),
+            message = "Stripping LLVM minimal bins for %s" % platform,
         ),
-        message = "Building minimal LLVM for %s" % platform,
+        pkg_files(
+            name = "llvm_minimal_%s_bins_files" % repo_suffix,
+            srcs = [":llvm_minimal_%s_strip_bins" % repo_suffix],
+            prefix = "llvm-minimal-%s-%s/bin" % (LLVM_VERSION, platform),
+            strip_prefix = "llvm_minimal_%s/bin" % repo_suffix,
+        ),
+        pkg_files(
+            name = "llvm_minimal_%s_libs_files" % repo_suffix,
+            srcs = ["@llvm_tarball_%s//:minimal_libs" % repo_suffix],
+            prefix = "llvm-minimal-%s-%s" % (LLVM_VERSION, platform),
+            strip_prefix = strip_prefix.from_pkg(),
+        ),
+        pkg_tar(
+            name = "llvm_minimal_%s" % repo_suffix,
+            srcs = [
+                ":llvm_minimal_%s_bins_files" % repo_suffix,
+                ":llvm_minimal_%s_libs_files" % repo_suffix,
+            ],
+            extension = "tar.xz",
+            package_file_name = "llvm-minimal-%s-%s.tar.xz" % (LLVM_VERSION, platform),
+        ),
     )
-    for platform, tarball_filename, repo_suffix in [
-        ("Linux-X64", LLVM_MINIMAL_PLATFORMS["Linux-X64"], "linux_x86_64"),
-        ("Linux-ARM64", LLVM_MINIMAL_PLATFORMS["Linux-ARM64"], "linux_arm64"),
-        ("macOS-ARM64", LLVM_MINIMAL_PLATFORMS["macOS-ARM64"], "macos_arm64"),
+    for platform, repo_suffix, bins in [
+        (
+            "Linux-X64",
+            "linux_x86_64",
+            [b for b in LLVM_MINIMAL_BINS if b not in _LLVM_MINIMAL_MACOS_ONLY_BINS],
+        ),
+        (
+            "Linux-ARM64",
+            "linux_arm64",
+            [b for b in LLVM_MINIMAL_BINS if b not in _LLVM_MINIMAL_MACOS_ONLY_BINS],
+        ),
+        (
+            "macOS-ARM64",
+            "macos_arm64",
+            LLVM_MINIMAL_BINS,
+        ),
     ]
 ]
