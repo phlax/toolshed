@@ -239,23 +239,18 @@ for spec in "$@"; do
     fi
 done
 
-# Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects
-# (e.g. git-clang-format is a Python script — llvm-readobj probe fails → skip).
-# Use a temp file + mv rather than in-place mutation: some Bazel sandbox
-# strategies hardlink inputs into the output tree, and stripping in-place
-# would corrupt the input.
-# nullglob: skip the loop body entirely when $DEST is empty (avoids the
-# shell expanding "$DEST/*" to a literal string on a non-nullglob shell).
-shopt -s nullglob
-for f in "$DEST/"*; do
-    [ -L "$f" ] && continue
-    [ -f "$f" ] || continue
+# Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects.
+# find -maxdepth 1 -type f naturally skips symlinks and handles an empty DEST
+# without requiring bash's shopt/nullglob; -print0 / read -d '' handles paths
+# with spaces.  Process substitution keeps the loop in the same shell so
+# set -e can propagate strip failures correctly.
+while IFS= read -r -d '' f; do
     if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
         tmpf="${f}.strip-tmp"
         "$STRIPPER" -o "$tmpf" "$f"
         mv "$tmpf" "$f"
     fi
-done
+done < <(find "$DEST" -maxdepth 1 -type f -print0)
 """
 
 def _llvm_minimal_strip_bins_impl(ctx):
