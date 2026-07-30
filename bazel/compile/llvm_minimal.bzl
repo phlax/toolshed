@@ -215,8 +215,15 @@ for spec in "$@"; do
     if [ -L "$src" ]; then
         cp -P "$src" "$DEST/$name"
         # Portable readlink -f: walk the chain to the real file.
+        # Cap at 40 iterations to catch circular symlinks (matches MAXSYMLINKS).
         real="$src"
+        _depth=0
         while [ -L "$real" ]; do
+            _depth=$((_depth + 1))
+            if [ "$_depth" -gt 40 ]; then
+                echo "symlink loop detected at $src" >&2
+                exit 1
+            fi
             target="$(readlink "$real")"
             case "$target" in
                 /*) real="$target" ;;
@@ -234,11 +241,16 @@ done
 
 # Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects
 # (e.g. git-clang-format is a Python script — llvm-readobj probe fails → skip).
+# Use a temp file + mv rather than in-place mutation: some Bazel sandbox
+# strategies hardlink inputs into the output tree, and stripping in-place
+# would corrupt the input.
 for f in "$DEST/"*; do
     [ -L "$f" ] && continue
     [ -f "$f" ] || continue
     if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
-        "$STRIPPER" "$f"
+        tmpf="${f}.strip-tmp"
+        "$STRIPPER" -o "$tmpf" "$f"
+        mv "$tmpf" "$f"
     fi
 done
 """
