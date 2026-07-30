@@ -303,18 +303,22 @@ done
                     ]))
             ),
             message = "Stripping LLVM minimal bins for %s" % platform,
+            tags = ["manual", "no-cache", "no-remote"],
+            local = 1,
         ),
         pkg_files(
             name = "llvm_minimal_%s_bins_files" % repo_suffix,
             srcs = [":llvm_minimal_%s_strip_bins" % repo_suffix],
             prefix = "llvm-minimal-%s-%s/bin" % (LLVM_VERSION, platform),
             strip_prefix = "llvm_minimal_%s/bin" % repo_suffix,
+            tags = ["manual"],
         ),
         pkg_files(
             name = "llvm_minimal_%s_libs_files" % repo_suffix,
             srcs = ["@llvm_tarball_%s//:minimal_libs" % repo_suffix],
             prefix = "llvm-minimal-%s-%s" % (LLVM_VERSION, platform),
             strip_prefix = strip_prefix.from_pkg(),
+            tags = ["manual"],
         ),
         pkg_tar(
             name = "llvm_minimal_%s" % repo_suffix,
@@ -324,6 +328,7 @@ done
             ],
             extension = "tar.xz",
             package_file_name = "llvm-minimal-%s-%s.tar.xz" % (LLVM_VERSION, platform),
+            tags = ["manual"],
         ),
     )
     for platform, repo_suffix, bins in [
