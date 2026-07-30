@@ -240,17 +240,16 @@ for spec in "$@"; do
 done
 
 # Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects.
-# find -maxdepth 1 -type f naturally skips symlinks and handles an empty DEST
-# without requiring bash's shopt/nullglob; -print0 / read -d '' handles paths
-# with spaces.  Process substitution keeps the loop in the same shell so
-# set -e can propagate strip failures correctly.
-while IFS= read -r -d '' f; do
+# find -maxdepth 1 -type f naturally skips symlinks and handles an empty DEST.
+# Piped while (not process substitution) for portability across sh/bash.
+# With pipefail, a strip or mv failure in the subshell propagates to the caller.
+find "$DEST" -maxdepth 1 -type f | while IFS= read -r f; do
     if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
         tmpf="${f}.strip-tmp"
         "$STRIPPER" -o "$tmpf" "$f"
         mv "$tmpf" "$f"
     fi
-done < <(find "$DEST" -maxdepth 1 -type f -print0)
+done
 """
 
 def _llvm_minimal_strip_bins_impl(ctx):
@@ -287,7 +286,7 @@ def _llvm_minimal_strip_bins_impl(ctx):
 
     ctx.actions.run_shell(
         # bin_files provide the source tree (allowlisted tools + symlink targets).
-        inputs = depset(bin_files),
+        inputs = bin_files,
         # stripper and readobj are declared as tools so Bazel tracks them in the
         # exec configuration and provides their runfiles automatically.
         tools = [stripper, readobj],
