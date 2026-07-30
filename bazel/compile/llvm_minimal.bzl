@@ -231,7 +231,7 @@ for spec in "$@"; do
             esac
         done
         realbase="$(basename "$real")"
-        if [ ! -e "$DEST/$realbase" ]; then
+        if [ ! -f "$DEST/$realbase" ]; then
             cp "$real" "$DEST/$realbase"
         fi
     else
@@ -241,13 +241,13 @@ done
 
 # Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects.
 # find -maxdepth 1 -type f naturally skips symlinks and handles an empty DEST.
-# Piped while (not process substitution) for portability across sh/bash.
-# With pipefail, a strip or mv failure in the subshell propagates to the caller.
+# Piped while for portability; explicit || exit 1 ensures strip/mv failures
+# propagate regardless of whether the subshell inherits set -e.
 find "$DEST" -maxdepth 1 -type f | while IFS= read -r f; do
     if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
         tmpf="${f}.strip-tmp"
-        "$STRIPPER" -o "$tmpf" "$f"
-        mv "$tmpf" "$f"
+        "$STRIPPER" -o "$tmpf" "$f" || exit 1
+        mv "$tmpf" "$f" || exit 1
     fi
 done
 """
