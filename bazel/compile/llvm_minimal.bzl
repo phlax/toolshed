@@ -244,6 +244,9 @@ done
 # Use a temp file + mv rather than in-place mutation: some Bazel sandbox
 # strategies hardlink inputs into the output tree, and stripping in-place
 # would corrupt the input.
+# nullglob: skip the loop body entirely when $DEST is empty (avoids the
+# shell expanding "$DEST/*" to a literal string on a non-nullglob shell).
+shopt -s nullglob
 for f in "$DEST/"*; do
     [ -L "$f" ] && continue
     [ -f "$f" ] || continue
@@ -288,7 +291,11 @@ def _llvm_minimal_strip_bins_impl(ctx):
     ]
 
     ctx.actions.run_shell(
-        inputs = depset(bin_files + [stripper, readobj]),
+        # bin_files provide the source tree (allowlisted tools + symlink targets).
+        inputs = depset(bin_files),
+        # stripper and readobj are declared as tools so Bazel tracks them in the
+        # exec configuration and provides their runfiles automatically.
+        tools = [stripper, readobj],
         outputs = [out_dir],
         command = _LLVM_STRIP_BINS_SCRIPT,
         arguments = [out_dir.path, stripper.path, readobj.path] + specs,
