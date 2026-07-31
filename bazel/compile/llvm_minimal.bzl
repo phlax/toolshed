@@ -416,7 +416,7 @@ for spec in "$@"; do
         shim_target="$(readlink "$src" || true)"
         if [ -n "${shim_target:-}" ]; then
             if [ "${shim_target#/}" = "$shim_target" ]; then
-                shim_target="$(cd "$(dirname "$src")" && realpath -m "$shim_target")"
+                shim_target="$(cd "$(dirname "$src")" && realpath -sm "$shim_target")"
             fi
             if [ -e "$shim_target" ]; then
                 src_for_copy="$shim_target"
