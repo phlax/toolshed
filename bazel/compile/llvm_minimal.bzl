@@ -414,8 +414,13 @@ for spec in "$@"; do
     src_for_copy="$src"
     if [ -L "$src" ]; then
         shim_target="$(readlink "$src" || true)"
-        if [ -n "${shim_target:-}" ] && [ "${shim_target#/}" != "$shim_target" ] && [ -e "$shim_target" ]; then
-            src_for_copy="$shim_target"
+        if [ -n "${shim_target:-}" ]; then
+            if [ "${shim_target#/}" = "$shim_target" ]; then
+                shim_target="$(cd "$(dirname "$src")" && realpath -m "$shim_target")"
+            fi
+            if [ -e "$shim_target" ]; then
+                src_for_copy="$shim_target"
+            fi
         fi
     fi
     cp -P "$src_for_copy" "$DEST/$name"
