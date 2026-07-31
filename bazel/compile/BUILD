@@ -300,6 +300,8 @@ _LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
                 ":llvm_minimal_%s_bins_files" % repo_suffix,
                 ":llvm_minimal_%s_libs_files" % repo_suffix,
             ],
+            compressor_args = "-T0",
+            exec_properties = {"Pool": "linux_x64_xlarge"},
             extension = "tar.xz",
             package_file_name = "llvm-minimal-%s-%s.tar.xz" % (LLVM_VERSION, platform),
             tags = ["manual"],
