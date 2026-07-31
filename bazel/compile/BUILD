@@ -420,6 +420,7 @@ sh_test(
     srcs = ["//compile/test:assert_llvm_minimal_bins_layout.sh"],
     data = [":llvm_minimal_linux_x86_64"],
     env = {
+        "CLANG_REAL": "clang-%s" % _LLVM_MINIMAL_LLVM_MAJOR,
         "TARBALL": "$(rootpath :llvm_minimal_linux_x86_64)",
         "ROOT_DIR": "llvm-minimal-%s-Linux-X64" % LLVM_VERSION,
     },

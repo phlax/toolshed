@@ -3,6 +3,7 @@ set -euo pipefail
 
 : "${TARBALL:?TARBALL must be set}"
 : "${ROOT_DIR:?ROOT_DIR must be set}"
+: "${CLANG_REAL:?CLANG_REAL must be set}"
 
 list_file="$(mktemp)"
 trap 'rm -f "$list_file"; rm -rf "${tmpdir:-}"' EXIT
@@ -27,9 +28,9 @@ require_true() {
   fi
 }
 
-require_link "bin/clang" "clang-22"
-require_link "bin/clang\+\+" "clang-22"
-require_link "bin/clang-cpp" "clang-22"
+require_link "bin/clang" "${CLANG_REAL}"
+require_link "bin/clang\+\+" "${CLANG_REAL}"
+require_link "bin/clang-cpp" "${CLANG_REAL}"
 require_link "bin/ld.lld" "lld"
 require_link "bin/ld64.lld" "lld"
 require_link "bin/wasm-ld" "lld"
@@ -37,20 +38,20 @@ require_link "bin/wasm-ld" "lld"
 tmpdir="$(mktemp -d)"
 tar --zstd -xf "$TARBALL" -C "$tmpdir" \
   "${ROOT_DIR}/bin/clang" \
-  "${ROOT_DIR}/bin/clang-22" \
+  "${ROOT_DIR}/bin/${CLANG_REAL}" \
   "${ROOT_DIR}/bin/lld" \
   "${ROOT_DIR}/bin/ld.lld"
 
 BIN_DIR="$tmpdir/$ROOT_DIR/bin"
 
-require_true "bin/clang is not symlink to clang-22" test -L "$BIN_DIR/clang"
-require_true "bin/clang symlink target is not clang-22" test "$(readlink "$BIN_DIR/clang")" = "clang-22"
+require_true "bin/clang is not symlink to ${CLANG_REAL}" test -L "$BIN_DIR/clang"
+require_true "bin/clang symlink target is not ${CLANG_REAL}" test "$(readlink "$BIN_DIR/clang")" = "${CLANG_REAL}"
 require_true "bin/ld.lld is not symlink to lld" test -L "$BIN_DIR/ld.lld"
 require_true "bin/ld.lld symlink target is not lld" test "$(readlink "$BIN_DIR/ld.lld")" = "lld"
-require_true "bin/clang-22 must be a real file" test ! -L "$BIN_DIR/clang-22"
+require_true "bin/${CLANG_REAL} must be a real file" test ! -L "$BIN_DIR/${CLANG_REAL}"
 require_true "bin/lld must be a real file" test ! -L "$BIN_DIR/lld"
 
-require_true "bin/clang-22 is not stripped" sh -c "file \"$BIN_DIR/clang-22\" | grep -q stripped"
+require_true "bin/${CLANG_REAL} is not stripped" sh -c "file \"$BIN_DIR/${CLANG_REAL}\" | grep -q stripped"
 require_true "bin/lld is not stripped" sh -c "file \"$BIN_DIR/lld\" | grep -q stripped"
 
 echo "PASS: llvm minimal bin symlink + stripped checks passed"
