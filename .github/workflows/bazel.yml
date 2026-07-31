@@ -284,11 +284,11 @@ jobs:
       matrix:
         include:
         - target: //compile:llvm_minimal_linux_x86_64
-          artifact: compile/llvm-minimal-22.1.8-Linux-X64.tar.xz
+          artifact: compile/llvm-minimal-22.1.8-Linux-X64.tar.zst
         - target: //compile:llvm_minimal_linux_arm64
-          artifact: compile/llvm-minimal-22.1.8-Linux-ARM64.tar.xz
+          artifact: compile/llvm-minimal-22.1.8-Linux-ARM64.tar.zst
         - target: //compile:llvm_minimal_macos_arm64
-          artifact: compile/llvm-minimal-22.1.8-macOS-ARM64.tar.xz
+          artifact: compile/llvm-minimal-22.1.8-macOS-ARM64.tar.zst
     uses: ./.github/workflows/_bazel.yml
     with:
       action: build

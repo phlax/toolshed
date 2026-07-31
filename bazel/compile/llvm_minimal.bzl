@@ -318,12 +318,12 @@ llvm_minimal_strip_bins = rule(
         "stripper": attr.label(
             mandatory = True,
             allow_single_file = True,
-            doc = "Host-executable llvm-strip binary (from the Linux-X64 tarball).",
+            doc = "Host-executable llvm-strip binary.",
         ),
         "readobj": attr.label(
             mandatory = True,
             allow_single_file = True,
-            doc = "Host-executable llvm-readobj binary (from the Linux-X64 tarball).",
+            doc = "Host-executable llvm-readobj binary.",
         ),
         "repo_suffix": attr.string(
             mandatory = True,
@@ -408,7 +408,7 @@ def _llvm_minimal_impl(ctx):
             platform = platform,
         )
         ctx.download_and_extract(
-            url = "https://github.com/envoyproxy/toolshed/releases/download/bins-v{version}/llvm-minimal-{llvm_version}-{platform}.tar.xz".format(
+            url = "https://github.com/envoyproxy/toolshed/releases/download/bins-v{version}/llvm-minimal-{llvm_version}-{platform}.tar.zst".format(
                 version = version,
                 llvm_version = llvm_version,
                 platform = platform,
