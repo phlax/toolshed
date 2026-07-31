@@ -25,13 +25,21 @@ load("//:versions.bzl", "LLVM_DISTRIBUTIONS", "LLVM_VERSION", "VERSIONS")
 # (toolchain/cc_toolchain_config.bzl), clang/ld/as filegroups
 # (toolchain/BUILD.llvm_repo.tpl), aliased_tools (toolchain/aliases.bzl),
 # and direct envoy/toolshed references.
+#
+# Symlink aliases and their real targets are BOTH listed explicitly so that
+# each allowlisted entry can be copied verbatim (preserving linkiness) without
+# any symlink-chain resolution:
+#   clang, clang++, clang-cpp        -> clang-22 (the real clang binary)
+#   ld.lld, ld64.lld, wasm-ld        -> lld      (the real linker binary)
 LLVM_MINIMAL_BINS = [
     # Compiler driver + assembler
     "clang",
     "clang++",
     "clang-cpp",
+    # Real clang binary that clang/clang++/clang-cpp symlink to.
+    "clang-22",
     "llvm-as",
-    # Linkers
+    # Linkers (ld.lld/ld64.lld/wasm-ld symlink to the real `lld`).
     "lld",
     "ld.lld",
     "ld64.lld",
@@ -373,23 +381,21 @@ llvm_tarball = repository_rule(
 # Build rule: assemble and strip the minimal bin/ tree
 # =============================================================================
 
-# Two-pass script:
-#   Pass 1 — copy all allowlisted bins into DEST, preserving symlinks but also
-#             copying each symlink's real target so no symlink is dangling.
-#   Pass 2 — walk DEST, skip symlinks, probe each real file with llvm-readobj;
-#             strip ELF/Mach-O objects (fatal on strip error) and skip scripts
-#             like git-clang-format that are not valid object files.
-#
-# Portability note: readlink -f is GNU-only; use a portable loop to resolve
-# the symlink chain without depending on GNU coreutils.
+# Two-pass script implementing the intended algorithm:
+#   Pass 1 — copy EXACTLY the allowlisted files, preserving their linkiness.
+#            `cp -P` never dereferences: a real file is copied as a real file,
+#            a symlink is copied as a symlink. Because every symlink target is
+#            itself allowlisted (clang-22 for the clang* aliases, lld for the
+#            ld*/wasm-ld aliases), the copied symlinks resolve within DEST and
+#            none dangle. No symlink-chain resolution, no target materialization.
+#   Pass 2 — walk DEST, skip symlinks and anything that cannot be stripped
+#            (probed via llvm-readobj --file-headers), and strip the rest.
+#            `find -maxdepth 1 -type f` skips symlinks; the readobj probe skips
+#            scripts like git-clang-format that are not valid object files.
 #
 # Arguments: DEST STRIPPER READOBJ [name:src_path ...]
-#   name     — output filename (e.g. "clang")
+#   name     — output filename (e.g. "clang" or "clang-22")
 #   src_path — full path to the source file from bin_all inputs
-#
-# Symlink resolution is done entirely from $src (its dirname is the bin/
-# directory, so the relative target resolves correctly inside the sandbox
-# without requiring an explicit SRCDIR argument).
 _LLVM_STRIP_BINS_SCRIPT = """
 set -euo pipefail
 DEST="$1"
@@ -397,41 +403,18 @@ STRIPPER="$2"
 READOBJ="$3"
 shift 3
 
-# Pass 1: copy allowlisted bins; for symlinks also copy their real targets.
+# Pass 1: copy exactly the allowlisted files, preserving linkiness.
+# cp -P never follows symlinks, so links stay links and files stay files.
 for spec in "$@"; do
     name="${spec%%:*}"
     src="${spec#*:}"
-    if [ -L "$src" ]; then
-        cp -P "$src" "$DEST/$name"
-        # Portable readlink -f: walk the chain to the real file.
-        # Cap at 40 iterations to catch circular symlinks (matches MAXSYMLINKS).
-        real="$src"
-        _depth=0
-        while [ -L "$real" ]; do
-            _depth=$((_depth + 1))
-            if [ "$_depth" -gt 40 ]; then
-                echo "symlink loop detected at $src" >&2
-                exit 1
-            fi
-            target="$(readlink "$real")"
-            case "$target" in
-                /*) real="$target" ;;
-                *)  real="$(dirname "$real")/$target" ;;
-            esac
-        done
-        realbase="$(basename "$real")"
-        if [ ! -f "$DEST/$realbase" ]; then
-            cp "$real" "$DEST/$realbase"
-        fi
-    else
-        cp "$src" "$DEST/$name"
-    fi
+    cp -P "$src" "$DEST/$name"
 done
 
-# Pass 2: strip real (non-symlink) ELF/Mach-O files; skip non-objects.
-# find -maxdepth 1 -type f naturally skips symlinks and handles an empty DEST.
-# Piped while for portability; explicit || exit 1 ensures strip/mv failures
-# propagate regardless of whether the subshell inherits set -e.
+# Pass 2: strip real (non-symlink) ELF/Mach-O files; skip symlinks and
+# non-objects.  find -maxdepth 1 -type f skips symlinks and handles an empty
+# DEST.  Piped while for portability; explicit || exit 1 ensures strip/mv
+# failures propagate regardless of whether the subshell inherits set -e.
 find "$DEST" -maxdepth 1 -type f | while IFS= read -r f; do
     if "$READOBJ" --file-headers "$f" > /dev/null 2>&1; then
         tmpf="${f}.strip-tmp"
