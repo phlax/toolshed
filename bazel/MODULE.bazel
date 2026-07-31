@@ -145,6 +145,6 @@ libcxx_libs_ext.setup()
 use_repo(libcxx_libs_ext, "libcxx_libs_aarch64", "libcxx_libs_x86_64")
 
 # Set up raw LLVM tarball download repos needed to build //compile:llvm_minimal_* targets.
-# These are dev_dependency only — consumers use llvm_minimal_extension instead.
+# These are dev_dependency only — consumers use the llvm_minimal_* http_archive repos instead.
 llvm_minimal_build_ext = use_extension("//compile:extensions.bzl", "llvm_minimal_build_extension", dev_dependency = True)
 use_repo(llvm_minimal_build_ext, "llvm_tarball_linux_x86_64", "llvm_tarball_linux_arm64", "llvm_tarball_macos_arm64")
