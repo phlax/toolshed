@@ -261,18 +261,11 @@ _LLVM_MINIMAL_MACOS_ONLY_BINS = [
     "llvm-install-name-tool",
 ]
 
-# Use the host-runnable Linux-X64 llvm-strip/llvm-readobj for all minimal artifact
-# variants.  This keeps stripping hermetic even when assembling Linux-ARM64 or
-# macOS-ARM64 trees on Linux RBE workers (their own binaries are not executable on
-# Linux x86_64 hosts).
-_LLVM_MINIMAL_HOST_STRIPPER = "@llvm_tarball_linux_x86_64//:bin/llvm-strip"
-_LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
-
-sh_binary(
-    name = "llvm_minimal_xz_compressor",
-    srcs = ["llvm_minimal_xz_compressor.sh"],
-    visibility = ["//visibility:private"],
-)
+# Use the host-runnable hermetic toolchain LLVM tools for all minimal artifact
+# variants. This keeps stripping hermetic even when assembling Linux-ARM64 or
+# macOS-ARM64 trees on Linux RBE workers.
+_LLVM_MINIMAL_STRIPPER = "@llvm_toolchain_llvm//:bin/llvm-strip"
+_LLVM_MINIMAL_READOBJ = "@llvm_toolchain_llvm//:bin/llvm-readobj"
 
 [
     (
@@ -280,8 +273,8 @@ sh_binary(
             name = "llvm_minimal_%s_strip_bins" % repo_suffix,
             bin_all = "@llvm_tarball_%s//:bin_all" % repo_suffix,
             bins = bins,
-            stripper = _LLVM_MINIMAL_HOST_STRIPPER,
-            readobj = _LLVM_MINIMAL_HOST_READOBJ,
+            stripper = _LLVM_MINIMAL_STRIPPER,
+            readobj = _LLVM_MINIMAL_READOBJ,
             repo_suffix = repo_suffix,
             platform = platform,
             tags = ["manual"],
@@ -306,7 +299,7 @@ sh_binary(
                 ":llvm_minimal_%s_bins_files" % repo_suffix,
                 ":llvm_minimal_%s_libs_files" % repo_suffix,
             ],
-            compressor = ":llvm_minimal_xz_compressor",
+            compressor = "@xz//:xz_tool",
             compressor_args = "-T0",
             exec_properties = {"Pool": "linux_x64_xlarge"},
             extension = "tar.xz",

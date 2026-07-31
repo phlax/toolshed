@@ -97,6 +97,17 @@ LLVM_MINIMAL_PLATFORMS = {
     "macOS-ARM64": "LLVM-%s-macOS-ARM64.tar.xz" % LLVM_VERSION,
 }
 
+_XZ_REPOSITORY_BUILD = """\
+load("@envoy_toolshed//compile:llvm_minimal.bzl", "file_executable")
+
+package(default_visibility = ["//visibility:public"])
+
+file_executable(
+    name = "xz_tool",
+    src = "xz",
+)
+"""
+
 # =============================================================================
 # Repository rule: extracted LLVM tree (for building minimal artifacts)
 # =============================================================================
@@ -178,6 +189,62 @@ llvm_tarball = repository_rule(
         ),
     },
     doc = "Downloads and extracts an upstream LLVM tarball for hermetic minimal LLVM artifact builds.",
+)
+
+def _xz_repository_impl(ctx):
+    """Downloads a pinned hermetic xz binary for pkg_tar compression."""
+    ctx.download_and_extract(
+        url = ctx.attr.url,
+        sha256 = ctx.attr.sha256,
+        stripPrefix = "xz-%s-linux-x86_64" % ctx.attr.version,
+        type = "tar",
+    )
+    ctx.file("BUILD.bazel", _XZ_REPOSITORY_BUILD)
+
+xz_repository = repository_rule(
+    implementation = _xz_repository_impl,
+    attrs = {
+        "url": attr.string(
+            mandatory = True,
+            doc = "URL of the hermetic xz archive to download",
+        ),
+        "sha256": attr.string(
+            mandatory = True,
+            doc = "SHA256 hash of the hermetic xz archive",
+        ),
+        "version": attr.string(
+            mandatory = True,
+            doc = "Version of the hermetic xz archive",
+        ),
+    },
+    doc = "Downloads a pinned hermetic xz binary for pkg_tar compression.",
+)
+
+def _file_executable_impl(ctx):
+    """Exposes a downloaded executable file via FilesToRunProvider."""
+    executable = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(
+        output = executable,
+        target_file = ctx.file.src,
+        is_executable = True,
+    )
+    return [
+        DefaultInfo(
+            executable = executable,
+            files = depset([executable]),
+            runfiles = ctx.runfiles(files = [ctx.file.src]),
+        ),
+    ]
+
+file_executable = rule(
+    implementation = _file_executable_impl,
+    attrs = {
+        "src": attr.label(
+            mandatory = True,
+            allow_single_file = True,
+        ),
+    },
+    executable = True,
 )
 
 # =============================================================================
@@ -344,6 +411,7 @@ def setup_llvm_minimal_build():
       @llvm_tarball_linux_x86_64 — extracted Linux-X64 LLVM tree
       @llvm_tarball_linux_arm64  — extracted Linux-ARM64 LLVM tree
       @llvm_tarball_macos_arm64  — extracted macOS-ARM64 LLVM tree
+      @xz                        — hermetic xz binary used by pkg_tar
 
     These are consumed by the //compile:llvm_minimal_* build targets.
     """
@@ -366,6 +434,14 @@ def setup_llvm_minimal_build():
             version = LLVM_VERSION,
             platform = platform,
         )
+
+    xz = VERSIONS["llvm_minimal_xz"]
+    xz_repository(
+        name = "xz",
+        url = xz["url"].format(version = xz["version"]),
+        sha256 = xz["sha256"],
+        version = xz["version"],
+    )
 
 # =============================================================================
 # Repository rule: consume pre-built minimal LLVM artifact from toolshed releases

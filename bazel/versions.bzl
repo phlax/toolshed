@@ -65,6 +65,12 @@ VERSIONS = {
         "macOS-ARM64": "",
     },
 
+    "llvm_minimal_xz": {
+        "version": "5.2.5",
+        "sha256": "4d547783092dd4f37b5af250c6a70cc09664af615764a22232f03b4d1e5868ff",
+        "url": "https://github.com/therootcompany/xz-static/releases/download/v{version}/xz-{version}-linux-x86_64.tar.gz",
+    },
+
     # Glint binary hashes by architecture
     "glint_sha256": {
         "amd64": "67c91213b7ae3ebf37a59ccd9272d5b940d7a8c6557f36f3a0481b8fc80a0121",
