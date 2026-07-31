@@ -193,11 +193,15 @@ llvm_tarball = repository_rule(
 
 def _xz_repository_impl(ctx):
     """Downloads a pinned hermetic xz binary for pkg_tar compression."""
-    ctx.download_and_extract(
+    archive = "xz.tar"
+    ctx.download(
         url = ctx.attr.url,
+        output = archive,
         sha256 = ctx.attr.sha256,
+    )
+    ctx.extract(
+        archive = archive,
         stripPrefix = "xz-%s-linux-x86_64" % ctx.attr.version,
-        type = "tar",
     )
     ctx.file("BUILD.bazel", _XZ_REPOSITORY_BUILD)
 
