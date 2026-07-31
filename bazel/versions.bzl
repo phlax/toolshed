@@ -1,5 +1,7 @@
 SUPPORTED_ARCHES = ["aarch64", "x86_64"]
 
+BINS_RELEASE = "0.2.2"
+
 # This is only used for cross-compilation (toolchains_llvm provides these otherwise)
 LLVM_CXX_BUILD = """
 filegroup(
@@ -37,7 +39,7 @@ VERSIONS = {
     "llvm": LLVM_VERSION,
     "ninja": "1.12.0",
     "python": "3.12",
-    "bins_release": "0.2.2",
+    "bins_release": BINS_RELEASE,
     "msan_libs_sha256": "2da6ebb745363b2ac71854b7d03a47c3e1a7d343994f392880efe2b6249d5aa3",
     "tsan_libs_sha256": "2d136d0c63021b3280ec4b33a88c8381f2214a849a50ae557d7f5d9e9f9b93d0",
 
@@ -142,6 +144,36 @@ VERSIONS = {
         "url": "https://github.com/{repo}/releases/download/llvmorg-{version}/LLVM-{version}-{download_suffix}.tar.xz",
         "strip_prefix": "LLVM-{version}-{download_suffix}/",
         "build_file_content": LLVM_CXX_BUILD,
+    },
+    "llvm_minimal_linux_x64": {
+        "type": "http_archive",
+        "repo": "envoyproxy/toolshed",
+        "download_suffix": "Linux-X64",
+        "version": LLVM_VERSION,
+        "bins_release": BINS_RELEASE,
+        "sha256": "ef30a219712973b1080883a4fbfeaa117f1062775ca58bd877f6e5fe381eaee8",
+        "url": "https://github.com/{repo}/releases/download/bins-v{bins_release}/llvm-minimal-{version}-{download_suffix}.tar.zst",
+        "strip_prefix": "llvm-minimal-{version}-{download_suffix}",
+    },
+    "llvm_minimal_linux_arm64": {
+        "type": "http_archive",
+        "repo": "envoyproxy/toolshed",
+        "download_suffix": "Linux-ARM64",
+        "version": LLVM_VERSION,
+        "bins_release": BINS_RELEASE,
+        "sha256": "12a8cc936058aed0ee11053d9dadf65f2bb59a2d11b31ef80f4e9b19d32d94c4",
+        "url": "https://github.com/{repo}/releases/download/bins-v{bins_release}/llvm-minimal-{version}-{download_suffix}.tar.zst",
+        "strip_prefix": "llvm-minimal-{version}-{download_suffix}",
+    },
+    "llvm_minimal_macos_arm64": {
+        "type": "http_archive",
+        "repo": "envoyproxy/toolshed",
+        "download_suffix": "macOS-ARM64",
+        "version": LLVM_VERSION,
+        "bins_release": BINS_RELEASE,
+        "sha256": "b2264adc17c1a58862411a0c65731465eb84fef5fb93802c15fb5df35873d686",
+        "url": "https://github.com/{repo}/releases/download/bins-v{bins_release}/llvm-minimal-{version}-{download_suffix}.tar.zst",
+        "strip_prefix": "llvm-minimal-{version}-{download_suffix}",
     },
     "llvm_source": {
         "type": "github_archive",
