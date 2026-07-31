@@ -291,6 +291,8 @@ _LLVM_MINIMAL_HOST_READOBJ = "@llvm_toolchain_llvm//:bin/llvm-readobj"
         mtree_mutate(
             name = "llvm_minimal_%s_bins_mtree" % repo_suffix,
             mtree = ":llvm_minimal_%s_bins_mtree_src" % repo_suffix,
+            preserve_symlinks = True,
+            srcs = [":llvm_minimal_%s_strip_bins" % repo_suffix],
             package_dir = "llvm-minimal-%s-%s" % (LLVM_VERSION, platform),
             strip_prefix = "compile/llvm_minimal_%s" % repo_suffix,
             tags = ["manual"],
@@ -404,3 +406,15 @@ EOF""" % LLVM_MINIMAL_LLVM_REPO_BUILD,
         ),
     ]
 ]
+
+sh_test(
+    name = "llvm_minimal_linux_x86_64_bins_layout_test",
+    size = "small",
+    srcs = ["//compile/test:assert_llvm_minimal_bins_layout.sh"],
+    data = [":llvm_minimal_linux_x86_64"],
+    env = {
+        "TARBALL": "$(rootpath :llvm_minimal_linux_x86_64)",
+        "ROOT_DIR": "llvm-minimal-%s-Linux-X64" % LLVM_VERSION,
+    },
+    tags = ["manual"],
+)

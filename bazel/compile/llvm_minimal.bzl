@@ -404,11 +404,20 @@ READOBJ="$3"
 shift 3
 
 # Pass 1: copy exactly the allowlisted files, preserving linkiness.
-# cp -P never follows symlinks, so links stay links and files stay files.
+# In Bazel sandboxes, file inputs are usually symlink shims to the real execroot
+# paths. Unwrap one shim hop so cp -P sees the actual upstream path (where
+# clang/ld aliases are real symlinks and clang-22/lld are real files).
 for spec in "$@"; do
     name="${spec%%:*}"
     src="${spec#*:}"
-    cp -P "$src" "$DEST/$name"
+    src_for_copy="$src"
+    if [ -L "$src" ]; then
+        shim_target="$(readlink "$src" || true)"
+        if [ -n "${shim_target:-}" ] && [ "${shim_target#/}" != "$shim_target" ] && [ -e "$shim_target" ]; then
+            src_for_copy="$shim_target"
+        fi
+    fi
+    cp -P "$src_for_copy" "$DEST/$name"
 done
 
 # Pass 2: strip real (non-symlink) ELF/Mach-O files; skip symlinks and
