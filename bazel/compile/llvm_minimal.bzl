@@ -50,6 +50,7 @@ LLVM_MINIMAL_BINS = [
     "llvm-nm",
     "llvm-objcopy",
     "llvm-objdump",
+    "llvm-readobj",
     "llvm-readelf",
     "llvm-strip",
     "llvm-dwp",

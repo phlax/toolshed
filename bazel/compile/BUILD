@@ -297,6 +297,13 @@ _LLVM_MINIMAL_HOST_READOBJ = "@llvm_toolchain_llvm//:bin/llvm-readobj"
             strip_prefix = "compile/llvm_minimal_%s" % repo_suffix,
             tags = ["manual"],
         ),
+        genrule(
+            name = "llvm_minimal_%s_bins_mtree_fixed" % repo_suffix,
+            srcs = [":llvm_minimal_%s_bins_mtree" % repo_suffix],
+            outs = ["llvm_minimal_%s_bins_fixed.mtree" % repo_suffix],
+            cmd = "sed -E 's# link=\\.\\./# link=#g' $(location :llvm_minimal_%s_bins_mtree) >$@" % repo_suffix,
+            tags = ["manual"],
+        ),
         mtree_spec(
             name = "llvm_minimal_%s_libs_mtree_src" % repo_suffix,
             srcs = ["@llvm_tarball_%s//:minimal_libs" % repo_suffix],
@@ -331,7 +338,7 @@ EOF""" % LLVM_MINIMAL_LLVM_REPO_BUILD,
         genrule(
             name = "llvm_minimal_%s_mtree" % repo_suffix,
             srcs = [
-                ":llvm_minimal_%s_bins_mtree" % repo_suffix,
+                ":llvm_minimal_%s_bins_mtree_fixed" % repo_suffix,
                 ":llvm_minimal_%s_libs_mtree" % repo_suffix,
                 ":llvm_minimal_%s_build_mtree" % repo_suffix,
             ],
