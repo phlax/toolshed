@@ -268,6 +268,12 @@ _LLVM_MINIMAL_MACOS_ONLY_BINS = [
 _LLVM_MINIMAL_HOST_STRIPPER = "@llvm_tarball_linux_x86_64//:bin/llvm-strip"
 _LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
 
+sh_binary(
+    name = "llvm_minimal_xz_compressor",
+    srcs = ["llvm_minimal_xz_compressor.sh"],
+    visibility = ["//visibility:private"],
+)
+
 [
     (
         llvm_minimal_strip_bins(
@@ -300,6 +306,7 @@ _LLVM_MINIMAL_HOST_READOBJ = "@llvm_tarball_linux_x86_64//:bin/llvm-readobj"
                 ":llvm_minimal_%s_bins_files" % repo_suffix,
                 ":llvm_minimal_%s_libs_files" % repo_suffix,
             ],
+            compressor = ":llvm_minimal_xz_compressor",
             compressor_args = "-T0",
             exec_properties = {"Pool": "linux_x64_xlarge"},
             extension = "tar.xz",
