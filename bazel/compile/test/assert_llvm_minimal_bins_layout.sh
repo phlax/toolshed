@@ -18,6 +18,15 @@ require_link() {
   fi
 }
 
+require_true() {
+  local message="$1"
+  shift
+  if ! "$@"; then
+    echo "FAIL: ${message}" >&2
+    exit 1
+  fi
+}
+
 require_link "bin/clang" "clang-22"
 require_link "bin/clang\+\+" "clang-22"
 require_link "bin/clang-cpp" "clang-22"
@@ -34,12 +43,14 @@ tar --zstd -xf "$TARBALL" -C "$tmpdir" \
 
 BIN_DIR="$tmpdir/$ROOT_DIR/bin"
 
-[ -L "$BIN_DIR/clang" ] && [ "$(readlink "$BIN_DIR/clang")" = "clang-22" ]
-[ -L "$BIN_DIR/ld.lld" ] && [ "$(readlink "$BIN_DIR/ld.lld")" = "lld" ]
-[ ! -L "$BIN_DIR/clang-22" ]
-[ ! -L "$BIN_DIR/lld" ]
+require_true "bin/clang is not symlink to clang-22" test -L "$BIN_DIR/clang"
+require_true "bin/clang symlink target is not clang-22" test "$(readlink "$BIN_DIR/clang")" = "clang-22"
+require_true "bin/ld.lld is not symlink to lld" test -L "$BIN_DIR/ld.lld"
+require_true "bin/ld.lld symlink target is not lld" test "$(readlink "$BIN_DIR/ld.lld")" = "lld"
+require_true "bin/clang-22 must be a real file" test ! -L "$BIN_DIR/clang-22"
+require_true "bin/lld must be a real file" test ! -L "$BIN_DIR/lld"
 
-file "$BIN_DIR/clang-22" | grep -q "stripped"
-file "$BIN_DIR/lld" | grep -q "stripped"
+require_true "bin/clang-22 is not stripped" sh -c "file \"$BIN_DIR/clang-22\" | grep -q stripped"
+require_true "bin/lld is not stripped" sh -c "file \"$BIN_DIR/lld\" | grep -q stripped"
 
 echo "PASS: llvm minimal bin symlink + stripped checks passed"
