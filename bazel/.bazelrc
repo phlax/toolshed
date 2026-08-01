@@ -14,6 +14,9 @@ common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --@rules_python//python/config_settings:bootstrap_impl=script
 
 common --registry=https://bcr.bazel.build/
+# Local registry takes priority over the pinned upstream registry for bzlmod
+# (contains custom-versioned modules like toolchains_llvm/1.8.0.envoy; these
+# use .envoy version suffixes so they do not shadow any BCR module versions).
 common --registry=file://%workspace%/../bazel-registry
 common --registry=https://raw.githubusercontent.com/envoyproxy/toolshed/90e1a4c1735b75f7e02996d2c055a3ce7822a16e/bazel-registry
 
