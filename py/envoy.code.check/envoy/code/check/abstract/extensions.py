@@ -6,7 +6,7 @@ import logging
 import pathlib
 import re
 from functools import cached_property
-from typing import Any, cast, Pattern
+from typing import Any, cast
 
 import yaml as _yaml
 
@@ -45,6 +45,7 @@ UPSTREAM_EXTENSION_CATEGORY = "envoy.filters.http.upstream"
 @abstracts.implementer(interface.IExtensionsCheck)
 class AExtensionsCheck(abstract.ACodeCheck, metaclass=abstracts.Abstraction):
     """Extensions check."""
+
     _owners_min_default: int = OWNERS_MIN_DEFAULT
 
     def __init__(
@@ -77,15 +78,15 @@ class AExtensionsCheck(abstract.ACodeCheck, metaclass=abstracts.Abstraction):
         return self.extensions_schema["builtin"]
 
     @cached_property
-    def codeowner_re(self) -> Pattern[str]:
+    def codeowner_re(self) -> re.Pattern[str]:
         return re.compile(CODEOWNER_RE)
 
     @cached_property
-    def codeowners_contrib_re(self) -> Pattern[str]:
+    def codeowners_contrib_re(self) -> re.Pattern[str]:
         return re.compile(CODEOWNERS_CONTRIB_RE)
 
     @cached_property
-    def codeowners_extensions_re(self) -> Pattern[str]:
+    def codeowners_extensions_re(self) -> re.Pattern[str]:
         return re.compile(CODEOWNERS_EXTENSIONS_RE)
 
     @cached_property
@@ -160,7 +161,7 @@ class AExtensionsCheck(abstract.ACodeCheck, metaclass=abstracts.Abstraction):
         return maintainers
 
     @cached_property
-    def maintainers_re(self) -> Pattern[str]:
+    def maintainers_re(self) -> re.Pattern[str]:
         return re.compile(MAINTAINERS_RE)
 
     @async_property(cache=True)
@@ -276,7 +277,7 @@ class AExtensionsCheck(abstract.ACodeCheck, metaclass=abstracts.Abstraction):
             + tuple(self.owned["contrib"].keys()))
 
     @cached_property
-    def tracked_ownership_re(self) -> Pattern[str]:
+    def tracked_ownership_re(self) -> re.Pattern[str]:
         return re.compile(TRACKED_OWNERSHIP_RE)
 
     async def check_metadata(self, extension: str) -> tuple[str, ...]:
@@ -456,7 +457,7 @@ class AExtensionsCheck(abstract.ACodeCheck, metaclass=abstracts.Abstraction):
             self,
             line: str,
             matcher: (
-                Pattern[str] | None) = None) -> dict[str, dict[str, set]]:
+                re.Pattern[str] | None) = None) -> dict[str, dict[str, set]]:
         if line.startswith('#'):
             return {}
         m = (matcher or self.codeowners_extensions_re).search(line)

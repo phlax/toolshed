@@ -704,8 +704,6 @@ def setup_llvm_minimal(
         "macOS-ARM64": ("llvm_minimal_macos_arm64", macos_arm64_sha256),
     }
     for platform, (repo_name, override_sha256) in platform_to_repo.items():
-        if repo_name in native.existing_rules():
-            continue
         config = VERSIONS[repo_name]
         llvm_minimal_repo(
             name = repo_name,

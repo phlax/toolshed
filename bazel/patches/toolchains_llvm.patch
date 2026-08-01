@@ -77,26 +77,16 @@ diff -Naur a/toolchain/internal/configure.bzl b/toolchain/internal/configure.bzl
 +    cxx_cross_lib_link_flags = {}
 +    cxx_cross_lib_cxx_flags = {}
 +    exec_pair = _os_arch_pair(os, arch)
-+    # GNU target triples for arch-qualified libc++ paths used by LLVM minimal distributions.
-+    # LLVM stores libc++ under lib/<triple>/libc++.a and the platform config site under
-+    # include/<triple>/c++/v1/__config_site.
-+    _cxx_cross_lib_triples = {
-+        "linux-aarch64": "aarch64-unknown-linux-gnu",
-+        "linux-x86_64": "x86_64-unknown-linux-gnu",
-+    }
 +    for target_pair, cxx_cross_lib_label_str in rctx.attr.cxx_cross_lib.items():
 +        if target_pair == exec_pair:
 +            continue
 +        cxx_cross_lib_label = Label(cxx_cross_lib_label_str)
 +        cxx_cross_lib_path = _pkg_path_from_label(cxx_cross_lib_label)
-+        target_triple = _cxx_cross_lib_triples.get(target_pair, "")
-+        lib_subdir = "/lib/" + target_triple if target_triple else "/lib"
-+        include_subdir = "/include/" + target_triple + "/c++/v1" if target_triple else "/include"
 +        cxx_cross_lib_include_dirs[target_pair] = [
-+            "%workspace%/" + cxx_cross_lib_path + include_subdir,
++            "%workspace%/" + cxx_cross_lib_path + "/include",
 +        ]
 +        cxx_cross_lib_link_flags[target_pair] = [
-+            "-L" + cxx_cross_lib_path + lib_subdir,
++            "-L" + cxx_cross_lib_path + "/lib",
 +            "-l:libc++.a",
 +            "-l:libc++abi.a",
 +        ]
@@ -105,7 +95,7 @@ diff -Naur a/toolchain/internal/configure.bzl b/toolchain/internal/configure.bzl
 +            "-isystem",
 +            paths.join(target_llvm_repo_paths[target_pair], "include/c++/v1"),
 +            "-isystem",
-+            cxx_cross_lib_path + include_subdir,
++            cxx_cross_lib_path + "/include",
 +        ]
 +
 +    # Merge cxx_cross_lib paths into include dirs, link flags, and cxx flags.

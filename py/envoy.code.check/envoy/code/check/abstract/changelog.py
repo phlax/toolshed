@@ -1,8 +1,10 @@
 
 import itertools
+import pathlib
+import re
 from datetime import datetime
 from functools import cached_property
-from typing import Iterator
+from collections.abc import Iterator
 
 from packaging import version as _version
 
@@ -11,10 +13,17 @@ import abstracts
 from aio.core.functional import async_property
 
 from envoy.base import utils
+from envoy.base.utils.abstract.project.changelog import (
+    CHANGELOG_CONFIG_PATH,
+    CHANGELOG_ENTRY_GLOB,
+    ENTRY_SEPARATOR,
+)
 from envoy.code.check import abstract, interface
 
 
 MAX_VERSION_FOR_CHANGES_SECTION = "1.16"
+VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-/]+$")
+VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-/]+"
 
 
 @abstracts.implementer(interface.IChangelogChangesChecker)
@@ -25,13 +34,19 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
 
     def __init__(
             self,
-            sections: utils.typing.ChangelogSectionsDict) -> None:
+            sections: utils.typing.ChangelogSectionsDict,
+            areas: "utils.typing.ChangelogAreasDict") -> None:
         self.sections = sections
+        self.areas = areas
 
     @property  # type:ignore
     @abstracts.interfacemethod
     def change_checkers(self) -> tuple[interface.IRSTCheck, ...]:
         raise NotImplementedError
+
+    @cached_property
+    def config_path(self) -> pathlib.Path:
+        return pathlib.Path(CHANGELOG_CONFIG_PATH)
 
     @cached_property
     def max_version_for_changes_section(self) -> _version.Version:
@@ -95,6 +110,81 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
                 f"{version}/changes: Invalid `changes` section "
                 "(this is no longer used)")
 
+    def check_entry_filename(
+            self,
+            path: pathlib.Path) -> str | None:
+        section = path.parent.name
+        if section not in self.sections:
+            return (
+                f"{path}: Invalid section `{section}`. "
+                f"Valid sections: {sorted(self.sections)}")
+        if path.suffix != ".rst":
+            return (
+                f"{path}: Invalid file extension `{path.suffix}` "
+                "(expected `.rst`)")
+        if path.stem.count(ENTRY_SEPARATOR) != 1:
+            return (
+                f"{path}: Filename stem must contain exactly one "
+                f"`{ENTRY_SEPARATOR}` separator "
+                f"(expected `<area>{ENTRY_SEPARATOR}<slug>`)")
+        area, slug = path.stem.split(ENTRY_SEPARATOR, 1)
+        if not area:
+            return f"{path}: Area part of filename is empty"
+        if self.areas and area not in self.areas:
+            return (
+                f"{path}: Invalid area '{area}'. "
+                f"Valid areas come from {self.config_path}")
+        if not slug:
+            return f"{path}: Slug part of filename is empty"
+        return None
+
+    def check_areas_file(self) -> tuple[str, ...]:
+        if not self.areas:
+            return ()
+        title_areas: dict[str, list[str]] = {}
+        errors = []
+        for area, area_data in self.areas.items():
+            title = area_data["title"]
+            title_areas.setdefault(title, []).append(area)
+            if not VALID_CHANGELOG_AREA_RE.match(area):
+                errors.append(
+                    f"{self.config_path}: "
+                    f"Invalid area key '{area}' "
+                    f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+            if not VALID_CHANGELOG_AREA_RE.match(title):
+                errors.append(
+                    f"{self.config_path}: "
+                    f"Invalid title '{title}' for area '{area}' "
+                    f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+        for title, areas in sorted(title_areas.items()):
+            if len(areas) < 2:
+                continue
+            errors.append(
+                f"{self.config_path}: "
+                f"Duplicate title '{title}' used by areas: "
+                f"{', '.join(sorted(areas))}")
+        return tuple(errors)
+
+    def check_entry_content(
+            self,
+            path: pathlib.Path) -> str | None:
+        content = path.read_text()
+        if not content.strip():
+            return (
+                f"{path}: Entry file is empty or contains only whitespace")
+        return None
+
+    def check_entry_files(
+            self,
+            paths: list[pathlib.Path]) -> tuple[str, ...]:
+        errors = []
+        for path in paths:
+            if err := self.check_entry_filename(path):
+                errors.append(err)
+            if err := self.check_entry_content(path):
+                errors.append(err)
+        return tuple(errors)
+
 
 @abstracts.implementer(interface.IChangelogStatus)
 class AChangelogStatus(metaclass=abstracts.Abstraction):
@@ -133,18 +223,35 @@ class AChangelogStatus(metaclass=abstracts.Abstraction):
     def duplicate_current(self) -> bool:
         return (
             self.is_current
+            and self.project.is_dev
             and self.project.changelogs.changelog_path(
                 self.version).exists())
 
+    @property
+    def entry_dir(self) -> pathlib.Path | None:
+        if not self.is_current:
+            return None
+        return (
+            self.project.changelogs
+                        .changelog_path(self.version)
+                        .with_suffix(""))
+
     @async_property(cache=True)
     async def errors(self) -> tuple[str, ...]:
+        areas_errors = await self.check_areas_file()
+        entry_errors = await self.check_entry_files()
         try:
             return (
                 *self.check_version(),
                 *await self.check_date(),
-                *await self.check_sections())
+                *await self.check_sections(),
+                *areas_errors,
+                *entry_errors)
         except utils.exceptions.ChangelogParseError as e:
-            return (f"{self.version}: {e}", )
+            return (
+                *areas_errors,
+                *entry_errors,
+                f"{self.version}: {e}")
 
     @async_property
     async def invalid_date(self) -> str | None:
@@ -195,6 +302,11 @@ class AChangelogStatus(metaclass=abstracts.Abstraction):
             > _version.Version(self.project.version.base_version))
 
     async def check_date(self) -> tuple[str, ...]:
+        # In the entries layout the current changelog has no real date; it is
+        # synthesized as `Pending` until `write_version` bakes a dated file,
+        # so there is nothing to validate here.
+        if self.is_current and self.project.changelogs.entries_layout:
+            return ()
         errors = []
         if invalid_date := await self.invalid_date:
             errors.append(f"Format not recognized \"{invalid_date}\"")
@@ -215,12 +327,31 @@ class AChangelogStatus(metaclass=abstracts.Abstraction):
             self.version,
             await self.sections)
 
+    async def check_entry_files(self) -> tuple[str, ...]:
+        entry_dir = self.entry_dir
+        if entry_dir is None or not entry_dir.exists():
+            return ()
+        paths = sorted(entry_dir.glob(CHANGELOG_ENTRY_GLOB))
+        if not paths:
+            return ()
+        return await self.project.execute(
+            self.checker.check_entry_files,
+            paths)
+
+    async def check_areas_file(self) -> tuple[str, ...]:
+        areas = self.project.changelogs.areas
+        if not self.is_current or not areas:
+            return ()
+        return await self.project.execute(self.checker.check_areas_file)
+
     def check_version(self) -> tuple[str, ...]:
         errors = []
         if self.duplicate_current:
             errors.append(
                 "Duplicate current version file. "
-                "Only `current.yaml` should exist for the current version "
+                "A `changelogs/"
+                f"{self.project.version.base_version}.yaml` exists alongside "
+                "`changelogs/current/` for the in-flight changelog "
                 f"({self.project.version.base_version})")
         elif self.version_higher_than_current:
             errors.append(
@@ -251,7 +382,8 @@ class AChangelogCheck(
     @cached_property
     def changes_checker(self) -> interface.IChangelogChangesChecker:
         return self.changes_checker_class(
-            self.project.changelogs.sections)
+            self.project.changelogs.sections,
+            self.project.changelogs.areas)
 
     @property  # type:ignore
     @abstracts.interfacemethod

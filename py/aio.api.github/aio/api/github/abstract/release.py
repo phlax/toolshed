@@ -1,9 +1,9 @@
 
 import logging
 import pathlib
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from functools import cached_property
-from typing import AsyncIterator, Callable
 
 from packaging import version
 
@@ -86,6 +86,7 @@ class AGithubRelease(GithubRepoEntity, metaclass=abstracts.Abstraction):
 @abstracts.implementer(interface.IGithubReleaseAssets)
 class AGithubReleaseAssets(metaclass=abstracts.Abstraction):
     """Base class for Github release assets pusher/fetcher."""
+
     _concurrency = 4
 
     def __init__(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pathlib
-from typing import (
+from collections.abc import (
     AsyncGenerator, ItemsView, Iterator, KeysView,
     ValuesView)
 
@@ -235,8 +235,22 @@ class IChangelogs(metaclass=abstracts.Interface):
 
     @property
     @abstracts.interfacemethod
+    def areas(self) -> typing.ChangelogAreasDict:
+        """Changelog areas."""
+        raise NotImplementedError
+
+    @property
+    @abstracts.interfacemethod
     def sections(self) -> typing.ChangelogSectionsDict:
         """Changelog groupings/sections."""
+        raise NotImplementedError
+
+    @abstracts.interfacemethod
+    def validate_sections(
+            self,
+            data: typing.ChangelogDict,
+            path: pathlib.Path | None = None) -> typing.ChangelogDict:
+        """Validate parsed changelog data against configured sections."""
         raise NotImplementedError
 
     @abstracts.interfacemethod
@@ -271,17 +285,17 @@ class IChangelogs(metaclass=abstracts.Interface):
 
     @abstracts.interfacemethod
     def write_current(self) -> None:
-        """Create the `current.yaml` changelog file from a template."""
+        """Create the current changelog entries directory."""
         raise NotImplementedError
 
     @abstracts.interfacemethod
     def write_date(self) -> None:
-        """Set the date in the `current.yaml` changelog file."""
+        """Freeze the current changelog entries with a release date."""
         raise NotImplementedError
 
     @abstracts.interfacemethod
     def write_version(self, version: _version.Version) -> None:
-        """Write the `current.yaml` file to the current version."""
+        """Write the current changelog entries to the current version."""
         raise NotImplementedError
 
 

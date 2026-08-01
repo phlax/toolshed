@@ -21,7 +21,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-  - uses: envoyproxy/toolshed/actions/cache/prime@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/cache/prime@90dbeeeeb32109e6362797f48fbf232f89360d8f
     id: prime
     with:
       key: ${{ inputs.image-tag }}${{ inputs.key-suffix }}
@@ -33,6 +33,9 @@ runs:
         mv /var/lib/docker /var/lib/docker.orig
         mkdir /var/lib/docker
         systemctl start docker
-        docker pull ${{ inputs.image-tag }}
+        docker pull "$IMAGE_TAG"
         systemctl stop docker docker.socket
         tar cf - -C /var/lib/docker . | zstd - -T0 -o docker.tar.zst
+      sudo-preserve-env: IMAGE_TAG
+    env:
+      IMAGE_TAG: ${{ inputs.image-tag }}

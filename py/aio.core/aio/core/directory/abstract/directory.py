@@ -1,4 +1,3 @@
-
 import asyncio
 import pathlib
 import re
@@ -6,9 +5,8 @@ import shutil
 import subprocess as subprocess
 from concurrent import futures
 from functools import cached_property, partial
-from typing import (
-    AsyncIterator, Iterable, Mapping,
-    Pattern, Type)
+from collections.abc import AsyncIterator, Iterable, Mapping
+from re import Pattern
 
 import abstracts
 
@@ -123,17 +121,17 @@ class ADirectory(event.AExecutive, metaclass=abstracts.Abstraction):
     """A filesystem directory, with an associated fileset, and tools for
     finding files.
 
-    The required `path` argument should be the path to an existing filesystem
-    directory.
+    The required `path` argument should be the path to an existing
+    filesystem directory.
 
     The `exclude` and `exclude_dirs` parameters are passed to the `grep`
     command as `--exclude` and `--exclude-dir` args respectively.
 
-    You can specify inclusive and exclusive regex matchers with `path_matcher`
-    and `exclude_matcher`.
+    You can specify inclusive and exclusive regex matchers with
+    `path_matcher` and `exclude_matcher`.
 
-    By default, only text files (from grep/git grep pov) will be searched,
-    you can override this by setting `text_only` to `False`.
+    By default, only text files (from grep/git grep pov) will be
+    searched, you can override this by setting `text_only` to `False`.
     """
 
     def __init__(
@@ -178,7 +176,7 @@ class ADirectory(event.AExecutive, metaclass=abstracts.Abstraction):
 
     @property  # type:ignore
     @abstracts.interfacemethod
-    def finder_class(self) -> Type[ADirectoryFileFinder]:
+    def finder_class(self) -> type[ADirectoryFileFinder]:
         raise NotImplementedError
 
     @cached_property

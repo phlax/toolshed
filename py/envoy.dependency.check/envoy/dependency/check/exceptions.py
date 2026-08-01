@@ -13,21 +13,17 @@ class BadGithubURL(Exception):
     pass
 
 
+class GithubTokenError(Exception):
+    pass
+
+
+class DependencyMetadataError(Exception):
+    """Raised when the loaded dependency metadata fails validation."""
+
+
 class NotGithubDependency(Exception):
     pass
 
 
 class NoReleaseAssetError(Exception):
-    pass
-
-
-class CPEError(Exception):
-    pass
-
-
-class CVEError(Exception):
-    pass
-
-
-class CVECheckError(Exception):
     pass

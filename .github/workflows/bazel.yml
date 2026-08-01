@@ -20,17 +20,21 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.run }}
     steps:
-    - uses: envoyproxy/toolshed/actions/github/should-run@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/github/should-run@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: filter
       with:
         config: |
           paths:
           - BINS_VERSION.txt
+          - bazel/*
           - bazel/**
           - .github/workflows/bazel.yml
           - .github/workflows/_bazel.yml
 
   test:
+    permissions:
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -41,10 +45,11 @@ jobs:
       bazel-args: >-
         --config=ci
         ${{ matrix.mode == 'bzlmod'
-            && '--enable_bzlmod'
+            && '--enable_bzlmod --noenable_workspace'
             || '' }}
       bazel-mode: ${{ matrix.mode }}
       bazel-path: bazel
+      rbe: true
       targets: >-
         //...
         //sysroot:sysroots
@@ -57,7 +62,8 @@ jobs:
 
   build:
     permissions:
-      contents: write
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -66,16 +72,22 @@ jobs:
     with:
       action: build
       artifacts: |
-          compile/msan-llvm18.1.8-x86_64.tar.xz
-          compile/tsan-llvm18.1.8-x86_64.tar.xz
+          compile/libcxx-llvm22.1.8-aarch64.tar.xz
+          compile/libcxx-llvm22.1.8-x86_64.tar.xz
+          compile/msan-llvm22.1.8-x86_64.tar.xz
+          compile/tsan-llvm22.1.8-x86_64.tar.xz
           sysroot/sysroot-*.tar.xz
+      # Note: macOS sysroot + darwin libcxx are packaged separately
+      # in the package-macos job (runs on Linux)
       bazel-args: >-
         --config=ci
         ${{ matrix.mode == 'bzlmod'
-            && '--enable_bzlmod'
+            && '--enable_bzlmod --noenable_workspace'
             || '' }}
       bazel-path: bazel
       bazel-mode: ${{ matrix.mode }}
+      create-source: true
+      rbe: true
       targets: >-
         //...
         //sysroot:sysroots
@@ -88,6 +100,9 @@ jobs:
         - bzlmod
 
   test-gcc:
+    permissions:
+      contents: read
+      packages: read
     needs: request
     if: >-
       always()
@@ -99,10 +114,12 @@ jobs:
         --config=ci
         --config=gcc
         ${{ matrix.mode == 'bzlmod'
-            && '--enable_bzlmod'
+            && '--enable_bzlmod --noenable_workspace'
             || '' }}
       bazel-mode: ${{ matrix.mode }}-gcc
       bazel-path: bazel
+      rbe: true
+      rbe-config: rbe-gcc
       targets: >-
         //...
     strategy:
@@ -113,6 +130,9 @@ jobs:
         - bzlmod
 
   test-macos:
+    permissions:
+      contents: read
+      packages: read
     runs-on: macos-14
     needs: request
     if: >-
@@ -126,17 +146,163 @@ jobs:
         - bzlmod
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
     - name: Setup Bazel
       uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2  # v3
-    - name: Bazel targets (build/${{ matrix.mode }}-macos)
+    - name: RBE auth check
+      id: rbe
+      if: github.event_name == 'pull_request'
+      uses: envoyproxy/toolshed/actions/github/container/auth@358540eca0af3a423fed5fe00ac656b73be3af2d
+      with:
+        container: hello-world
+    - name: Configure repo Bazel settings
+      if: vars.TOOLSHED_CI_BAZELRC
+      shell: bash
       run: |
-        exec bazel build \
-          --config=ci \
-          --config=macos \
-          ${{ matrix.mode == 'bzlmod' && '--enable_bzlmod' || '' }} \
-          //...
+        echo "${BAZELRC_CONTENT}" > repo.bazelrc
+      working-directory: ${{ inputs.bazel-path }}
+      env:
+        BAZELRC_CONTENT: ${{ vars.TOOLSHED_CI_BAZELRC }}
+    - name: Bazel targets (build/${{ matrix.mode }}-macos)
+      run: >-
+        exec bazel build
+        --config=ci
+        --config=macos
+        ${{ (steps.rbe.outputs.authorized == 'true' || github.event_name != 'pull_request') && '--config=rbe-cache-only' || '' }}
+        ${{ matrix.mode == 'bzlmod' && '--enable_bzlmod --noenable_workspace' || '' }}
+        //...
       working-directory: bazel
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+  package-macos:
+    # Intentionally Linux-hosted: downloads the Apple SDK and LLVM macOS release
+    # and repackages them on Linux — no mac runner needed.
+    runs-on: ubuntu-24.04
+    needs: request
+    if: >-
+      always()
+      && fromJSON(needs.request.outputs.run || 'false')
+    env:
+      LLVM_VERSION: "22.1.8"
+      LLVM_MAJOR: "22"
+      SDK_PKG_URL: >-
+        https://swcdn.apple.com/content/downloads/52/01/082-41241-A_0747ZN8FHV/dectd075r63pppkkzsb75qk61s0lfee22j/CLTools_macOSNMOS_SDK.pkg
+      SDK_PKG_SHA256: "ba3453d62b3d2babf67f3a4a44e8073d6555c85f114856f4390a1f53bd76e24a"
+      PKGUTIL_URL: "https://github.com/cerisier/pkgutil/releases/download/v1.2.0/pkgutil_linux_amd64"
+      PKGUTIL_SHA256: "3bcf79dbec6b7858ca0c1b6db03952ac122501a74073bac186c8080fcfb391fd"
+      SDK_PREFIX: "Payload/Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk"
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - name: Extract macOS arm64 sysroot
+      run: |
+        set -euo pipefail
+
+        # Download pkgutil (extracts macOS .pkg on Linux)
+        wget "$PKGUTIL_URL" -O pkgutil
+        echo "${PKGUTIL_SHA256}  pkgutil" | sha256sum -c -
+        chmod +x pkgutil
+
+        # Download Apple CLTools SDK package
+        wget --user-agent="Mozilla/5.0" "$SDK_PKG_URL" -O CLTools_macOSNMOS_SDK.pkg
+        echo "${SDK_PKG_SHA256}  CLTools_macOSNMOS_SDK.pkg" | sha256sum -c -
+
+        # Extract only the files we need from the SDK package
+        mkdir -p out/macos_arm64
+        includes=()
+        while IFS=$'\n' read -r line; do
+          includes+=("--include" "${SDK_PREFIX}/${line}")
+        done < bazel/sysroot/manifests/sysroot-macos.txt
+        ./pkgutil "${includes[@]}" --strip-components 6 --expand-full CLTools_macOSNMOS_SDK.pkg out/macos_arm64
+
+        tar -cf sysroot-macos-arm64.tar -C out/ macos_arm64
+        zstd -T0 --long -10 --rm sysroot-macos-arm64.tar
+        # Also create .tar.xz for compatibility with existing toolshed patterns
+        tar -cJf sysroot-macos-arm64.tar.xz -C out/ macos_arm64
+
+        echo "Sysroot size: $(du -sh sysroot-macos-arm64.tar.xz | cut -f1)"
+        sha256sum sysroot-macos-arm64.tar.xz
+    - name: Extract darwin libcxx from LLVM release
+      run: |
+        set -euo pipefail
+
+        # Extract cxx-cross-libs from official LLVM macOS release (no cmake build needed)
+        LLVM_TARBALL="LLVM-${LLVM_VERSION}-macOS-ARM64.tar.xz"
+        LLVM_PREFIX="LLVM-${LLVM_VERSION}-macOS-ARM64"
+
+        wget "https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${LLVM_TARBALL}" \
+          -O llvm-macos.tar.xz
+
+        # Extract only the files we need
+        tar -xf llvm-macos.tar.xz \
+          "${LLVM_PREFIX}/include/c++/v1/__config_site" \
+          "${LLVM_PREFIX}/lib/libc++.1.0.dylib" \
+          "${LLVM_PREFIX}/lib/libc++.1.dylib" \
+          "${LLVM_PREFIX}/lib/libc++.dylib" \
+          "${LLVM_PREFIX}/lib/libc++abi.1.0.dylib" \
+          "${LLVM_PREFIX}/lib/libc++abi.1.dylib" \
+          "${LLVM_PREFIX}/lib/libc++abi.dylib"
+
+        mkdir -p libcxx-darwin/{include,lib}
+        cp "${LLVM_PREFIX}/include/c++/v1/__config_site" libcxx-darwin/include/
+        cp -a "${LLVM_PREFIX}/lib/libc++"*.dylib libcxx-darwin/lib/
+
+        # Patch install names: @rpath/ -> /usr/lib/ so binaries use system libc++ at runtime.
+        # Use llvm-objcopy from the system (Ubuntu 24.04 has llvm-18 available).
+        sudo apt-get -qq update && sudo apt-get -qq install -y llvm-18
+        llvm-install-name-tool-18 -id /usr/lib/libc++.1.dylib libcxx-darwin/lib/libc++.1.dylib
+        llvm-install-name-tool-18 -id /usr/lib/libc++abi.dylib libcxx-darwin/lib/libc++abi.1.dylib
+
+        tar -cJf "libcxx-llvm${LLVM_VERSION}-darwin-aarch64.tar.xz" -C libcxx-darwin .
+
+        echo "Libcxx size: $(du -sh "libcxx-llvm${LLVM_VERSION}-darwin-aarch64.tar.xz" | cut -f1)"
+        sha256sum "libcxx-llvm${LLVM_VERSION}-darwin-aarch64.tar.xz"
+    - name: Upload artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: bazel-macos-artifacts
+        path: |
+          sysroot-macos-arm64.tar.xz
+          libcxx-llvm*-darwin-aarch64.tar.xz
+        retention-days: 30
+
+  package-llvm:
+    # Builds the stripped/minimal LLVM artifacts for all three platforms.
+    # These targets are tagged `manual` and must NOT run as part of `//...`.
+    # This job builds them explicitly by label, one platform per matrix leg so
+    # the three slow extract+strip+repack runs execute in parallel.
+    needs: request
+    if: >-
+      always()
+      && fromJSON(needs.request.outputs.run || 'false')
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - target: //compile:llvm_minimal_linux_x86_64
+          artifact: compile/llvm-minimal-22.1.8-Linux-X64.tar.zst
+          artifact-name: bazel-llvm-x64-artifacts
+        - target: //compile:llvm_minimal_linux_arm64
+          artifact: compile/llvm-minimal-22.1.8-Linux-ARM64.tar.zst
+          artifact-name: bazel-llvm-arm64-artifacts
+        - target: //compile:llvm_minimal_macos_arm64
+          artifact: compile/llvm-minimal-22.1.8-macOS-ARM64.tar.zst
+          artifact-name: bazel-llvm-macos-artifacts
+    uses: ./.github/workflows/_bazel.yml
+    with:
+      action: build
+      artifact-name: ${{ matrix.artifact-name }}
+      artifacts: ${{ matrix.artifact }}
+      bazel-args: --config=ci
+      bazel-mode: llvm
+      bazel-path: bazel
+      rbe: true
+      targets: ${{ matrix.target }}
+      upload: true
 
   status:
     runs-on: ubuntu-24.04
@@ -150,6 +316,8 @@ jobs:
     - build
     - test-gcc
     - test-macos
+    - package-macos
+    - package-llvm
     steps:
     - run: |
         if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" || "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then

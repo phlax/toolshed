@@ -9,8 +9,6 @@ case $ARCH in
     'aarch64' )
         DEB_ARCH=arm64
         BAZELISK_SHA256SUM="$BAZELISK_SHA256SUM_ARM64"
-        LLVM_DISTRO="$LLVM_DISTRO_ARM64"
-        LLVM_SHA256SUM="$LLVM_SHA256SUM_ARM64"
         ;;
 esac
 
@@ -24,18 +22,6 @@ download_and_check () {
     echo "${sha256}  ${to}" | sha256sum --check
 }
 
-install_llvm_bins () {
-    LLVM_RELEASE="clang+llvm-${LLVM_VERSION}-${LLVM_DISTRO}"
-    download_and_check "${LLVM_RELEASE}.tar.xz" "${LLVM_DOWNLOAD_PREFIX}${LLVM_VERSION}/${LLVM_RELEASE}.tar.xz" "${LLVM_SHA256SUM}"
-    mkdir /opt/llvm
-    tar Jxf "${LLVM_RELEASE}.tar.xz" --strip-components=1 -C /opt/llvm
-    chown -R root:root /opt/llvm
-    rm "./${LLVM_RELEASE}.tar.xz"
-    LLVM_HOST_TARGET="$(/opt/llvm/bin/llvm-config --host-target)"
-    echo "/opt/llvm/lib/${LLVM_HOST_TARGET}" > /etc/ld.so.conf.d/llvm.conf
-    ldconfig
-}
-
 ## Build install fun
 install_build_tools () {
     download_and_check \
@@ -45,29 +31,10 @@ install_build_tools () {
     chmod +x /usr/local/bin/bazel
 }
 
-install_clang_tools () {
-    if [[ -z "$CLANG_TOOLS_SHA256SUM" ]]; then
-        return
-    fi
-    # Pick `run-clang-tidy.py` from `clang-tools-extra` and place in filepath expected by Envoy CI.
-    # Only required for more recent LLVM/Clang versions
-    ENVOY_CLANG_TIDY_PATH=/opt/llvm/share/clang/run-clang-tidy.py
-    CLANG_TOOLS_SRC="clang-tools-extra-${LLVM_VERSION}.src"
-    CLANG_TOOLS_TARBALL="${CLANG_TOOLS_SRC}.tar.xz"
-    download_and_check "./${CLANG_TOOLS_TARBALL}" "${LLVM_DOWNLOAD_PREFIX}${LLVM_VERSION}/${CLANG_TOOLS_TARBALL}" "$CLANG_TOOLS_SHA256SUM"
-    mkdir -p /opt/llvm/share/clang/
-    tar JxfO "./${CLANG_TOOLS_TARBALL}" "${CLANG_TOOLS_SRC}/clang-tidy/tool/run-clang-tidy.py" > "$ENVOY_CLANG_TIDY_PATH"
-    rm "./${CLANG_TOOLS_TARBALL}"
-}
-
 install_build () {
     setup_tcpdump
     if [[ -z "${NO_INSTALL_BUILDTOOLS}" ]]; then
         install_build_tools
-        export PATH="/opt/llvm/bin:${PATH}"
-    fi
-    if [[ -z "${NO_INSTALL_CLANGTOOLS}" ]]; then
-        install_clang_tools
     fi
     git config --global --add safe.directory /source
     mv ~/.gitconfig /etc/gitconfig
@@ -150,6 +117,8 @@ WORKER_PACKAGES=(
     autoconf-archive
     automake
     libtool
+    # Ideally remove this if its ever fixed in llvm
+    libxml2
     m4
     # This is for mobile/android which seems to be able to
     # build hermetically with just the worker
@@ -237,7 +206,7 @@ mobile_install_android () {
     (yes || :) | $sdkmanager --licenses
     $sdkmanager --install "ndk;${ANDROID_NDK_VERSION}" | (grep -v = || :)
     $sdkmanager --install "platforms;android-30" | grep -v = || true
-    $sdkmanager --install "build-tools;30.0.2" | grep -v = || true
+    $sdkmanager --install "build-tools;35.0.0" | grep -v = || true
 }
 
 mobile_install_jdk () {
@@ -274,7 +243,6 @@ install_devel () {
 
     # not sure if this is necessary
     export NO_INSTALL_BUILDTOOLS=1
-    export NO_INSTALL_CLANGTOOLS=1
     install_build
 
     echo "Development tools installation completed - compilers provided by toolchains"
@@ -307,10 +275,8 @@ install_docker () {
     fi
     lsb_release="$(lsb_release -cs)"
     docker_key=$(add_apt_key "${APT_KEY_DOCKER}" docker)
-    k8s_key=$(add_apt_key "${APT_KEY_K8S}" k8s)
     apt_repos=(
-        "[arch=${DEB_ARCH} signed-by=${docker_key}] https://download.docker.com/linux/debian ${lsb_release} stable"
-        "[signed-by=${k8s_key}] https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/Debian_Testing/ /")
+        "[arch=${DEB_ARCH} signed-by=${docker_key}] https://download.docker.com/linux/debian ${lsb_release} stable")
     add_apt_repos "${apt_repos[@]}"
     apt-get -qq update
     apt-get -qq install -y --no-install-recommends "${DOCKER_PACKAGES[@]}"

@@ -19,7 +19,7 @@ jobs:
       run: ${{ steps.filter.outputs.run }}
       sha: ${{ steps.commit.outputs.sha }}
     steps:
-    - uses: envoyproxy/toolshed/actions/github/should-run@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/github/should-run@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: filter
       with:
         config: |
@@ -33,6 +33,8 @@ jobs:
           - BINS_VERSION.txt
           - actions/VERSION.txt
           - python/VERSION.txt
+          - docker/build/VERSION.txt
+          - docker-assets.yaml
     - name: Get latest commit from main
       id: commit
       if: fromJSON(steps.filter.outputs.run)
@@ -84,6 +86,7 @@ jobs:
         - actions-with-version
         - bazel
         - bins
+        - docker
         - python
         - python-args
         action:

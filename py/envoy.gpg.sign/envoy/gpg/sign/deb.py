@@ -1,28 +1,27 @@
 
 import pathlib
+from collections.abc import Iterator
 from functools import cached_property
 from itertools import chain
-from typing import Iterator, Type
 
 from .exceptions import SigningError
 from .util import DirectorySigningUtil
 
 
-class DebChangesFiles(object):
+class DebChangesFiles:
     """Creates a set of `changes` files for specific distros from a src
     `changes` file.
 
     eg, if src changes file is `envoy_1.100.changes` and `Distribution:`
     field is `buster bullseye`, it creates:
 
-        `envoy_1.100.changes` -> `envoy_1.100.buster.changes`
-        `envoy_1.100.changes` -> `envoy_1.100.bullseye.changes`
+    `envoy_1.100.changes` -> `envoy_1.100.buster.changes`
+    `envoy_1.100.changes` -> `envoy_1.100.bullseye.changes`
 
     while replacing any instances of the original distribution name in
     the respective changes files, eg:
 
-        `buster bullseye` -> `buster`
-        `buster bullseye` -> `bullseye`
+    `buster bullseye` -> `buster` `buster bullseye` -> `bullseye`
 
     finally, it removes the src changes file.
     """
@@ -80,8 +79,8 @@ class DebSigningUtil(DirectorySigningUtil):
     distribution, with only one distribution listed.
 
     this extracts the `.changes` files to -> per-distro
-    `filename.distro.changes`, and removes the original, before signing the
-    files.
+    `filename.distro.changes`, and removes the original, before signing
+    the files.
     """
 
     command_name = "debsign"
@@ -93,7 +92,7 @@ class DebSigningUtil(DirectorySigningUtil):
         return ("-k", self.maintainer.fingerprint)
 
     @property
-    def changes_files(self) -> Type[DebChangesFiles]:
+    def changes_files(self) -> type[DebChangesFiles]:
         return DebChangesFiles
 
     @cached_property

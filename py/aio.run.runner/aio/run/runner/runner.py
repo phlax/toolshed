@@ -19,7 +19,7 @@ try:
     import uvloop
 except ImportError:
     uvloop = None  # type:ignore
-    logging.warn("Unsupported platform, Cannot import uvloop...")
+    logging.warning("Unsupported platform, Cannot import uvloop...")
 
 import verboselogs  # type:ignore
 
@@ -296,5 +296,9 @@ class Runner(event.AReactive):
 
     def _on_runner_error(self, e: BaseException) -> int:
         self.exit()
-        return asyncio.get_event_loop().run_until_complete(
-            self.on_runner_error(e))
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(self.on_runner_error(e))
+        finally:
+            loop.close()

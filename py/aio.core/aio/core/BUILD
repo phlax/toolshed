@@ -1,15 +1,6 @@
 
 toolshed_library(
     "aio.core",
-    dependencies=[
-        "//py/deps:reqs#abstracts",
-        "//py/deps:reqs#pytz",
-        "//py/deps:reqs#pyyaml",
-        "//py/deps:reqs#trycast",
-        "//py/deps:reqs#types-orjson",
-        "//py/deps:reqs#types-pytz",
-        "//py/deps:reqs#types-pyyaml",
-    ],
     sources=[
         "__init__.py",
         "dev/__init__.py",

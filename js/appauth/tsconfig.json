@@ -14,8 +14,10 @@
     "removeComments": false,
     "preserveConstEnums": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "types": ["node"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "**/*.test.ts"],
+  "references": [{"path": "../utils"}]
 }

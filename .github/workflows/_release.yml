@@ -52,6 +52,9 @@ on:
               if [[ -f "$version_file" ]]; then
                   package_dir=$(dirname "$version_file")
                   package_name=$(basename "$package_dir")
+                  if [[ "${package_name}" == _* ]]; then
+                      continue
+                  fi
                   version=$(cat "$version_file")
                   _OUTPUT+=("$package_name $version")
               fi
@@ -80,7 +83,7 @@ jobs:
     name: ${{ inputs.action }}
     runs-on: ubuntu-24.04
     steps:
-    - uses: envoyproxy/toolshed/actions/appauth@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/appauth@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: appauth
       name: Appauth
       if: >-
@@ -90,7 +93,7 @@ jobs:
         key: ${{ secrets.app-key }}
     - id: checkout
       name: Checkout the repository
-      uses: envoyproxy/toolshed/actions/github/checkout@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/checkout@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         branch: main
         committer-name: ${{ inputs.committer-name }}
@@ -99,23 +102,24 @@ jobs:
         token: ${{ steps.appauth.outputs.token }}
     - name: Get version file
       id: version-file
-      uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/jq@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         input: |
           actions: actions/VERSION.txt
           bins: BINS_VERSION.txt
           bazel: bazel/VERSION.txt
+          docker: docker/build/VERSION.txt
           python: py/VERSION.txt
         input-format: yaml
         options: -r
         filter: .["${{ inputs.type }}"]
     - name: Get version info
       id: version
-      uses: envoyproxy/toolshed/actions/version@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/version@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         version-file: ${{ steps.version-file.outputs.value }}
     - name: Update version file
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       if: >-
         inputs.action != 'prepare'
       with:
@@ -148,7 +152,7 @@ jobs:
 
     # BAZEL ONLY
     - name: Get latest bins release (for bazel)
-      uses: envoyproxy/toolshed/actions/github/release/latest@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/release/latest@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: bins-version
       if: >-
         inputs.type == 'bazel'
@@ -156,7 +160,7 @@ jobs:
       with:
         pattern: ^bins-
     - name: Get SHAs for latest bins release (for bazel)
-      uses: envoyproxy/toolshed/actions/github/release/shas@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/release/shas@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: bins-shas
       if: >-
         inputs.type == 'bazel'
@@ -164,7 +168,7 @@ jobs:
       with:
         tag: ${{ steps.bins-version.outputs.tag }}
     - name: Get current SHAs and version (for bazel)
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: bins-deps
       if: >-
         inputs.type == 'bazel'
@@ -179,7 +183,7 @@ jobs:
           bash::output
         options: -sRr
     - name: Update bins shas (for bazel)
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: bins-updates
       if: >-
         inputs.type == 'bazel'
@@ -215,10 +219,20 @@ jobs:
           | [$san[]
              | . as $san_type
              | $current["\($san_type)_libs_sha256"] as $current_sha
-             | ($shas["\($san_type)-llvm18.1.8-x86_64.tar.xz"] | split(":") | .[1]) as $new_sha
+             | ($shas["\($san_type)-llvm\($current.llvm)-x86_64.tar.xz"] | split(":") | .[1]) as $new_sha
              | if $current_sha != $new_sha then
                  "sed -i s/\($current_sha)/\($new_sha)/g \($versions_file)"
                else "" end] as $san_updates
+          | [["aarch64", "x86_64"][]
+             | . as $arch
+             | ($shas["libcxx-llvm\($current.llvm)-\($arch).tar.xz"] // null) as $sha_entry
+             | if $sha_entry then
+                 ($sha_entry | split(":") | .[1]) as $new_sha
+                 | $current.libcxx_libs_sha256[$arch] as $current_sha
+                 | if $current_sha != $new_sha then
+                     "sed -i s/\($current_sha)/\($new_sha)/g \($versions_file)"
+                   else "" end
+               else "" end] as $libcxx_updates
           | [$arches[]
              | . as $arch
              | [($shas["glint-\($glint_version)-\($arch)"] | split(":") | .[1]) as $new_sha
@@ -242,7 +256,46 @@ jobs:
                     "sed -i s/\($current_sha)/\($new_sha)/g \($versions_file)"
                   else "" end] as $sysroot_updates
               | $glint_updates + $sysroot_updates] as $arch_updates
-          | $bins_update + $san_updates + $arch_updates
+          | [
+             # macOS sysroot hash
+             ($shas["sysroot-macos-arm64.tar.xz"] // null) as $sha_entry
+             | if $sha_entry then
+                 ($sha_entry | split(":") | .[1]) as $new_sha
+                 | $current.macos_sysroot_sha256.arm64 as $cur
+                 | if $cur == $new_sha then ""
+                   elif ($cur | length) > 0 then
+                     "sed -i s/\($cur)/\($new_sha)/g \($versions_file)"
+                   else
+                     "sed -i '0,/\"arm64\": \"\"/s//\"arm64\": \"\($new_sha)\"/' \($versions_file)"
+                   end
+               else "" end,
+             # darwin libcxx hash
+             ($shas["libcxx-llvm\($current.llvm)-darwin-aarch64.tar.xz"] // null) as $sha_entry
+             | if $sha_entry then
+                 ($sha_entry | split(":") | .[1]) as $new_sha
+                 | $current.libcxx_libs_darwin_sha256.aarch64 as $cur
+                 | if $cur == $new_sha then ""
+                   elif ($cur | length) > 0 then
+                     "sed -i s/\($cur)/\($new_sha)/g \($versions_file)"
+                   else
+                     "sed -i '0,/\"aarch64\": \"\"/s//\"aarch64\": \"\($new_sha)\"/' \($versions_file)"
+                   end
+               else "" end
+            ] as $macos_updates
+          | [["Linux-X64", "Linux-ARM64", "macOS-ARM64"][]
+            | . as $platform
+            | ($shas["llvm-minimal-\($current.llvm)-\($platform).tar.zst"] // null) as $sha_entry
+            | if $sha_entry then
+                ($sha_entry | split(":") | .[1]) as $new_sha
+                | $current.llvm_minimal_sha256[$platform] as $cur
+                | if $cur == $new_sha then ""
+                  elif ($cur | length) > 0 then
+                    "sed -i s/\($cur)/\($new_sha)/g \($versions_file)"
+                  else
+                    "sed -i '0,/\"\($platform)\": \"\"/s//\"\($platform)\": \"\($new_sha)\"/' \($versions_file)"
+                  end
+              else "" end] as $llvm_minimal_updates
+          | $bins_update + $san_updates + $libcxx_updates + $arch_updates + $macos_updates + $llvm_minimal_updates
           | [flatten[]
              | select(. != "")]
           | join("\n")
@@ -258,13 +311,91 @@ jobs:
         git add bazel/MODULE.bazel
         git diff --cached bazel/MODULE.bazel
 
+    # DOCKER ONLY
+    - name: Get latest bins release (for docker)
+      uses: envoyproxy/toolshed/actions/github/release/latest@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      id: docker-bins-version
+      if: >-
+        inputs.type == 'docker'
+        && inputs.action != 'release-no-prepare'
+      with:
+        pattern: ^bins-
+    - name: Get SHAs for latest bins release (for docker)
+      uses: envoyproxy/toolshed/actions/github/release/shas@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      id: docker-bins-shas
+      if: >-
+        inputs.type == 'docker'
+        && inputs.action != 'release-no-prepare'
+      with:
+        tag: ${{ steps.docker-bins-version.outputs.tag }}
+    - name: Get echo version from Cargo.toml (for docker)
+      id: docker-echo-version
+      if: >-
+        inputs.type == 'docker'
+        && inputs.action != 'release-no-prepare'
+      shell: bash
+      run: |
+        VERSION=$(yq '.package.version' rust/echo/Cargo.toml)
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+    - name: Get current docker asset state (for docker)
+      id: docker-current
+      if: >-
+        inputs.type == 'docker'
+        && inputs.action != 'release-no-prepare'
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        input: |
+          OUTPUT=$(yq -o=json '.assets["toolshed-echo"]' docker-assets.yaml)
+        input-format: text
+        filter: bash::output
+        options: -sRr
+    - name: Update docker-assets.yaml (for docker)
+      id: docker-updates
+      if: >-
+        inputs.type == 'docker'
+        && inputs.action != 'release-no-prepare'
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        input: |
+          bins_latest: ${{ steps.docker-bins-version.outputs.tag }}
+          echo_version: ${{ steps.docker-echo-version.outputs.version }}
+          current: ${{ steps.docker-current.outputs.output }}
+          shas: ${{ steps.docker-bins-shas.outputs.shas }}
+        input-format: yaml
+        filter: |
+          .bins_latest as $bins_latest
+          | .echo_version as $echo_version
+          | .current as $current
+          | .shas as $shas
+          | (($shas["echo-\($echo_version)-amd64"]
+             // error("No SHA found for echo-\($echo_version)-amd64 in \($bins_latest)"))
+             | split(":") | .[1]) as $sha_amd64
+          | (($shas["echo-\($echo_version)-arm64"]
+             // error("No SHA found for echo-\($echo_version)-arm64 in \($bins_latest)"))
+             | split(":") | .[1]) as $sha_arm64
+          | (if $current["release-tag"] != $bins_latest then
+               ["yq -i '.assets[\"toolshed-echo\"][\"release-tag\"] = \"\($bins_latest)\"' docker-assets.yaml"]
+             else [] end) as $tag_update
+          | (if $current.version != $echo_version then
+               ["yq -i '.assets[\"toolshed-echo\"].version = \"\($echo_version)\"' docker-assets.yaml"]
+             else [] end) as $version_update
+          | (if $current.sha256.amd64 != $sha_amd64 then
+               ["yq -i '.assets[\"toolshed-echo\"].sha256.amd64 = \"\($sha_amd64)\"' docker-assets.yaml"]
+             else [] end) as $amd64_update
+          | (if $current.sha256.arm64 != $sha_arm64 then
+               ["yq -i '.assets[\"toolshed-echo\"].sha256.arm64 = \"\($sha_arm64)\"' docker-assets.yaml"]
+             else [] end) as $arm64_update
+          | $tag_update + $version_update + $amd64_update + $arm64_update
+          | [.[] | select(. != "")]
+          | join("\n")
+
     # PYTHON ONLY
     - name: Get python package versions
       id: python-versions
       if: >-
         inputs.type == 'python'
         && inputs.action != 'release-no-prepare'
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         input: |
           ${{ inputs.python-find-versions }}
@@ -281,7 +412,7 @@ jobs:
         inputs.type == 'python'
         && inputs.action != 'release-no-prepare'
       name: Update python release packages
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         input: |
           args: >-
@@ -303,7 +434,7 @@ jobs:
       if: >-
         inputs.type == 'python'
         && inputs.action != 'release-no-prepare'
-      uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/bson@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         input: |
           ${{ inputs.python-find-versions }}
@@ -349,7 +480,7 @@ jobs:
         echo "message=${COMMIT_MESSAGE}" >> "$GITHUB_OUTPUT"
         echo "changes=true" >> "$GITHUB_OUTPUT"
     - name: Create Pull Request
-      uses: envoyproxy/toolshed/actions/github/pr@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/pr@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       if: fromJSON(steps.commit.outputs.changes)
       with:
         base: main

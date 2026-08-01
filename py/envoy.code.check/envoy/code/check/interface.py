@@ -2,7 +2,7 @@
 import asyncio
 import pathlib
 from concurrent import futures
-from typing import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
 
 from packaging import version as _version
 
@@ -136,6 +136,28 @@ class IChangelogChangesChecker(metaclass=abstracts.Interface):
             version: _version.Version,
             sections: utils.typing.ChangelogChangeSectionsDict) -> (
                 tuple[str, ...]):
+        raise NotImplementedError
+
+    @abstracts.interfacemethod
+    def check_entry_filename(
+            self,
+            path: pathlib.Path) -> str | None:
+        raise NotImplementedError
+
+    @abstracts.interfacemethod
+    def check_entry_content(
+            self,
+            path: pathlib.Path) -> str | None:
+        raise NotImplementedError
+
+    @abstracts.interfacemethod
+    def check_areas_file(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    @abstracts.interfacemethod
+    def check_entry_files(
+            self,
+            paths: list[pathlib.Path]) -> tuple[str, ...]:
         raise NotImplementedError
 
 

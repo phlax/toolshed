@@ -1,0 +1,80 @@
+manifests:
+# worker
+- name: envoy-build
+  tag: worker-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-worker-v{version}-{arch}.tar
+# worker (gcr)
+- name: envoy-build
+  tag: worker-v{version}
+  registry: gcr.io/envoy-ci
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-worker-v{version}-{arch}.tar
+# ci
+- name: envoy-build
+  tag: ci-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-ci-v{version}-{arch}.tar
+# gcc
+- name: envoy-build
+  tag: gcc-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-gcc-v{version}-{arch}.tar
+# gcc (gcr)
+- name: envoy-build
+  tag: gcc-v{version}
+  registry: gcr.io/envoy-ci
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-gcc-v{version}-{arch}.tar
+# devtools
+- name: envoy-build
+  tag: devtools-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-devtools-v{version}-{arch}.tar
+# docker
+- name: envoy-build
+  tag: docker-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-docker-v{version}-{arch}.tar
+# test
+- name: envoy-build
+  tag: test-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/envoy-build-test-v{version}-{arch}.tar
+# mobile (amd64 only)
+- name: envoy-build
+  tag: mobile-v{version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  artifact-pattern: oci-debian-{arch}/envoy-build-mobile-v{version}-{arch}.tar
+# toolshed-echo
+- name: toolshed-echo
+  tag: v{echo-version}
+  registry: docker.io/envoyproxy
+  architectures:
+  - amd64
+  - arm64
+  artifact-pattern: oci-debian-{arch}/toolshed-echo-v{echo-version}-{arch}.tar

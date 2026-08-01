@@ -1,24 +1,16 @@
 
 import hashlib
 import pathlib
+from collections.abc import Iterator
 from functools import cached_property
-from typing import Iterator
 
 from .util import DirectorySigningUtil
 
 
 class BinarySigningUtil(DirectorySigningUtil):
-    """Sign all `changes` packages in a given directory.
+    """Generate SHA256 checksums for files in a directory.
 
-    the `.changes` spec allows a single `.changes` file to have multiple
-    `Distributions` listed.
-
-    but, most package repos require a single signed `.change` file per
-    distribution, with only one distribution listed.
-
-    this extracts the `.changes` files to -> per-distro
-    `filename.distro.changes`, and removes the original, before signing the
-    files.
+    The resulting checksum manifest is GPG clearsigned.
     """
 
     _package_type = "bin"

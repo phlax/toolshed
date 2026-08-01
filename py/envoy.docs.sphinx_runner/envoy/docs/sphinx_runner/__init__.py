@@ -1,3 +1,4 @@
+"""Envoy Sphinx runner package."""
 
 from .exceptions import SphinxBuildError, SphinxEnvError
 from .cmd import cmd, main
@@ -10,5 +11,3 @@ __all__ = (
     "SphinxRunner",
     "SphinxBuildError",
     "SphinxEnvError")
-
-# __import__("pkg_resources").declare_namespace(__name__)

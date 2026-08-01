@@ -69,7 +69,7 @@ runs:
   #
   # Only specified bots are trusted.
   - id: trusted
-    uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     with:
       input: |
         trusted_bots: |
@@ -87,7 +87,7 @@ runs:
         | (. and ($input.event_name | startswith("pull_request") | not))
 
   # Check requested changes
-  - uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/bson@90dbeeeeb32109e6362797f48fbf232f89360d8f
     id: changed
     with:
       title: git diff changes from ${{ inputs.merge-commit || 'HEAD^1' }}
@@ -108,7 +108,7 @@ runs:
         | split("\n")
 
   # Check current/requested config (currently only build-images can be overridden)
-  - uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/bson@90dbeeeeb32109e6362797f48fbf232f89360d8f
     id: config
     with:
       title: fetch ${{ inputs.branch-name }}:${{ inputs.config-file }}
@@ -128,14 +128,14 @@ runs:
       result-filter: .
 
   - id: build-images
-    uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     with:
       input-format: yaml-path
       input: ${{ inputs.working-directory }}/${{ inputs.config-file }}
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
       filter: |
         .["build-image"].repo as $repo
-        | (.["build-image"].tag | validate::sha(40)) as $tag
+        | (. ["build-image"].tag | validate::sha_or_semver(40)) as $tag
         | (.["build-image"].sha | validate::sha(64)) as $sha
         | (.["build-image"]["mobile-sha"] | validate::sha(64)) as $mobileSha
         | {"default": "\($repo):\($tag)@sha256:\($sha)",
@@ -147,11 +147,11 @@ runs:
         | .["build-image"].sha as $sha
         | .["build-image"]["mobile-sha"] as $mobileSha
         | {default: "\($repo):\($tag)@sha256:\($sha)",
-           mobile: "\($repo)::mobile-\($tag)@sha256:\($mobileSha)"}
+           mobile: "\($repo):mobile-\($tag)@sha256:\($mobileSha)"}
         | {$requested, current: .}
 
   # Check current/request versions
-  - uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     name: Validate given version string
     id: version-string
     with:
@@ -160,7 +160,7 @@ runs:
       input: ${{ inputs.working-directory }}/VERSION.txt
       filter: |
         validate::version
-  - uses: envoyproxy/toolshed/actions/bson@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/bson@90dbeeeeb32109e6362797f48fbf232f89360d8f
     id: version
     with:
       title: fetch ${{ inputs.branch-name }}:${{ inputs.version-file }}
@@ -192,7 +192,7 @@ runs:
         | {requested: ., current: $current}
 
   - id: request
-    uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     with:
       input: |
         actor: ${{ toJSON(github.actor) }}
@@ -240,18 +240,18 @@ runs:
 
   - name: Run config
     id: run-config
-    uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+    uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     with:
       input-format: yaml
       input: ${{ toJSON(fromJSON(steps.config.outputs.output).run) }}
-  - uses: envoyproxy/toolshed/actions/torun@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/torun@90dbeeeeb32109e6362797f48fbf232f89360d8f
     id: torun
     with:
       event: ${{ github.event_name }}
       config: ${{ steps.run-config.outputs.value }}
       paths: ${{ steps.changed.outputs.output || '[]' }}
 
-  - uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+  - uses: envoyproxy/toolshed/actions/jq@90dbeeeeb32109e6362797f48fbf232f89360d8f
     name: Create data
     id: data
     with:

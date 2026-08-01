@@ -1,0 +1,93 @@
+name: Publish Python packages to PyPI
+description: >-
+  Stages *.whl and *.tar.gz files (excluding GPG .asc files) and uploads
+  them to PyPI via Trusted Publishing (OIDC). Supports dry-run mode.
+
+inputs:
+  attestations:
+    type: boolean
+    default: false
+  dry-run:
+    type: boolean
+    default: true
+  packages-dir:
+    type: string
+    default: artifacts/publish
+  repository-url:
+    type: string
+    default:
+  skip-existing:
+    type: boolean
+    default: true
+
+
+runs:
+  using: composite
+  steps:
+  - name: Stage packages for PyPI
+    id: stage
+    shell: bash
+    env:
+      DRY_RUN: ${{ inputs.dry-run }}
+      PACKAGES_DIR: ${{ inputs.packages-dir }}
+      STAGE_DIR: ${{ runner.temp }}/pypi-dist
+    run: |
+      mkdir -p "${STAGE_DIR}"
+      if [[ -d "${PACKAGES_DIR}" ]]; then
+          find "${PACKAGES_DIR}" -maxdepth 1 \( -name '*.whl' -o -name '*.tar.gz' \) \
+              -exec cp {} "${STAGE_DIR}/" \;
+      fi
+      count=$(find "${STAGE_DIR}" -maxdepth 1 \( -name '*.whl' -o -name '*.tar.gz' \) | wc -l | tr -d ' ')
+      echo "count=${count}" >> "${GITHUB_OUTPUT}"
+      echo "stage-dir=${STAGE_DIR}" >> "${GITHUB_OUTPUT}"
+      if [[ "${count}" -eq 0 ]]; then
+          if [[ "${DRY_RUN}" == "true" ]]; then
+              echo "::warning::No packages found in ${PACKAGES_DIR} to stage for PyPI upload"
+          else
+              echo "::error::No packages found in ${PACKAGES_DIR} to stage for PyPI upload"
+              exit 1
+          fi
+      fi
+
+  - name: Dry-run summary
+    if: fromJSON(inputs.dry-run)
+    shell: bash
+    env:
+      STAGE_DIR: ${{ steps.stage.outputs.stage-dir }}
+    run: |
+      {
+        echo "### PyPI Dry-Run: packages staged for upload"
+        echo '```'
+        ls -la "${STAGE_DIR}"
+        echo '```'
+      } >> "${GITHUB_STEP_SUMMARY}"
+
+  # Bypass pypa/gh-action-pypi-publish's composite-action trampoline, which
+  # uses `github.action_repository`/`github.action_ref` to compute the Docker
+  # image to run. Those context values are not reliably populated when the
+  # action is invoked from inside another composite action (see
+  # actions/runner#2473 and pypa/gh-action-pypi-publish's create-docker-action.py),
+  # which causes it to fall back to `ghcr.io/${{ github.repository }}:${{ github.ref_name }}`
+  # and fail with "denied" from ghcr.io.
+  #
+  # Instead, reference the upstream pre-built image directly. The tag below
+  # is the commit SHA of pypa/gh-action-pypi-publish v1.14.0
+  # (https://github.com/pypa/gh-action-pypi-publish/releases/tag/v1.14.0).
+  - name: Publish to PyPI
+    if: >-
+      ! fromJSON(inputs.dry-run)
+    uses: >-
+      docker://ghcr.io/pypa/gh-action-pypi-publish:cef221092ed1bacb1cc03d23a2d87d1d172e277b@sha256:72bce99a396e7ed0635f3fcc0f0a7052314a68c00c1999f5d0f9454b18cd2e40
+    with:
+      # user=__token__ + empty password activates OIDC Trusted Publishing in
+      # twine-upload.sh (line 77). repository-url defaults to PyPI's legacy
+      # upload endpoint. These match pypa/gh-action-pypi-publish's action.yml
+      # defaults but must be explicit here because we bypass the composite
+      # wrapper via docker://, which skips input defaulting.
+      user: __token__
+      password: ""
+      verbose: "true"
+      attestations: ${{ inputs.attestations }}
+      packages-dir: ${{ steps.stage.outputs.stage-dir }}
+      repository-url: ${{ inputs.repository-url || 'https://upload.pypi.org/legacy/' }}
+      skip-existing: ${{ inputs.skip-existing }}

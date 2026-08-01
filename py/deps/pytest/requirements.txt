@@ -1,5 +1,5 @@
-pytest>=7
-pytest-abstracts>=0.0.4
-pytest-cov>=4
-pytest-iters>=0.0.3
-pytest-patches
+pytest>=9.1.1
+pytest-abstracts>=0.1.1
+pytest-cov>=7.1.0
+pytest-iters>=0.1.0
+pytest-patches>=0.1.0

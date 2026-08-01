@@ -2,8 +2,8 @@
 import abc
 import pathlib
 import re
+from collections.abc import Mapping
 from functools import cached_property
-from typing import Mapping, Type
 
 import abstracts
 
@@ -21,10 +21,6 @@ IGNORED_DIRS = (
     "^/examples/vrp",
     "^/examples/wasm",
     "^/examples/win")
-
-# TODO(phlax): add checks for:
-#      - requirements can be installed together
-#      - pip-compile formatting
 
 
 @abstracts.implementer(event.AExecutive)
@@ -68,9 +64,9 @@ class ADependatoolChecker(
             loop=self.loop,
             text_only=False)
 
-    @property  # type:ignore
+    @property  # type: ignore[misc]  # abstract property override
     @abstracts.interfacemethod
-    def directory_class(self) -> Type[_directory.ADirectory]:
+    def directory_class(self) -> type[_directory.ADirectory]:
         raise NotImplementedError
 
     @cached_property
@@ -82,6 +78,5 @@ class ADependatoolChecker(
     def path(self) -> pathlib.Path:
         return super().path
 
-    # TODO: make this public
     async def _run_check(self, check):
         await self.check_tools[check].check()

@@ -1,19 +1,21 @@
+"""Sphinx build orchestration for Envoy docs."""
+
 import argparse
 import contextlib
 import os
 import pathlib
-import platform
 import shutil
-import sys
-import time
+from collections.abc import Iterator
 from functools import cached_property
-from typing import Dict, List, Optional, TypedDict
+from typing import TypedDict
 
 from packaging.version import Version
 
-from colorama import Fore, Style  # type:ignore
+from colorama import Fore, Style  # type:ignore[import-untyped]
 
-from sphinx.cmd.build import main as sphinx_build  # type:ignore
+from sphinx.cmd.build import (  # type:ignore[import-untyped]
+    main as sphinx_build,
+)
 
 from aio.run import runner
 
@@ -22,18 +24,41 @@ from envoy.base import utils
 from .exceptions import SphinxBuildError, SphinxEnvError
 
 
-# TODO: remove this once build perf work is complete
+ENVOY_DOCS_BASE_URL = (
+    "https://www.envoyproxy.io/docs/envoy")
+SPHINX_WARNINGS_TAIL_LINES = 50
+
+
+def _remove_path(path: pathlib.Path) -> None:
+    if not path.exists():
+        return
+    if path.is_file():
+        path.unlink()
+    else:
+        shutil.rmtree(path)
+
+
 @contextlib.contextmanager
-def debug(jobs):
-    total_cores = os.cpu_count()
-    used_cores = total_cores if jobs == "auto" else jobs
-    start = time.time()
+def _atomic_backup(
+        output_path: pathlib.Path,
+        backup_path: pathlib.Path,
+        *,
+        output_exists: bool) -> Iterator[bool]:
+    moved = False
+    if output_exists:
+        _remove_path(backup_path)
+        output_path.replace(backup_path)
+        moved = True
     try:
-        yield
-    finally:
-        print(
-            f"Sphinx ran ({used_cores}/{total_cores} cores) "
-            f"in {time.time() - start}s")
+        yield moved
+    except Exception:
+        if moved and backup_path.exists():
+            with contextlib.suppress(Exception):
+                backup_path.replace(output_path)
+        raise
+    else:
+        if moved:
+            _remove_path(backup_path)
 
 
 class BaseConfigDict(TypedDict):
@@ -42,17 +67,16 @@ class BaseConfigDict(TypedDict):
     blob_sha: str
     version_number: str
     docker_image_tag_name: str
+    intersphinx_mapping: dict[str, list[str]]
 
 
 class ConfigDict(BaseConfigDict, total=False):
     validator_path: str
     descriptor_path: str
     skip_validation: str
-    intersphinx_mapping: Dict[str, List[str]]
 
 
 class SphinxRunner(runner.Runner):
-    _build_dir = "."
     _build_sha = "UNKNOWN"
 
     @property
@@ -76,7 +100,7 @@ class SphinxRunner(runner.Runner):
         return self.args.build_target
 
     @cached_property
-    def colors(self) -> dict:
+    def colors(self) -> dict[str, str]:
         """Color scheme for build summary."""
         return dict(
             chrome=Fore.LIGHTYELLOW_EX,
@@ -88,7 +112,7 @@ class SphinxRunner(runner.Runner):
         """Populates a config file with self.configs and returns the file
         path."""
         return utils.to_yaml(
-            utils.typed(Dict, self.configs),
+            utils.typed(dict, self.configs),
             self.config_file_path)
 
     @property
@@ -104,7 +128,8 @@ class SphinxRunner(runner.Runner):
             release_level=self.release_level,
             blob_sha=self.blob_sha,
             version_number=self.version_number,
-            docker_image_tag_name=self.docker_image_tag_name)
+            docker_image_tag_name=self.docker_image_tag_name,
+            intersphinx_mapping=self.intersphinx_mapping)
         if self.validate_fragments:
             if self.validator_path:
                 _configs["validator_path"] = str(self.validator_path)
@@ -112,11 +137,10 @@ class SphinxRunner(runner.Runner):
                 _configs["descriptor_path"] = str(self.descriptor_path)
         else:
             _configs["skip_validation"] = "true"
-        _configs["intersphinx_mapping"] = self.intersphinx_mapping
         return _configs
 
     @property
-    def descriptor_path(self) -> Optional[pathlib.Path]:
+    def descriptor_path(self) -> pathlib.Path | None:
         """Path to a descriptor file for config validation."""
         return (
             pathlib.Path(self.args.descriptor_path)
@@ -145,18 +169,23 @@ class SphinxRunner(runner.Runner):
             else f"v{self.version_number}")
 
     @cached_property
-    def html_dir(self) -> pathlib.Path:
-        """Path to (temporary) directory for outputting html."""
-        return self.build_dir.joinpath("generated", "html")
+    def output_dir(self) -> pathlib.Path:
+        """Path to (temporary) directory Sphinx writes build output to.
+
+        The leaf is derived from `--build_target` so different build
+        targets do not collide and the path reflects the actual output
+        type (e.g. `html`, `dirhtml`, `singlehtml`, `latex`).
+        """
+        return self.build_dir.joinpath("generated", self.build_target)
 
     @property
-    def intersphinx_mapping(self) -> Dict[str, List[str]]:
+    def intersphinx_mapping(self) -> dict[str, list[str]]:
         return (
             {f"v{k}": [
-                f"https://www.envoyproxy.io/docs/envoy/v{v}",
+                f"{ENVOY_DOCS_BASE_URL}/v{v}",
                 f"inventories/v{k}/objects.inv"]
              for k, v
-             in utils.from_yaml(self.versions_path, Dict[str, str]).items()}
+             in utils.from_yaml(self.versions_path, dict[str, str]).items()}
             if self.versions_path.exists()
             else {})
 
@@ -164,6 +193,11 @@ class SphinxRunner(runner.Runner):
     def jobs(self) -> str:
         """Number of parallel jobs to run with Sphinx, defaults to `auto`."""
         return self.args.jobs
+
+    @property
+    def warnings_file(self) -> pathlib.Path:
+        """Path to file Sphinx writes warnings (and errors) to."""
+        return self.build_dir.joinpath("sphinx-warnings.txt")
 
     @property
     def output_path(self) -> pathlib.Path:
@@ -176,15 +210,11 @@ class SphinxRunner(runner.Runner):
         return self.args.overwrite
 
     @property
-    def py_compatible(self) -> bool:
-        """Current python version is compatible."""
-        return bool(
-            sys.version_info.major == 3
-            and sys.version_info.minor >= 8)
-
-    @property
     def release_level(self) -> str:
-        """Current python version is compatible."""
+        """Release level.
+
+        `tagged` for versioned releases, `pre-release` otherwise.
+        """
         return "tagged" if self.docs_tag else "pre-release"
 
     @cached_property
@@ -192,17 +222,17 @@ class SphinxRunner(runner.Runner):
         """Populates an rst directory with contents of given rst tar, and
         returns the path to the directory."""
         rst_dir = self.build_dir.joinpath("generated", "rst")
-        if self.rst_tar:
+        if self.rst_tar is not None:
             utils.extract(rst_dir, self.rst_tar)
         return rst_dir
 
     @cached_property
-    def rst_tar(self) -> pathlib.Path:
-        """Path to the rst tarball."""
-        return pathlib.Path(self.args.rst_tar)
+    def rst_tar(self) -> pathlib.Path | None:
+        """Path to the rst tarball, or None if not provided."""
+        return pathlib.Path(self.args.rst_tar) if self.args.rst_tar else None
 
     @property
-    def sphinx_args(self) -> List[str]:
+    def sphinx_args(self) -> list[str]:
         """Command args for sphinx."""
         sphinx_args = (
             []
@@ -210,11 +240,12 @@ class SphinxRunner(runner.Runner):
             else ["-q"])
         return sphinx_args + [
             "-W",
+            "-w", str(self.warnings_file),
             "-j", self.jobs,
             "--keep-going",
             "--color",
             "-b", self.build_target,
-            str(self.rst_dir), str(self.html_dir)]
+            str(self.rst_dir), str(self.output_dir)]
 
     @property
     def tarmode(self) -> str:
@@ -232,7 +263,7 @@ class SphinxRunner(runner.Runner):
             or self.args.validate_fragments)
 
     @property
-    def validator_path(self) -> Optional[pathlib.Path]:
+    def validator_path(self) -> pathlib.Path | None:
         """Path to validator utility for validating snippets."""
         return (
             pathlib.Path(self.args.validator_path)
@@ -247,7 +278,6 @@ class SphinxRunner(runner.Runner):
     @cached_property
     def version_number(self) -> str:
         """Semantic version."""
-        # TODO: Use `packaging.version.Version`
         return (
             self.args.version
             if self.args.version
@@ -262,7 +292,8 @@ class SphinxRunner(runner.Runner):
             else f"{self.version_number}-{self.build_sha[:6]}")
 
     @cached_property
-    def versions_path(self):
+    def versions_path(self) -> pathlib.Path:
+        """Path to versions.yaml within the extracted RST directory."""
         return self.rst_dir.joinpath("versions.yaml")
 
     def add_arguments(self, parser: argparse.ArgumentParser) -> None:
@@ -283,27 +314,32 @@ class SphinxRunner(runner.Runner):
         parser.add_argument("output_path")
 
     def build_html(self) -> None:
-        with debug(self.jobs):
-            if sphinx_build(self.sphinx_args):
-                raise SphinxBuildError("BUILD FAILED")
+        if rc := sphinx_build(self.sphinx_args):
+            warnings = self._read_warnings()
+            message = f"BUILD FAILED (sphinx exit code {rc})"
+            if warnings:
+                message = f"{message}\n\nSphinx warnings:\n{warnings}"
+            raise SphinxBuildError(message)
+        if warnings := self._read_warnings():
+            self.log.warning(
+                f"Sphinx emitted warnings despite successful build "
+                f"(see {self.warnings_file})")
 
     def build_summary(self) -> None:
-        print()
-        print(self._color("#### Sphinx build configs #####################"))
-        print(self._color("###"))
+        self.log.info("")
+        self.log.info(
+            self._color("#### Sphinx build configs #####################"))
+        self.log.info(self._color("###"))
         for k, v in self.configs.items():
-            print(
-                f"{self._color('###')} {self._color(k, 'key')}: "
-                f"{self._color(v, 'value')}")
-        print(self._color("###"))
-        print(self._color("###############################################"))
-        print()
+            self.log.info(
+                f"{self._color('###')} {self._color(str(k), 'key')}: "
+                f"{self._color(str(v), 'value')}")
+        self.log.info(self._color("###"))
+        self.log.info(
+            self._color("###############################################"))
+        self.log.info("")
 
     def check_env(self) -> None:
-        if not self.py_compatible:
-            raise SphinxEnvError(
-                "ERROR: python version must be >= 3.8, "
-                f"you have {platform.python_version()}")
         if not self.configs["release_level"] == "tagged":
             return
         if f"v{self.version_number}" != self.docs_tag:
@@ -311,53 +347,86 @@ class SphinxRunner(runner.Runner):
                 "Given git tag does not match the VERSION file content:"
                 f"{self.docs_tag} vs v{self.version_number}")
         minor_version = ".".join(self.docs_tag.split(".")[:-1])
-        # this should probs only check the first line
-        version_current = self.rst_dir.joinpath(
-            "version_history",
-            f"{minor_version}",
-            f"{self.docs_tag}.rst").read_text()
+        try:
+            version_current = self.rst_dir.joinpath(
+                "version_history",
+                minor_version,
+                f"{self.docs_tag}.rst").read_text()
+        except FileNotFoundError as e:
+            raise SphinxEnvError(
+                "Version history file not found "
+                f"for {self.docs_tag}: {e}") from e
         if self.version_number not in version_current:
             raise SphinxEnvError(
                 f"Git tag ({self.version_number}) not found in "
-                "version_history/current.rst")
+                f"version_history/{minor_version}/{self.docs_tag}.rst")
 
     def save_html(self) -> None:
-        if self.output_path.exists():
-            self.log.warning(
-                f"Output path ({self.output_path}) exists, removing")
-            if self.output_path.is_file():
-                self.output_path.unlink()
+        output_path = self.output_path
+        staging_path = output_path.with_name(f"{output_path.name}.new")
+        backup_path = output_path.with_name(f"{output_path.name}.old")
+        tarlike = utils.is_tarlike(output_path)
+
+        try:
+            _remove_path(staging_path)
+            if not tarlike:
+                shutil.copytree(self.output_dir, staging_path)
             else:
-                shutil.rmtree(self.output_path)
-        if not utils.is_tarlike(self.output_path):
-            shutil.copytree(self.html_dir, self.output_path)
-            return
-        utils.pack(self.html_dir, self.output_path)
+                utils.pack(self.output_dir, staging_path)
+
+            output_exists = output_path.exists()
+            if tarlike:
+                staging_path.replace(output_path)
+                if output_exists:
+                    self.log.warning(
+                        f"Output path ({output_path}) exists, replacing")
+                return
+
+            with _atomic_backup(
+                    output_path,
+                    backup_path,
+                    output_exists=output_exists) as moved_old_output:
+                staging_path.replace(output_path)
+
+            if moved_old_output:
+                self.log.warning(
+                    f"Output path ({output_path}) exists, replacing")
+        except Exception:
+            _remove_path(staging_path)
+            raise
 
     @runner.cleansup
     @runner.catches((SphinxBuildError, SphinxEnvError))
-    async def run(self):
+    async def run(self) -> int | None:
         self.validate_args()
         os.environ["ENVOY_DOCS_BUILD_CONFIG"] = str(self.config_file)
-        try:
-            self.check_env()
-        except SphinxEnvError as e:
-            print(e)
-            return 1
+        self.check_env()
         self.build_summary()
-        try:
-            self.build_html()
-        except SphinxBuildError as e:
-            print(e)
-            return 1
+        self.build_html()
         self.save_html()
 
-    def validate_args(self):
+    def validate_args(self) -> None:
         if self.output_path.exists():
             if not self.overwrite:
-                raise SphinxBuildError(
+                raise SphinxEnvError(
                     f"Output path ({self.output_path}) exists and "
                     "`--overwrite` is not set`")
 
-    def _color(self, msg, name=None):
+    def _color(self, msg: str, name: str | None = None) -> str:
         return f"{self.colors[name or 'chrome']}{msg}{Style.RESET_ALL}"
+
+    def _read_warnings(self) -> str:
+        """Read tail of Sphinx warning file, if present and non-empty."""
+        warnings_file = self.warnings_file
+        if not warnings_file.exists():
+            return ""
+        warnings = warnings_file.read_text()
+        if not warnings.strip():
+            return ""
+        warnings_lines = warnings.splitlines()
+        warnings_tail = "\n".join(warnings_lines[-SPHINX_WARNINGS_TAIL_LINES:])
+        if len(warnings_lines) <= SPHINX_WARNINGS_TAIL_LINES:
+            return warnings_tail
+        return (
+            f"...(truncated, full warnings in {warnings_file})\n"
+            + warnings_tail)

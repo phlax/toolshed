@@ -2,6 +2,7 @@ import {Octokit} from '@octokit/rest'
 import * as core from '@actions/core'
 import type {Endpoints} from '@octokit/types'
 import {createAppAuth} from '@octokit/auth-app'
+import {withRetry, parseIntInput, type RetryOptions} from '@envoy-toolshed/utils/retry'
 
 type listInstallationsResponse = Endpoints['GET /app/installations']['response']
 
@@ -26,6 +27,23 @@ const run = async (): Promise<void> => {
       return
     }
 
+    const retries = parseIntInput(core.getInput('retries'), 'retries', 5, 'appauth', core.warning.bind(core))
+    const baseDelayMs = parseIntInput(
+      core.getInput('retry-base-delay-ms'),
+      'retry-base-delay-ms',
+      1000,
+      'appauth',
+      core.warning.bind(core),
+    )
+    const maxDelayMs = parseIntInput(
+      core.getInput('retry-max-delay-ms'),
+      'retry-max-delay-ms',
+      15000,
+      'appauth',
+      core.warning.bind(core),
+    )
+    const retryOpts: RetryOptions = {retries, baseDelayMs, maxDelayMs}
+
     let installationId = parseInt(core.getInput('installation_id'))
     const appOctokit = new Octokit({
       authStrategy: createAppAuth,
@@ -36,13 +54,20 @@ const run = async (): Promise<void> => {
       baseUrl: process.env.GITHUB_API_URL || 'https://api.github.com',
     })
     if (!installationId) {
-      const installations: listInstallationsResponse = await appOctokit.apps.listInstallations()
+      const installations: listInstallationsResponse = await withRetry(
+        () => appOctokit.apps.listInstallations(),
+        retryOpts,
+        'appauth',
+        core.warning.bind(core),
+      )
       installationId = installations.data[0].id
     }
-    const resp = await appOctokit.auth({
-      type: 'installation',
-      installationId,
-    })
+    const resp = await withRetry(
+      () => appOctokit.auth({type: 'installation', installationId}),
+      retryOpts,
+      'appauth',
+      core.warning.bind(core),
+    )
 
     // @ts-expect-error no typing for resp
     if (!resp || !resp.token) {

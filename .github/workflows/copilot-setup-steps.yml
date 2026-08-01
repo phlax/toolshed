@@ -21,13 +21,13 @@ jobs:
         sudo rm -rf /usr/local/lib/android &
         sudo rm -rf /usr/share/dotnet &
     - name: Checkout code
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
     - name: Install deps
       shell: bash
       run: |
        sudo apt-get -qq update --error-on=any
        sudo apt-get -qq install --yes \
-           libtool libtinfo5 automake autoconf curl unzip mkcert libnss3-tools
+           libtool automake autoconf curl unzip mkcert libnss3-tools
     - name: Bazel setup
       run: |
         mkcert -install
@@ -85,7 +85,7 @@ jobs:
         bazel --version
       working-directory: bazel
 
-    - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548  # v6.1.0
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
       with:
         python-version: "3.12"
     - name: Pants

@@ -4,8 +4,10 @@ import os
 import types
 from functools import cached_property
 from typing import (
-    Any, AsyncIterable, AsyncIterator, Awaitable, Callable,
-    Iterable, Iterator)
+    Any)
+from collections.abc import (
+    AsyncIterable, AsyncIterator, Awaitable,
+    Callable, Iterable, Iterator)
 
 from aio.core.functional import async_property, AwaitableGenerator
 
@@ -104,6 +106,7 @@ class Concurrent:
     def __aiter__(self) -> AsyncIterator:
         """Start a coroutine task to process the submit queue, and return an
         async generator to deliver results back as they arrive."""
+
         self.submit_task = asyncio.create_task(self.submit())
         return self.output()
 
@@ -192,8 +195,8 @@ class Concurrent:
 
         This is for tracking when there are no longer any tasks running.
 
-        A queue is used here as opposed to other synchronization primitives, as
-        it allows us to get the size and emptiness.
+        A queue is used here as opposed to other synchronization
+        primitives, as it allows us to get the size and emptiness.
 
         The queue values are `None`.
         """
@@ -244,7 +247,6 @@ class Concurrent:
 
     async def cancel_tasks(self) -> None:
         """Cancel any running tasks."""
-
         for running in self.running_tasks:
             running.cancel()
             try:
@@ -432,7 +434,6 @@ class Concurrent:
 
     def validate_coro(self, coro: Awaitable) -> None:
         """Validate that a provided coroutine is actually awaitable."""
-
         if not inspect.isawaitable(coro):
             raise ConcurrentError(
                 f"Provided input was not a coroutine: {coro}")

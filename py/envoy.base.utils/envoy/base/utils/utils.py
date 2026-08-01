@@ -3,18 +3,16 @@
 #
 
 import contextlib
-import datetime
 import os
 import pathlib
 import tempfile
+from collections.abc import Generator, Iterator
 from configparser import ConfigParser
+from datetime import datetime, timezone
 from typing import (
-    Any, AsyncGenerator, Callable, Generator,
-    Iterator, TypeVar)
+    Any, TypeVar)
 
 from packaging import version as _version
-
-import pytz
 
 import yaml
 
@@ -108,19 +106,6 @@ def typed(tocast: type[T] | None, value: Any) -> T:
         value=value)
 
 
-async def async_list(
-        gen: AsyncGenerator,
-        filter: Callable | None = None) -> list:
-    """Turn an async generator into a here and now list, with optional
-    filter."""
-    results = []
-    async for x in gen:
-        if filter and not filter(x):
-            continue
-        results.append(x)
-    return results
-
-
 @contextlib.contextmanager
 def cd_and_return(
         path: pathlib.Path | str) -> Generator[None, None, None]:
@@ -134,13 +119,6 @@ def cd_and_return(
         os.chdir(prev_cwd)
 
 
-def to_bytes(data: str | bytes) -> bytes:
-    return (
-        bytes(data, encoding="utf-8")
-        if not isinstance(data, bytes)
-        else data)
-
-
 def is_sha(text: str) -> bool:
     if len(text) != 40:
         return False
@@ -151,9 +129,9 @@ def is_sha(text: str) -> bool:
     return True
 
 
-def dt_to_utc_isoformat(dt: datetime.datetime) -> str:
+def dt_to_utc_isoformat(dt: datetime) -> str:
     """Convert a `datetime` -> UTC `date.isoformat`"""
-    date = dt.replace(tzinfo=pytz.UTC)
+    date = dt.replace(tzinfo=timezone.utc)
     return date.date().isoformat()
 
 

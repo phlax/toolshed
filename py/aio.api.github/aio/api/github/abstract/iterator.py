@@ -1,5 +1,6 @@
 
-from typing import Any, AsyncGenerator, AsyncIterable, Mapping, TypeVar
+from collections.abc import AsyncGenerator, AsyncIterable, Mapping
+from typing import Any, TypeVar
 
 import gidgethub.abc
 import gidgethub.sansio
@@ -48,8 +49,9 @@ class AGithubIterator(AsyncIterable[T], metaclass=abstracts.Abstraction):
     @property
     def count_url(self) -> str:
         """Request URL for API call to get `total_count`."""
+        sep = "&" if "?" in self.query else "?"
         return gidgethub.sansio.format_url(
-            f"{self.query}&per_page=1",
+            f"{self.query}{sep}per_page=1",
             {},
             base_url=self.api.base_url)
 
@@ -72,18 +74,24 @@ class AGithubIterator(AsyncIterable[T], metaclass=abstracts.Abstraction):
     def count_from_headers(self, headers: Mapping[str, str]) -> int:
         """Get the last page link from from the headers resulting from the
         request for single page iteration."""
-        return (
-            int(headers["Link"].split(
-                ",")[1].split(
-                    ">")[0].split("=")[-1])
-            if "Link" in headers
-            else 0)
+        if not (link := headers.get("Link")):
+            return 0
+        for entry in link.split(","):
+            url_part, _, rel_part = entry.strip().partition(";")
+            if 'rel="last"' not in rel_part:
+                continue
+            for piece in (url_part.strip().lstrip("<").rstrip(">")
+                          .rsplit("?", 1)[-1].split("&")):
+                key, _, value = piece.partition("=")
+                if key == "page" and value.isdigit():
+                    return int(value)
+            return 0
+        return 0
 
     def count_from_response(
             self,
             response: tuple[int, Mapping[str, str], bytes]) -> int:
         """Get total count from the headers or data."""
-
         (data,
          self.api.rate_limit,
          more) = gidgethub.sansio.decipher_response(*response)

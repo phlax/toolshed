@@ -1,6 +1,5 @@
 
 from functools import cached_property
-from typing import Dict, Optional, Tuple
 
 from packaging import version
 
@@ -9,8 +8,6 @@ import abstracts
 from aio.api import github as _github
 
 
-GITHUB_REPO_LOCATION = "envoyproxy/envoy"
-LABELS = ("dependencies", "area/build", "no stalebot")
 BODY_TPL = """
 Package Name: {dep}
 Current Version: {dep.github_version_name}@{release_date}
@@ -37,11 +34,11 @@ class AGithubDependencyReleaseIssue(
     """Github issue associated with a dependency."""
 
     @property
-    def parse_vars(self) -> Tuple[str, ...]:
+    def parse_vars(self) -> tuple[str, ...]:
         return ("key", "version")
 
     @cached_property
-    def version(self) -> Optional[version.Version]:
+    def version(self) -> version.Version | None:
         """Parsed dependency version of an issue."""
         try:
             return (
@@ -89,13 +86,17 @@ class AGithubDependencyReleaseIssues(
     def issues_search_tpl(self) -> str:
         return super().issues_search_tpl
 
-    @property
-    def labels(self) -> Tuple[str, ...]:
-        return LABELS
+    @property  # type: ignore[misc]
+    @abstracts.interfacemethod
+    def labels(self) -> tuple[str, ...]:
+        """Required GitHub labels for tracked issues."""
+        raise NotImplementedError
 
-    @property
+    @property  # type: ignore[misc]
+    @abstracts.interfacemethod
     def repo_name(self) -> str:
-        return GITHUB_REPO_LOCATION
+        """`owner/repo` to manage tracked issues against."""
+        raise NotImplementedError
 
     @property
     def title_prefix(self) -> str:
@@ -123,9 +124,15 @@ class AGithubDependencyReleaseIssues(
             title_prefix=self.title_prefix,
             newer_release=await kwargs["dep"].newer_release)
 
-    def track_issue(  # type:ignore[override]
+    async def create_label(self, name: str) -> None:
+        """Create a tracked issue label in the configured repository."""
+        await self.repo.post(
+            "labels",
+            data=dict(name=name))
+
+    def track_issue(  # type: ignore[override]  # narrow concrete issue types
             self,
-            issues: Dict[str, AGithubDependencyReleaseIssue],
+            issues: dict[str, AGithubDependencyReleaseIssue],
             issue: AGithubDependencyReleaseIssue) -> bool:
         if issue.key not in issues:
             return True

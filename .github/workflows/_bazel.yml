@@ -1,5 +1,8 @@
 name: _bazel
 
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:
@@ -7,6 +10,9 @@ on:
         description: Bazel action (build or test)
         required: true
         type: string
+      artifact-name:
+        type: string
+        default: bazel-artifacts
       artifacts:
         description: Artifacts to upload
         required: false
@@ -15,6 +21,17 @@ on:
         description: Bazel args
         default:
         type: string
+      create-source:
+        type: boolean
+        default: false
+      rbe:
+        description: Enable EngFlow RBE (appends the selected RBE config when auth passes)
+        type: boolean
+        default: false
+      rbe-config:
+        description: Bazel RBE config to append when RBE is enabled and authorized
+        type: string
+        default: rbe
       bazel-mode:
         description: Bazel mode (workspace or bzlmod)
         required: true
@@ -33,46 +50,77 @@ on:
         default: false
 
 
-permissions:
-  contents: read
-
 jobs:
   bazel:
     runs-on: ubuntu-24.04
     name: Bazel (${{ inputs.action }})
+    permissions:
+      contents: read
+      packages: read
     steps:
+    - uses: envoyproxy/toolshed/actions/bind-mounts@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        mounts: |
+          - src: /mnt/workspace
+            target: ${{ github.workspace }}
+            chown: "runner:runner"
+          - src: /mnt/cache
+            target: /home/runner/.cache
+            chown: "runner:runner"
     - name: Checkout Repository
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
     - name: Setup Bazel
       uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2  # v3
-    - name: Install libtinfo5
+    - name: Install packages
       run: |
-        # Workaround for https://github.com/llvm/llvm-project/issues/75490
-        curl -LO "http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb"
-        sudo dpkg -i "libtinfo5_6.3-2ubuntu0.1_amd64.deb"
-        rm "libtinfo5_6.3-2ubuntu0.1_amd64.deb"
         sudo apt-get -qq update
         sudo apt-get -qq install -y --no-install-recommends \
             debian-archive-keyring debootstrap qemu-user-static binfmt-support
-    - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }})
+    - name: Configure repo Bazel settings
+      if: vars.TOOLSHED_CI_BAZELRC
+      shell: bash
       run: |
-        exec bazel ${{ inputs.action }} ${{ inputs.bazel-args }} ${{ inputs.targets }}
+        echo "${BAZELRC_CONTENT}" > repo.bazelrc
       working-directory: ${{ inputs.bazel-path }}
+      env:
+        BAZELRC_CONTENT: ${{ vars.TOOLSHED_CI_BAZELRC }}
+    - name: RBE auth check
+      id: rbe
+      if: inputs.rbe && github.event_name == 'pull_request'
+      uses: envoyproxy/toolshed/actions/github/container/auth@358540eca0af3a423fed5fe00ac656b73be3af2d
+      with:
+        container: hello-world
+    - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }})
+      shell: bash
+      run: >-
+        exec bazel ${{ inputs.action }}
+        ${{ inputs.bazel-args }}
+        ${{ (steps.rbe.outputs.authorized == 'true'
+             || github.event_name != 'pull_request')
+            && format('--config={0} --config=bes', inputs.rbe-config || 'rbe') || ''
+        }} ${{ inputs.targets }}
+      working-directory: ${{ inputs.bazel-path }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
     - name: Create source tarball
       id: source-tarball
       if: >-
         inputs.action == 'build'
         && inputs.bazel-path == 'bazel'
         && inputs.upload
-      uses: envoyproxy/toolshed/actions/source@b947ebfe9eda97a0da3e1b3a6a3598fbb55de7b6
+        && inputs.create-source
+      uses: envoyproxy/toolshed/actions/source@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         output-name: toolshed-bazel-v{version}.tar.gz
         source-path: bazel/
         transform: s,^bazel,toolshed-bazel-v{version},
         version-file: bazel/VERSION.txt
+        exclude-patterns: |
+          .git*
+          bazel/bazel-*
     - name: Bazel source
       if: ${{ steps.source-tarball.outputs.tarball }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
         name: bazel-source
         path: ${{ steps.source-tarball.outputs.tarball }}
@@ -83,7 +131,7 @@ jobs:
         inputs.action == 'build'
         && inputs.artifacts
         && inputs.upload
-      uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/jq@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         input: ${{ inputs.artifacts }}
         input-format: text
@@ -93,9 +141,75 @@ jobs:
           | "${{ inputs.bazel-path }}/bazel-bin/\(.)"
     - name: Bazel artifacts
       if: ${{ inputs.upload && (steps.artifact-paths.outputs.value || steps.source-tarball.outputs.tarball) }}
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
-        name: bazel-artifacts
+        name: ${{ inputs.artifact-name }}
         path: |
           ${{ steps.artifact-paths.outputs.value }}
         retention-days: 30
+
+  xcompile-x86-to-arm:
+    if: inputs.action == 'test'
+    runs-on: ubuntu-24.04
+    name: Bazel (x-compile x86 -> arm)
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - name: Setup Bazel
+      uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2  # v3
+    - name: Install packages
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y --no-install-recommends \
+            debian-archive-keyring debootstrap qemu-user-static binfmt-support
+    - name: Configure repo Bazel settings
+      if: vars.TOOLSHED_CI_BAZELRC
+      shell: bash
+      run: |
+        echo "${BAZELRC_CONTENT}" > repo.bazelrc
+      working-directory: ${{ inputs.bazel-path }}
+      env:
+        BAZELRC_CONTENT: ${{ vars.TOOLSHED_CI_BAZELRC }}
+    - name: Cross-compile test (x86_64 -> aarch64/${{ inputs.bazel-mode }})
+      run: |
+        bazel test ${{ inputs.bazel-args }} \
+          --platforms=@toolchains_llvm//platforms:linux-aarch64 \
+          //compile/test:cross_compile_aarch64_test \
+          //compile/test:cross_compile_aarch64_unwind_test
+      working-directory: ${{ inputs.bazel-path }}
+    - name: Cross-compile test (x86_64 -> aarch64/${{ inputs.bazel-mode }})
+      run: |
+        bazel test ${{ inputs.bazel-args }} \
+          --platforms=@toolchains_llvm//platforms:linux-aarch64 \
+          --@toolchains_llvm//toolchain/config:libunwind=False \
+          //compile/test:cross_compile_aarch64_no_unwind_test
+      working-directory: ${{ inputs.bazel-path }}
+
+  xcompile-arm-to-x86:
+    if: inputs.action == 'test'
+    runs-on: ubuntu-24.04-arm
+    name: Bazel (x-compile arm -> x86)
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - name: Setup Bazel
+      uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2  # v3
+    - name: Install packages
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y --no-install-recommends \
+            debian-archive-keyring debootstrap qemu-user-static binfmt-support
+    - name: Cross-compile test (aarch64 -> x86_64/${{ inputs.bazel-mode }})
+      run: |
+        bazel test ${{ inputs.bazel-args }} \
+          --platforms=@toolchains_llvm//platforms:linux-x86_64 \
+          //compile/test:cross_compile_x86_64_test \
+          //compile/test:cross_compile_x86_64_unwind_test
+      working-directory: ${{ inputs.bazel-path }}
+    - name: Cross-compile test (x86_64 -> x86_64/${{ inputs.bazel-mode }})
+      run: |
+        bazel test ${{ inputs.bazel-args }} \
+          --platforms=@toolchains_llvm//platforms:linux-x86_64 \
+          --@toolchains_llvm//toolchain/config:libunwind=False \
+          //compile/test:cross_compile_x86_64_no_unwind_test
+      working-directory: ${{ inputs.bazel-path }}

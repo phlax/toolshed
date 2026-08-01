@@ -1,2 +1,2 @@
-mypy==1.19.0
-mypy-abstracts
+mypy==2.3.0
+mypy-abstracts>=0.1.1

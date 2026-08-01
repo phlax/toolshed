@@ -3,7 +3,7 @@ nock.disableNetConnect()
 
 const processStdoutWrite = process.stdout.write.bind(process.stdout)
 process.stdout.write = (str, encoding, cb) => {
-  if (!str.match(/^##/)) {
+  if (typeof str !== 'string' || !str.match(/^##/)) {
     return processStdoutWrite(str, encoding, cb)
   }
   return false
@@ -14,8 +14,20 @@ module.exports = {
   moduleFileExtensions: ['js', 'ts'],
   testEnvironment: 'node',
   testMatch: ['**/*.test.ts'],
+  setupFiles: ['<rootDir>/jest.setup.js'],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\\.[tj]sx?$': ['ts-jest', {
+      tsconfig: 'tsconfig.test.json',
+    }],
   },
+  moduleNameMapper: {
+    '^@actions/core$': '<rootDir>/node_modules/@actions/core/lib/core.js',
+    '^@actions/github$': '<rootDir>/node_modules/@actions/github/lib/github.js',
+    '^@actions/exec$': '<rootDir>/node_modules/@actions/exec/lib/exec.js',
+    '^@actions/io$': '<rootDir>/node_modules/@actions/io/lib/io.js',
+    '^@actions/([^/]+)/(.*)$': '<rootDir>/node_modules/@actions/$1/$2.js',
+    '^@actions/([^/]+)$': '<rootDir>/node_modules/@actions/$1/lib/index.js',
+  },
+  transformIgnorePatterns: [],
   verbose: true,
 }

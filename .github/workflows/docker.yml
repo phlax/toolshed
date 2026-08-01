@@ -21,16 +21,20 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.run }}
     steps:
-    - uses: envoyproxy/toolshed/actions/github/should-run@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/github/should-run@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: filter
       with:
         config: |
           paths:
           - 'docker/build/**'
+          - 'docker/echo/**'
           - '.github/workflows/docker.yml'
+          - '.github/docker-manifests.yml'
+          - 'docker/build/VERSION.txt'
+          - 'docker-assets.yaml'
+          - 'BINS_VERSION.txt'
 
   build:
-    runs-on: ${{ matrix.arch == 'amd64' && 'ubuntu-24.04' || 'ubuntu-24.04-arm' }}
     needs: request
     if: >-
       github.repository_owner == 'envoyproxy'
@@ -41,68 +45,14 @@ jobs:
         arch:
         - amd64
         - arm64
-    name: build (${{ matrix.arch }})
-    steps:
-    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
-
-    - name: Get docker SHA
-      id: docker-sha
-      shell: bash
-      run: |
-        TAG_SHA=$(git log -1 --pretty=format:"%H" ./docker/build)
-        echo "sha=${TAG_SHA}" >> $GITHUB_OUTPUT
-
-    - name: Build Docker image (debian-${{ matrix.arch }})
-      run: |
-        cd docker/build
-        export OS_FAMILY=linux
-        export OS_DISTRO=debian
-        export CONTAINER_SHA=${{ steps.docker-sha.outputs.sha }}
-        export CONTAINER_TAG=${{ steps.docker-sha.outputs.sha }}
-        export BUILD_TOOLS_PLATFORMS=${{ matrix.arch == 'amd64' && 'linux/amd64' || 'linux/arm64' }}
-        export SAVE_OCI=true
-        export LOAD_IMAGE=true
-        ./push.sh
-        echo "::group::Docker images"
-        docker images | grep envoy-build || echo "No envoy-build images found"
-        echo "::endgroup::"
-      shell: bash
-
-    - name: Upload OCI artifacts
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
-      with:
-        name: oci-debian-${{ matrix.arch }}
-        path: docker/build/oci-output/*.tar
-        retention-days: 1
-        if-no-files-found: error
-
-    - name: Test Docker image
-      run: |
-        IMAGE_TAG="envoyproxy/envoy-build:ci-${{ steps.docker-sha.outputs.sha }}-${{ matrix.arch }}"
-        echo "Testing main image: $IMAGE_TAG"
-        echo "Attempting to run container and read build-id..."
-        if BUILD_ID=$(docker run --rm --entrypoint /bin/cat "$IMAGE_TAG" /.build-id 2>&1); then
-          echo "Build ID: $BUILD_ID"
-          EXPECTED_ID="ci-${{ steps.docker-sha.outputs.sha }}"
-          if [[ "$BUILD_ID" == "$EXPECTED_ID" ]]; then
-            echo "✓ Build ID is correct"
-          else
-            echo "✗ Build ID mismatch: expected '$EXPECTED_ID', got '$BUILD_ID'"
-            exit 1
-          fi
-        else
-          echo "ERROR: Failed to run container or read build-id"
-          echo "Docker run output: $BUILD_ID"
-          echo "Checking if image exists:"
-          docker images | grep -E "(REPOSITORY|envoy-build.*ci-)"
-          echo "Trying docker inspect:"
-          docker image inspect "$IMAGE_TAG" 2>&1 | head -20 || echo "Inspect failed"
-          exit 1
-        fi
-      shell: bash
+        target:
+        - echo
+        - build
+    name: build ${{ matrix.target }} (${{ matrix.arch }})
+    uses: ./.github/workflows/_docker.yml
+    with:
+      arch: ${{ matrix.arch }}
+      target: ${{ matrix.target }}
 
   status:
     runs-on: ubuntu-24.04

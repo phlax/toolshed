@@ -3,13 +3,11 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
-import aiohttp
-
 import gidgethub
 
 import abstracts
 
-from aio.api import github, nist
+from aio.api import github
 from aio.core.functional import async_property
 from aio.core.tasks import ConcurrentError
 from aio.run.checker import Checker
@@ -26,10 +24,6 @@ class DummyDependencyChecker:
         return super().access_token
 
     @property
-    def cves_class(self):
-        return super().cves_class
-
-    @property
     def dependency_class(self):
         return super().dependency_class
 
@@ -41,6 +35,10 @@ class DummyDependencyChecker:
     def issues_class(self):
         return super().issues_class
 
+    @property
+    def no_dep_issues_re(self):
+        return super().no_dep_issues_re
+
 
 def test_checker_constructor():
 
@@ -51,13 +49,12 @@ def test_checker_constructor():
     assert isinstance(checker, Checker)
     assert (
         checker.checks
-        == ("cves",
-            "release_dates",
+        == ("release_dates",
             "release_issues",
             "releases"))
 
     iface_props = [
-        "dependency_class", "issues_class"]
+        "dependency_class", "issues_class", "no_dep_issues_re"]
 
     for prop in iface_props:
         with pytest.raises(NotImplementedError):
@@ -106,52 +103,25 @@ def test_checker_access_token(patches, arg):
     assert "access_token" not in checker.__dict__
 
 
-def test_checker_cve_config(patches):
+def test_checker_access_token_oserror(patches):
     checker = DummyDependencyChecker()
     patched = patches(
+        "pathlib",
         ("ADependencyChecker.args",
          dict(new_callable=PropertyMock)),
         prefix="envoy.dependency.check.abstract.checker")
 
-    with patched as (m_args, ):
-        assert checker.cve_config == m_args.return_value.cve_config
-
-    assert "cve_config" not in checker.__dict__
-
-
-def test_checker_cves(patches):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        ("ADependencyChecker.dependencies",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.cve_config",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.cves_class",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.loop",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.pool",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.preloaded_cve_data",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.session",
-         dict(new_callable=PropertyMock)),
-        prefix="envoy.dependency.check.abstract.checker")
-
-    with patched as patchy:
-        (m_deps, m_config, m_class,
-         m_loop, m_pool, m_pre, m_session) = patchy
-        assert checker.cves == m_class.return_value.return_value
+    with patched as (m_plib, m_args):
+        m_plib.Path.return_value.read_text.side_effect = (
+            OSError("no such file"))
+        with pytest.raises(exceptions.GithubTokenError) as e:
+            checker.access_token
 
     assert (
-        m_class.return_value.call_args
-        == [(m_deps.return_value, ),
-            dict(config_path=m_config.return_value,
-                 loop=m_loop.return_value,
-                 pool=m_pool.return_value,
-                 preloaded_cve_data=m_pre.return_value,
-                 session=m_session.return_value)])
-    assert "cves" in checker.__dict__
+        str(m_args.return_value.github_token)
+        in e.value.args[0])
+    assert "Cannot read GitHub token from" in e.value.args[0]
+    assert "access_token" not in checker.__dict__
 
 
 def test_checker_dep_ids(patches):
@@ -215,11 +185,12 @@ def test_checker_dependency_metadata(patches):
     checker = DummyDependencyChecker()
     patched = patches(
         "json",
+        "ADependencyChecker._validate_dependency_metadata",
         ("ADependencyChecker.repository_locations_path",
          dict(new_callable=PropertyMock)),
         prefix="envoy.dependency.check.abstract.checker")
 
-    with patched as (m_json, m_path):
+    with patched as (m_json, m_validate, m_path):
         assert (
             checker.dependency_metadata
             == m_json.loads.return_value)
@@ -230,26 +201,34 @@ def test_checker_dependency_metadata(patches):
     assert (
         m_path.return_value.read_text.call_args
         == [(), {}])
+    assert (
+        m_validate.call_args
+        == [(m_json.loads.return_value, ), {}])
     assert "dependency_metadata" not in checker.__dict__
 
 
-@pytest.mark.parametrize("token", [True, False])
-def test_checker_disabled_checks(patches, token):
+def test_checker_access_token_missing_token(patches):
     checker = DummyDependencyChecker()
     patched = patches(
-        ("ADependencyChecker.access_token",
+        "os",
+        ("ADependencyChecker.args",
          dict(new_callable=PropertyMock)),
         prefix="envoy.dependency.check.abstract.checker")
-    expected = (
-        dict(release_dates=abstract.checker.NO_GITHUB_TOKEN_ERROR_MSG,
-             release_issues=abstract.checker.NO_GITHUB_TOKEN_ERROR_MSG,
-             releases=abstract.checker.NO_GITHUB_TOKEN_ERROR_MSG)
-        if not token
-        else {})
 
-    with patched as (m_token, ):
-        m_token.return_value = token
-        assert checker.disabled_checks == expected
+    with patched as (m_os, m_args):
+        m_args.return_value.github_token = None
+        m_os.getenv.return_value = None
+        with pytest.raises(exceptions.GithubTokenError) as e:
+            checker.access_token
+
+    assert e.value.args[0] == abstract.checker.NO_GITHUB_TOKEN_ERROR_MSG
+    assert m_os.getenv.call_args == [("GITHUB_TOKEN", ), {}]
+    assert "access_token" not in checker.__dict__
+
+
+def test_checker_disabled_checks():
+    checker = DummyDependencyChecker()
+    assert checker.disabled_checks == {}
 
     assert "disabled_checks" in checker.__dict__
 
@@ -269,7 +248,7 @@ def test_checker_github(patches):
 
     assert (
         m_github.GithubAPI.call_args
-        == [(m_session.return_value, ""),
+        == [(m_session.return_value, abstract.checker.GITHUB_API_URL),
             dict(oauth_token=m_token.return_value)])
     assert "github" in checker.__dict__
 
@@ -396,30 +375,15 @@ def test_checker_session(patches):
 
     assert (
         m_aiohttp.ClientSession.call_args
-        == [(), {}])
+        == [(),
+            dict(
+                timeout=m_aiohttp.ClientTimeout.return_value,
+                headers={"User-Agent": abstract.checker.HTTP_USER_AGENT})])
+    assert (
+        m_aiohttp.ClientTimeout.call_args
+        == [(),
+            dict(total=abstract.checker.HTTP_SESSION_TIMEOUT_SECONDS)])
     assert "session" in checker.__dict__
-
-
-@pytest.mark.parametrize("cpu_count", [None, 0, 1, 23])
-def test_checker_sha_preload_limit(patches, cpu_count):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        "math.ceil",
-        "os",
-        prefix="envoy.dependency.check.abstract.checker")
-
-    with patched as (m_math, m_os):
-        m_os.cpu_count.return_value = cpu_count
-        assert (
-            checker.sha_preload_limit
-            == m_math.return_value)
-    assert (
-        m_math.call_args
-        == [((cpu_count or 1)*1.5, ), {}])
-    assert (
-        m_os.cpu_count.call_args
-        == [(), {}])
-    assert "sha_preload_limit" in checker.__dict__
 
 
 def test_checker_fix(patches):
@@ -451,28 +415,7 @@ def test_checker_add_arguments(patches):
     assert (
         parser.add_argument.call_args_list
         == [[('--github_token',), {}],
-            [('--repository_locations',), {}],
-            [('--cve_config',), {}],
-            [('--cve_data',), {}],
-            [('--download_cves',), {}]])
-
-
-async def test_checker_check_cves(iters, patches):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        ("ADependencyChecker.dependencies",
-         dict(new_callable=PropertyMock)),
-        "ADependencyChecker.dep_cve_check",
-        prefix="envoy.dependency.check.abstract.checker")
-    deps = iters(cb=lambda i: MagicMock())
-
-    with patched as (m_deps, m_check):
-        m_deps.return_value = deps
-        assert not await checker.check_cves()
-
-    assert (
-        m_check.call_args_list
-        == [[(mock,), {}] for mock in deps])
+            [('--repository_locations',), {}]])
 
 
 async def test_checker_check_release_dates(iters, patches):
@@ -575,79 +518,6 @@ async def test_checker_check_releases(iters, patches):
         == [[(mock,), {}] for mock in deps])
 
 
-async def test_checker_check_release_sha(iters, patches):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        ("ADependencyChecker.dependencies",
-         dict(new_callable=PropertyMock)),
-        "ADependencyChecker.dep_release_sha_check",
-        prefix="envoy.dependency.check.abstract.checker")
-    deps = iters(cb=lambda i: MagicMock())
-
-    with patched as (m_deps, m_check):
-        m_deps.return_value = deps
-        assert not await checker.check_release_sha()
-
-    assert (
-        m_check.call_args_list
-        == [[(mock,), {}] for mock in deps])
-
-
-@pytest.mark.parametrize("cpe", [True, False])
-@pytest.mark.parametrize("failed", [0, 1, 3])
-async def test_checker_dep_cve_check(iters, patches, cpe, failed):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        ("ADependencyChecker.active_check",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.cves",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.log",
-         dict(new_callable=PropertyMock)),
-        "ADependencyChecker.succeed",
-        "ADependencyChecker.warn",
-        prefix="envoy.dependency.check.abstract.checker")
-    dep = MagicMock()
-    dep.cpe = cpe
-    failures = iters(cb=lambda i: MagicMock(), count=failed)
-
-    async def iter_failure(dep):
-        for fail in failures:
-            yield fail
-
-    with patched as (m_active, m_cves, m_log, m_succeed, m_warn):
-        m_cves.return_value.dependency_check.side_effect = iter_failure
-        assert not await checker.dep_cve_check(dep)
-
-    if not cpe:
-        assert not m_cves.called
-        assert not m_warn.called
-        assert not m_succeed.called
-        assert (
-            m_log.return_value.info.call_args
-            == [(f"No CPE listed for: {dep.id}", ), {}])
-        return
-    assert not m_log.called
-    if not failures:
-        assert not m_warn.called
-        assert (
-            m_succeed.call_args
-            == [(m_active.return_value,
-                 [f"No CVE vulnerabilities found: {dep.id}"]),
-                {}])
-        return
-    assert (
-        m_warn.call_args
-        == [(m_active.return_value,
-             [f"{cve.format_failure.return_value}"
-              for cve in failures]),
-            {}])
-    for failure in failures:
-        assert (
-            failure.format_failure.call_args
-            == [(dep, ), {}])
-
-
 @pytest.mark.parametrize("gh_date", [None, "GH_DATE"])
 @pytest.mark.parametrize("mismatch", [True, False])
 async def test_checker_dep_date_check(patches, gh_date, mismatch):
@@ -726,6 +596,8 @@ async def test_checker_dep_issue_check(
          dict(new_callable=PropertyMock)),
         ("ADependencyChecker.fix",
          dict(new_callable=PropertyMock)),
+        ("ADependencyChecker._no_dep_issues",
+         dict(new_callable=PropertyMock)),
         "ADependencyChecker.succeed",
         "ADependencyChecker.warn",
         "ADependencyChecker._dep_release_issue_close_stale",
@@ -755,8 +627,9 @@ async def test_checker_dep_issue_check(
         issues_dict.get.return_value = None
 
     with patched as patchy:
-        (m_active, m_issue, m_manage,
+        (m_active, m_issue, m_manage, m_no_dep_issues,
          m_succeed, m_warn, m_close, m_create) = patchy
+        m_no_dep_issues.return_value.match.return_value = None
         dep_issues = AsyncMock(return_value=issues_dict)
         m_issue.return_value.__getitem__.return_value.issues = dep_issues()
         m_manage.return_value = fix
@@ -884,65 +757,6 @@ async def test_checker_dep_release_check(
             {}])
 
 
-@pytest.mark.parametrize("sha", [None, "SHA"])
-@pytest.mark.parametrize("mismatch", [True, False])
-async def test_checker_dep_release_sha_check(patches, sha, mismatch):
-    checker = DummyDependencyChecker()
-    checker._active_check = "ACTIVE CHECK"
-    patched = patches(
-        "ADependencyChecker.error",
-        "ADependencyChecker.succeed",
-        prefix="envoy.dependency.check.abstract.checker")
-
-    class DummyDepRelease:
-
-        @async_property
-        async def sha(self):
-            return sha
-
-    class DummyDep:
-        id = "DUMMY_DEP"
-        release_sha = "DUMMY_RELEASE_SHA"
-        display_sha = "DUMMY_DISPLAY_SHA"
-
-        @property
-        def release(self):
-            return DummyDepRelease()
-
-        @async_property
-        async def release_sha_mismatch(self):
-            return mismatch
-
-    dep = DummyDep()
-
-    with patched as (m_error, m_succeed):
-        assert not await checker.dep_release_sha_check(dep)
-
-    if not sha:
-        assert (
-            m_error.call_args
-            == [("ACTIVE CHECK",
-                 ["Unable to generate release SHA: DUMMY_DEP"]),
-                {}])
-        assert not m_succeed.called
-        return
-    if mismatch:
-        assert (
-            m_error.call_args
-            == [("ACTIVE CHECK",
-                 ["Mismatch: DUMMY_DEP "
-                  f"DUMMY_RELEASE_SHA != {sha}"]),
-                {}])
-        assert not m_succeed.called
-        return
-    assert not m_error.called
-    assert (
-        m_succeed.call_args
-        == [("ACTIVE CHECK",
-             ["Match (DUMMY_DISPLAY_SHA): DUMMY_DEP"]),
-            {}])
-
-
 async def test_checker_on_checks_complete(patches):
     checker = DummyDependencyChecker()
     patched = patches(
@@ -958,6 +772,29 @@ async def test_checker_on_checks_complete(patches):
     assert (
         m_session.return_value.close.call_args
         == [(), {}])
+
+
+def test_checker_run_catches():
+    checker = DummyDependencyChecker()
+    assert (
+        checker.run.__wrapped__.__catches__
+        == (exceptions.GithubTokenError, exceptions.DependencyMetadataError))
+
+
+async def test_checker_run_catches_github_token_error(patches):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        "checker.Checker.run",
+        ("ADependencyChecker.log",
+         dict(new_callable=PropertyMock)),
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_run, m_log):
+        m_run.side_effect = exceptions.GithubTokenError("NO TOKEN")
+        assert await checker.run() == 1
+
+    assert m_run.call_args == [(), {}]
+    assert m_log.return_value.error.call_args == [("NO TOKEN", ), {}]
 
 
 @pytest.mark.parametrize("fix", [True, False])
@@ -1019,45 +856,151 @@ async def test_checker_release_issues_duplicate_check(patches, fix, dupes):
         assert not m_succeed.called
 
 
-@pytest.mark.parametrize(
-    "missing_labels",
-    [[],
-     [f"LABEL{i}" for i in range(0, 5)]])
-async def test_checker_release_issues_labels_check(patches, missing_labels):
+async def test_checker_release_issues_labels_check_no_missing(patches):
     checker = DummyDependencyChecker()
     patched = patches(
         ("ADependencyChecker.active_check",
          dict(new_callable=PropertyMock)),
         ("ADependencyChecker.issues",
          dict(new_callable=PropertyMock)),
+        "ADependencyChecker.warn",
         "ADependencyChecker.error",
         "ADependencyChecker.succeed",
         prefix="envoy.dependency.check.abstract.checker")
 
-    with patched as (m_active, m_issues, m_error, m_succeed):
+    with patched as (m_active, m_issues, m_warn, m_error, m_succeed):
         (m_issues.return_value.__getitem__
                  .return_value.missing_labels) = AsyncMock(
-                     return_value=missing_labels)()
+                     return_value=[])()
         assert not await checker.release_issues_labels_check()
 
     assert (
         m_issues.return_value.__getitem__.call_args
         == [("releases", ), {}])
+    assert not m_warn.called
+    assert not m_error.called
+    assert (
+        m_succeed.call_args_list
+        == [[(m_active.return_value,
+            [f"All ({m_issues.return_value.labels.__len__.return_value}) "
+             "required labels are available."]),
+            {}]])
+
+
+@pytest.mark.parametrize(
+    "missing_labels",
+    [[f"LABEL{i}" for i in range(0, 5)]])
+async def test_checker_release_issues_labels_check_fix_false(
+        patches, missing_labels):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        ("ADependencyChecker.active_check",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.issues",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.fix",
+         dict(new_callable=PropertyMock)),
+        "ADependencyChecker.warn",
+        "ADependencyChecker.error",
+        "ADependencyChecker.succeed",
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_active, m_issues, m_fix, m_warn, m_error, m_succeed):
+        issues_tracker = m_issues.return_value.__getitem__.return_value
+        issues_tracker.missing_labels = AsyncMock(
+            return_value=missing_labels)()
+        issues_tracker.create_label = AsyncMock()
+        m_fix.return_value = False
+        assert not await checker.release_issues_labels_check()
+
     assert (
         m_error.call_args_list
         == [[(m_active.return_value,
               [f"Missing label: {label}"]), {}]
             for label in missing_labels])
-    if not missing_labels:
-        assert not m_error.called
-        assert (
-            m_succeed.call_args_list
-            == [[(m_active.return_value,
-                [f"All ({m_issues.return_value.labels.__len__.return_value}) "
-                 "required labels are available."]),
-                {}]])
-    else:
-        assert not m_succeed.called
+    assert not issues_tracker.create_label.called
+    assert not m_warn.called
+    assert not m_succeed.called
+
+
+@pytest.mark.parametrize(
+    "missing_labels",
+    [[f"LABEL{i}" for i in range(0, 5)]])
+async def test_checker_release_issues_labels_check_fix_true(
+        patches, missing_labels):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        ("ADependencyChecker.active_check",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.issues",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.fix",
+         dict(new_callable=PropertyMock)),
+        "ADependencyChecker.warn",
+        "ADependencyChecker.error",
+        "ADependencyChecker.succeed",
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_active, m_issues, m_fix, m_warn, m_error, m_succeed):
+        issues_tracker = m_issues.return_value.__getitem__.return_value
+        issues_tracker.missing_labels = AsyncMock(
+            return_value=missing_labels)()
+        issues_tracker.create_label = AsyncMock()
+        m_fix.return_value = True
+        assert not await checker.release_issues_labels_check()
+
+    assert (
+        issues_tracker.create_label.call_args_list
+        == [[(label, ), {}] for label in missing_labels])
+    assert (
+        m_warn.call_args_list
+        == [[(m_active.return_value,
+              [f"Missing label created: {label}"]), {}]
+            for label in missing_labels])
+    assert not m_error.called
+    assert not m_succeed.called
+
+
+@pytest.mark.parametrize(
+    "error_factory",
+    [lambda: PermissionError("no perms"),
+     lambda: ConnectionError("network issue"),
+     lambda: OSError("io issue"),
+     lambda: gidgethub.BadRequest(MagicMock(phrase="forbidden"))])
+@pytest.mark.parametrize("missing_labels", [["LABEL0"]])
+async def test_checker_release_issues_labels_check_fix_true_create_error(
+        patches, missing_labels, error_factory):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        ("ADependencyChecker.active_check",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.issues",
+         dict(new_callable=PropertyMock)),
+        ("ADependencyChecker.fix",
+         dict(new_callable=PropertyMock)),
+        "ADependencyChecker.warn",
+        "ADependencyChecker.error",
+        "ADependencyChecker.succeed",
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_active, m_issues, m_fix, m_warn, m_error, m_succeed):
+        issues_tracker = m_issues.return_value.__getitem__.return_value
+        issues_tracker.missing_labels = AsyncMock(
+            return_value=missing_labels)()
+        error = error_factory()
+        issues_tracker.create_label = AsyncMock(
+            side_effect=error)
+        m_fix.return_value = True
+        assert not await checker.release_issues_labels_check()
+
+    assert (
+        m_error.call_args_list
+        == [[(m_active.return_value,
+              ["Missing label: LABEL0 "
+               f"(create failed: {type(error).__name__}: {error})"]),
+             {}]])
+    assert not m_warn.called
+    assert not m_succeed.called
 
 
 @pytest.mark.parametrize(
@@ -1109,103 +1052,6 @@ async def test_checker_preload_releases(patches, deps):
     assert (
         ADependencyChecker.preload_releases.catches
         == (ConcurrentError, gidgethub.GitHubException))
-
-
-@pytest.mark.parametrize(
-    "deps",
-    [[],
-     [f"DEP{i}" for i in range(0, 5)]])
-async def test_checker_preload_release_sha(patches, deps):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        "inflate",
-        ("ADependencyChecker.log",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.github_dependencies",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.sha_preload_limit",
-         dict(new_callable=PropertyMock)),
-        prefix="envoy.dependency.check.abstract.checker")
-
-    async def iter_deps(iterable, cb, **kwargs):
-        for dep in deps:
-            mock_dep = MagicMock()
-            mock_dep.id = dep
-            yield mock_dep
-
-    with patched as (m_inflate, m_log, m_gh_deps, m_limit):
-        m_inflate.side_effect = iter_deps
-        assert not await checker.preload_release_sha()
-
-    cb = m_inflate.call_args[0][1]
-    item = MagicMock()
-    assert cb(item) == (item.release.sha, )
-    assert (
-        m_inflate.call_args
-        == [(m_gh_deps.return_value, cb),
-            dict(limit=m_limit.return_value)])
-    if deps:
-        assert (
-            m_log.return_value.debug.call_args_list
-            == [[(f"Preloaded release sha: {dep}", ), {}]
-                for dep in deps])
-    else:
-        assert not m_log.called
-    assert (
-        ADependencyChecker.preload_release_sha.when
-        == ('release_sha',))
-    assert (
-        ADependencyChecker.preload_release_sha.blocks
-        == ('release_sha',))
-    assert (
-        ADependencyChecker.preload_release_sha.unless
-        == ())
-    assert (
-        ADependencyChecker.preload_release_sha.catches
-        == (ConcurrentError, aiohttp.ClientError))
-
-
-@pytest.mark.parametrize(
-    "downloads",
-    [[],
-     [f"D{i}" for i in range(0, 5)]])
-async def test_checker_preload_cves(patches, downloads):
-    checker = DummyDependencyChecker()
-    patched = patches(
-        ("ADependencyChecker.cves",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.log",
-         dict(new_callable=PropertyMock)),
-        prefix="envoy.dependency.check.abstract.checker")
-
-    async def iter_downloads():
-        for download in downloads:
-            yield download
-
-    with patched as (m_cves, m_log):
-        m_cves.return_value.downloads = iter_downloads()
-        assert not await checker.preload_cves()
-
-    if downloads:
-        assert (
-            m_log.return_value.debug.call_args_list
-            == [[(f"Preloaded cve data: {download}", ), {}]
-                for download in downloads])
-    else:
-        assert not m_log.called
-
-    assert (
-        ADependencyChecker.preload_cves.when
-        == ('cves',))
-    assert (
-        ADependencyChecker.preload_cves.blocks
-        == ('cves',))
-    assert (
-        ADependencyChecker.preload_cves.unless
-        == ())
-    assert (
-        ADependencyChecker.preload_cves.catches
-        == (exceptions.CVECheckError, nist.exceptions.NISTError))
 
 
 @pytest.mark.parametrize(
@@ -1356,34 +1202,15 @@ async def test_checker_release_issues_missing_dep_check(
         assert not m_succeed.called
 
 
-@pytest.mark.parametrize("download_cves", [True, False])
-async def test_checker_run(patches, download_cves):
+async def test_checker_run(patches):
     checker = DummyDependencyChecker()
     patched = patches(
         "checker.Checker.run",
-        ("ADependencyChecker.cves",
-         dict(new_callable=PropertyMock)),
-        ("ADependencyChecker.download_cves",
-         dict(new_callable=PropertyMock)),
         prefix="envoy.dependency.check.abstract.checker")
-    cves_download = AsyncMock()
 
-    with patched as (m_super, m_cves, m_download):
-        m_download.return_value = download_cves
-        m_cves.return_value.download_cves = cves_download
-        assert (
-            await checker.run()
-            == (m_super.return_value
-                if not download_cves
-                else 0))
+    with patched as (m_super, ):
+        assert await checker.run() == m_super.return_value
 
-    if download_cves:
-        assert not m_super.called
-        assert (
-            cves_download.call_args
-            == [(download_cves, ), {}])
-        return
-    assert not cves_download.called
     assert (
         m_super.call_args
         == [(), {}])
@@ -1525,3 +1352,68 @@ async def test_checker__release_issue_close_missing_dep(patches):
         m_log.return_value.notice.call_args
         == [(f"Closed issue with no current dependency (#{issue.number})", ),
             {}])
+
+
+@pytest.mark.parametrize(
+    "data,raises,expected_msg",
+    [
+        # Valid metadata: no exception raised
+        ({"dep1": {"release_date": "2024-01-01", "version": "1.0",
+                   "urls": ["https://example.com"], "sha256": "abc"}},
+         False, None),
+        # Missing one required key
+        ({"dep2": {"release_date": "2024-01-01", "version": "1.0",
+                   "urls": ["https://example.com"]}},
+         True, "dep2: missing required keys: sha256"),
+        # Multiple deps with multiple errors
+        ({"dep3": {"release_date": "2024-01-01"},
+          "dep4": {"version": "1.0"}},
+         True, None),
+        # Non-dict metadata value
+        ({"dep5": "not-a-dict"},
+         True, "dep5: metadata must be a mapping, got str"),
+    ])
+def test_checker__validate_dependency_metadata(data, raises, expected_msg):
+    checker = DummyDependencyChecker()
+    if not raises:
+        checker._validate_dependency_metadata(data)
+    else:
+        with pytest.raises(exceptions.DependencyMetadataError) as exc_info:
+            checker._validate_dependency_metadata(data)
+        if expected_msg:
+            assert expected_msg in str(exc_info.value)
+
+
+async def test_checker_run_catches_dependency_metadata_error(patches):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        "checker.Checker.run",
+        ("ADependencyChecker.log",
+         dict(new_callable=PropertyMock)),
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_run, m_log):
+        m_run.side_effect = exceptions.DependencyMetadataError("BAD METADATA")
+        assert await checker.run() == 1
+
+    assert m_run.call_args == [(), {}]
+    assert m_log.return_value.error.call_args == [("BAD METADATA", ), {}]
+
+
+def test_checker__no_dep_issues(patches):
+    checker = DummyDependencyChecker()
+    patched = patches(
+        "re",
+        ("ADependencyChecker.no_dep_issues_re",
+         dict(new_callable=PropertyMock)),
+        prefix="envoy.dependency.check.abstract.checker")
+
+    with patched as (m_re, m_pattern):
+        assert (
+            checker._no_dep_issues
+            == m_re.compile.return_value)
+
+    assert (
+        m_re.compile.call_args
+        == [(m_pattern.return_value, ), {}])
+    assert "_no_dep_issues" in checker.__dict__

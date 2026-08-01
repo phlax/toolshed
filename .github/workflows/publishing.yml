@@ -1,7 +1,7 @@
 name: Publishing CI
 
 permissions:
-  actions: read
+  contents: read
 
 on:
   pull_request:
@@ -19,7 +19,7 @@ jobs:
       run: ${{ steps.filter.outputs.run }}
       sha: ${{ steps.commit.outputs.sha }}
     steps:
-    - uses: envoyproxy/toolshed/actions/github/should-run@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/github/should-run@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: filter
       with:
         config: |
@@ -28,11 +28,15 @@ jobs:
           - .github/workflows/_publish_release.yml
           - .github/workflows/actions.yml
           - .github/workflows/bazel.yml
+          - .github/workflows/docker.yml
           - .github/workflows/rust.yml
           - .github/workflows/publishing.yml
+          - actions/python/release/publish/action.yml
           - bazel/VERSION.txt
           - BINS_VERSION.txt
           - actions/VERSION.txt
+          - docker/build/VERSION.txt
+          - docker-assets.yaml
           - python/VERSION.txt
     - name: Get latest commit from main
       id: commit
@@ -56,6 +60,8 @@ jobs:
     if: fromJSON(needs.request.outputs.run || 'false')
     permissions:
       actions: read
+      contents: read
+      id-token: write
     # secrets.ENVOY_GPG_SNAKEOIL_KEY_PASSWORD
     # secrets.ENVOY_GPG_SNAKEOIL_KEY
     uses: ./.github/workflows/_publish.yml
@@ -66,10 +72,12 @@ jobs:
       actions-version: ${{ matrix.actions-version }}
       bazel-version: ${{ matrix.bazel-version }}
       bins-version: ${{ matrix.bins-version }}
+      docker-version: ${{ matrix.docker-version }}
       dry-run: true
       event: ${{ matrix.event }}
       python-filter-artifacts: ${{ matrix.python-filter-artifacts }}
       python-version: ${{ matrix.python-version }}
+      pypi-repository-url: ${{ matrix.pypi-repository-url || '' }}
       sha: ${{ matrix.sha || needs.request.outputs.sha }}
       skip: ${{ matrix.skip || (github.event_name != 'pull_request' && matrix.event == 'pull_request') }}
       title: ${{ needs.request.outputs.message }}
@@ -87,20 +95,27 @@ jobs:
         - event: push
           bins-version: 0.1.23
         - event: push
+          docker-version: 0.0.1
+        - event: push
           python-version: 0.0.23
         - event: push
           python-version: 0.0.23
           python-filter-artifacts: .
         - event: push
+          python-version: 0.0.23
+          pypi-repository-url: https://test.pypi.org/legacy/
+        - event: push
           actions-version: 0.0.123
           bazel-version: 0.2.17
           bins-version: 0.1.23
+          docker-version: 0.0.1
           python-version: 0.0.23
         # existing versions
         - event: push
           actions-version: 0.3.33
           bazel-version: 0.3.11
           bins-version: 0.1.27
+          docker-version: 0.0.1
           # not pre-existing version
           python-version: 0.0.23
         - event: push

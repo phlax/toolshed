@@ -2,9 +2,8 @@ import argparse
 import asyncio
 import pathlib
 import time
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from functools import cached_property
-from typing import (
-    Awaitable, Callable, Iterable, Sequence, Type)
 
 from aio.run import runner
 from aio.run.checker import abstract
@@ -19,6 +18,7 @@ class Checker(runner.Runner):
     Check methods should call the `self.warn`, `self.error` or
     `self.succeed` depending upon the outcome of the checks.
     """
+
     _active_check = ""
     checks: tuple[str, ...] = ()
     _preloader: asyncio.Task | None = None
@@ -84,8 +84,10 @@ class Checker(runner.Runner):
 
     @cached_property
     def path(self) -> pathlib.Path:
-        """The "path" - usually Envoy src dir. This is used for finding "
-        configs for the tooling and should be a dir
+        """The "path" - usually Envoy src dir.
+
+        This is used for finding configs for the tooling and should be
+        a dir.
         """
         try:
             path = pathlib.Path(self.args.path or self.args.paths[0])
@@ -140,7 +142,7 @@ class Checker(runner.Runner):
         return self.summary_class(self)
 
     @property
-    def summary_class(self) -> Type["CheckerSummary"]:
+    def summary_class(self) -> type["CheckerSummary"]:
         """Checker's summary class."""
         return CheckerSummary
 
@@ -330,7 +332,7 @@ class Checker(runner.Runner):
 
     @cached_property
     def completed_checks(self) -> set[str]:
-        """Checks that have succesfully completed."""
+        """Checks that have successfully completed."""
         return set()
 
     @cached_property
@@ -363,7 +365,7 @@ class Checker(runner.Runner):
 
     @cached_property
     def preloaded_checks(self) -> set[str]:
-        """Checks for wich all preload tasks are complete."""
+        """Checks for which all preload tasks are complete."""
         return set()
 
     @property
@@ -467,7 +469,7 @@ class Checker(runner.Runner):
             if proceed:
                 await self.on_preload(task)
 
-    def preloader_catches(self, task: str) -> tuple[Type[BaseException], ...]:
+    def preloader_catches(self, task: str) -> tuple[type[BaseException], ...]:
         return tuple(self.preload_checks_data[task].get("catches", ()))
 
     @runner.cleansup

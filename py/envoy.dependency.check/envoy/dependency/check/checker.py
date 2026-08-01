@@ -1,81 +1,74 @@
 
 from functools import cached_property
-from typing import Dict, List, Optional, Type
 
 import abstracts
 
-from aio.api import github, nist
+from aio.api import github
 
 from envoy.dependency import check
 
 
-class DependencyCVE(check.ADependencyCVE):
-    pass
-
-
-class DependencyCVEs(check.ADependencyCVEs):
-
-    @property
-    def cpe_class(self) -> Type[nist.ACPE]:
-        return nist.CPE
-
-    @property
-    def cve_class(self) -> Type[check.ADependencyCVE]:
-        return DependencyCVE
-
-    @cached_property
-    def ignored_cves(self) -> List[str]:
-        return super().ignored_cves
-
-    @property
-    def nist_downloader_class(self) -> Type[nist.NISTDownloader]:
-        return nist.NISTDownloader
+NO_ISSUE_DEPENDENCIES = r"com_google_protobuf_protoc_[a-zA-Z0-9_]+$"
+GITHUB_REPO_LOCATION = "envoyproxy/envoy"
+LABELS = ("dependencies", "area/build", "no stalebot")
 
 
 class Dependency(check.ADependency):
+    """Envoy-specific dependency."""
 
     @property
-    def release_class(self) -> Type[check.ADependencyGithubRelease]:
+    def release_class(self) -> type[check.ADependencyGithubRelease]:
         return DependencyGithubRelease
 
 
 class DependencyGithubRelease(check.ADependencyGithubRelease):
+    """Envoy-specific dependency release."""
+
     pass
 
 
 class GithubDependencyReleaseIssue(check.AGithubDependencyReleaseIssue):
+    """Envoy-specific dependency release issue."""
+
     pass
 
 
 @abstracts.implementer(github.IGithubTrackedIssues)
 class GithubDependencyReleaseIssues(check.AGithubDependencyReleaseIssues):
+    """Envoy-specific dependency release issue tracker."""
 
     @property
-    def issue_class(self) -> Type[GithubDependencyReleaseIssue]:
+    def issue_class(self) -> type[GithubDependencyReleaseIssue]:
         return GithubDependencyReleaseIssue
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        return LABELS
+
+    @property
+    def repo_name(self) -> str:
+        return GITHUB_REPO_LOCATION
 
 
 @abstracts.implementer(github.IGithubIssuesTracker)
 class GithubDependencyIssuesTracker(github.AGithubIssuesTracker):
+    """Envoy-specific dependency issues tracker."""
 
     @cached_property
-    def tracked_issues(self) -> Dict:
+    def tracked_issues(self) -> dict[str, GithubDependencyReleaseIssues]:
         return dict(
             releases=GithubDependencyReleaseIssues(self.github))
 
 
 class DependencyChecker(check.ADependencyChecker):
+    """Envoy-specific dependency checker."""
 
     @property
-    def access_token(self) -> Optional[str]:
+    def access_token(self) -> str | None:
         return super().access_token
 
     @property
-    def cves_class(self) -> Type[check.ADependencyCVEs]:
-        return DependencyCVEs
-
-    @property
-    def dependency_class(self) -> Type[check.ADependency]:
+    def dependency_class(self) -> type[check.ADependency]:
         return Dependency
 
     @cached_property
@@ -83,5 +76,9 @@ class DependencyChecker(check.ADependencyChecker):
         return super().dependency_metadata
 
     @property
-    def issues_class(self) -> Type[github.IGithubIssuesTracker]:
+    def issues_class(self) -> type[github.IGithubIssuesTracker]:
         return GithubDependencyIssuesTracker
+
+    @property
+    def no_dep_issues_re(self) -> str:
+        return NO_ISSUE_DEPENDENCIES

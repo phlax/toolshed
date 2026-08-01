@@ -4,7 +4,6 @@ import asyncio
 import logging
 from concurrent import futures
 from functools import cached_property
-from typing import List, Optional, Set, Type
 
 import gidgethub
 
@@ -29,10 +28,10 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
     def __init__(
             self,
             id: str,
-            metadata: "typing.DependencyMetadataDict",
+            metadata: typing.DependencyMetadataDict,
             github: github.IGithubAPI,
-            loop: Optional[asyncio.AbstractEventLoop] = None,
-            pool: Optional[futures.Executor] = None) -> None:
+            loop: asyncio.AbstractEventLoop | None = None,
+            pool: futures.Executor | None = None) -> None:
         self.id = id
         self.metadata = metadata
         self.github = github
@@ -56,14 +55,6 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
         return count and count - 1 or count
 
     @cached_property
-    def cpe(self) -> Optional[str]:
-        """Configured CPE for this dependency."""
-        return (
-            str(self.metadata["cpe"])
-            if self.metadata.get("cpe", "N/A") != "N/A"
-            else None)
-
-    @cached_property
     def display_sha(self) -> str:
         """Truncated release sha of this dependency, may/not be the same as the
         `display_version`."""
@@ -78,7 +69,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
             else self.version)
 
     @property
-    def github_filetypes(self) -> Set[str]:
+    def github_filetypes(self) -> set[str]:
         return {".tar.gz", ".zip"}
 
     @cached_property
@@ -116,7 +107,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
             if not self.release.tagged
             else self.github_version)
 
-    @async_property
+    @async_property(cache=True)
     async def has_recent_commits(self) -> bool:
         """Flag indicating whether there are more recent commits than the
         current pinned commit."""
@@ -124,12 +115,15 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
             return await self.recent_commits > 1
         except (ConcurrentError, gidgethub.GitHubException) as e:
             logger.debug(
-                f"Fetching recent commits failed ({self}): {type(e)} {e}")
-            raise e
+                "Fetching recent commits failed (%s): %s %s",
+                self,
+                type(e),
+                e)
+            raise
 
     @async_property(cache=True)
     async def newer_release(
-            self) -> Optional["abstract.ADependencyGithubRelease"]:
+            self) -> "abstract.ADependencyGithubRelease | None":
         """Release with highest semantic version if newer than the current
         release, or where pin is to tag or commit."""
         # TODO: consider adding `newer_tags` for deps that only create
@@ -139,13 +133,16 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
                 since=await self.release.timestamp)
         except (ConcurrentError, gidgethub.GitHubException) as e:
             logger.debug(
-                f"Fetching newer release failed ({self}): {type(e)} {e}")
-            raise e
+                "Fetching newer release failed (%s): %s %s",
+                self,
+                type(e),
+                e)
+            raise
         return (
             self.release_class(
                 self.repo,
                 newer_release.tag_version,
-                release=newer_release)  # type:ignore
+                release=newer_release)
             if (newer_release
                 and (version.parse(newer_release.tag_version)
                      != self.release.version))
@@ -179,9 +176,9 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
             loop=self.loop,
             pool=self.pool)
 
-    @property  # type:ignore
+    @property
     @abstracts.interfacemethod
-    def release_class(self) -> Type["abstract.ADependencyGithubRelease"]:
+    def release_class(self) -> type["abstract.ADependencyGithubRelease"]:
         """Github release class."""
         raise NotImplementedError
 
@@ -190,7 +187,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
         """Release (or published) date of this dependency."""
         return self.metadata["release_date"]
 
-    @async_property
+    @async_property(cache=True)
     async def release_date_mismatch(self) -> bool:
         """Flag indicating the metadata date doesnt match the Github date."""
         return (
@@ -202,7 +199,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
         """Release (or published) sha of this dependency."""
         return self.metadata["sha256"]
 
-    @async_property
+    @async_property(cache=True)
     async def release_sha_mismatch(self) -> bool:
         """Flag indicating the metadata sha doesnt match the Github sha."""
         return (
@@ -210,7 +207,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
             != await self.release.sha)
 
     @cached_property
-    def release_version(self) -> Optional[version.Version]:
+    def release_version(self) -> version.Version | None:
         """Semantic version for the release of this dependency if available."""
         try:
             return version.Version(self.version)
@@ -221,10 +218,10 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
     def repo(self) -> github.IGithubRepo:
         """Github repo for this dependency."""
         return self.github[
-            f"{self.organization}/{self.project}"]  # type: ignore
+            f"{self.organization}/{self.project}"]
 
     @cached_property
-    def url_components(self) -> List[str]:
+    def url_components(self) -> list[str]:
         """Github URL components."""
         if not self.github_url:
             urls = "\n".join(self.urls)
@@ -234,7 +231,7 @@ class ADependency(event.AReactive, metaclass=abstracts.Abstraction):
         return self.github_url.split('/')
 
     @property
-    def urls(self) -> List[str]:
+    def urls(self) -> list[str]:
         """Urls of this dependency."""
         return self.metadata["urls"]
 

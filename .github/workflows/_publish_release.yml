@@ -1,13 +1,16 @@
 name: _publish_release
 
 permissions:
-  actions: read
+  contents: read
 
 on:
   workflow_call:
     secrets:
       app-id:
       app-key:
+      dockerhub-username:
+      dockerhub-password:
+      gcr-key:
       gpg-key:
       gpg-password:
 
@@ -42,6 +45,15 @@ on:
       prepare-dev:
         required: false
         type: string
+      pypi-dry-run:
+        default: true
+        type: boolean
+      pypi-publish:
+        default: false
+        type: boolean
+      pypi-repository-url:
+        default:
+        type: string
       repository:
         default: ${{ github.repository }}
         type: string
@@ -72,8 +84,12 @@ jobs:
       actions: read
     name: release (${{ inputs.name }})
     runs-on: ubuntu-24.04
+    outputs:
+      continue: ${{ steps.status.outputs.continue }}
+      run-ids: ${{ steps.status.outputs.run-ids }}
+      version: ${{ steps.status.outputs.version }}
     steps:
-    - uses: envoyproxy/toolshed/actions/appauth@d10938876b114aa2a001b43b43158f1bf7008f1a
+    - uses: envoyproxy/toolshed/actions/appauth@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       id: appauth
       name: Appauth
       if: >-
@@ -84,7 +100,7 @@ jobs:
         key: ${{ secrets.app-key }}
     - id: checkout
       name: Checkout the repository
-      uses: envoyproxy/toolshed/actions/github/checkout@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/checkout@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         branch: main
         committer-name: ${{ inputs.committer-name }}
@@ -95,24 +111,25 @@ jobs:
         token: ${{ steps.appauth.outputs.token }}
 
     - if: inputs.dry-run
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         path: temprepo
     - if: inputs.dry-run
       run: |
         cp -a temprepo/.github/workflows/prepare_bazel_dev.sh .github/workflows
+        cp -a temprepo/.github/workflows/prepare_python_dev.sh .github/workflows
         rm -rf temprepo
     - name: Initialize GPG
       id: gpg
       if: >-
         inputs.artifacts
-      uses: envoyproxy/toolshed/actions/gpg@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/gpg@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         gpg-key: ${{ ! inputs.dry-run && secrets.gpg-key || '' }}
         gpg-password: ${{ ! inputs.dry-run && secrets.gpg-password || '' }}
     - name: Release title (eg commit message)
       id: title
-      uses: envoyproxy/toolshed/actions/jq@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/jq@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
       with:
         options: -sRr
         input: |
@@ -121,7 +138,8 @@ jobs:
           split("\n") | first
 
     - name: Publish the release
-      uses: envoyproxy/toolshed/actions/github/release@d10938876b114aa2a001b43b43158f1bf7008f1a
+      uses: envoyproxy/toolshed/actions/github/release@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      id: status
       with:
         artifact-workflows: ${{ inputs.artifact-workflows }}
         artifacts: ${{ inputs.artifacts }}
@@ -142,3 +160,111 @@ jobs:
         version: ${{ inputs.version }}
         version-file: ${{ inputs.version-file }}
         workflows: ${{ inputs.workflows }}
+
+  # Publishes Python wheels to PyPI using OIDC Trusted Publishing.
+  # Runs as a separate job so that:
+  #   - The `pypi` environment is only triggered for real (non-dry-run) publishes.
+  #   - id-token: write is scoped to this job only, not all release jobs.
+  pypi_publish:
+    needs: release
+    name: PyPI publish (${{ inputs.name }})
+    # Only run when this is a Python release with all required conditions met.
+    if: >-
+      inputs.name == 'python'
+      && fromJSON(inputs.pypi-publish)
+      && fromJSON(inputs.artifacts)
+      && needs.release.outputs.version != ''
+      && ! fromJSON(needs.release.outputs.version).is_dev
+      && fromJSON(needs.release.outputs.continue)
+    # Use the `pypi` environment only for real (non-dry-run) publishes.
+    # For dry-runs, no environment is set to avoid triggering deployment events.
+    # i.e. set `pypi` when neither dry-run nor pypi-dry-run is set.
+    environment: ${{ (!fromJSON(inputs.dry-run) && !fromJSON(inputs.pypi-dry-run)) && 'pypi' || null }}
+    permissions:
+      actions: read
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Download Python artifacts
+      uses: envoyproxy/toolshed/actions/github/release/artifacts@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        dry-run: ${{ fromJSON(inputs.dry-run) || fromJSON(inputs.pypi-dry-run) }}
+        filter-artifacts: ${{ inputs.filter-artifacts }}
+        run-ids: ${{ needs.release.outputs.run-ids }}
+        publish-directory: artifacts/publish
+        template-artifacts: ${{ inputs.template-artifacts }}
+        workflows: ${{ inputs.artifact-workflows }}
+    - name: Publish python wheels to PyPI
+      uses: envoyproxy/toolshed/actions/python/release/publish@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        dry-run: ${{ fromJSON(inputs.dry-run) || fromJSON(inputs.pypi-dry-run) }}
+        packages-dir: artifacts/publish
+        repository-url: ${{ inputs.pypi-repository-url }}
+
+  # Pushes multi-arch Docker manifests to docker.io/envoyproxy and gcr.io/envoy-ci.
+  # Runs as a separate job so that docker registry credentials are scoped to this job only.
+  docker_publish:
+    permissions:
+      actions: read
+      contents: read
+    needs: release
+    name: Docker publish (${{ inputs.name }})
+    if: >-
+      inputs.name == 'docker'
+      && fromJSON(needs.release.outputs.continue)
+      && needs.release.outputs.version != ''
+      && ! fromJSON(needs.release.outputs.version).is_dev
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+    - name: Get docker version
+      id: docker-version
+      shell: bash
+      run: |
+        TAG_VERSION=$(cat ./docker/build/VERSION.txt)
+        echo "version=${TAG_VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Get echo version
+      id: echo-version
+      shell: bash
+      run: |
+        ECHO_VER=$(yq '.assets["toolshed-echo"].version' docker-assets.yaml)
+        echo "version=${ECHO_VER}" >> $GITHUB_OUTPUT
+
+    - name: Generate manifest configuration
+      id: manifest-config
+      uses: envoyproxy/toolshed/actions/jq@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        input: .github/docker-manifests.yml
+        input-format: yaml-path
+        filter: >-
+          .manifests
+          | map(. + {
+              tag: (
+                .tag
+                | gsub("{version}"; "${{ steps.docker-version.outputs.version }}")
+                | gsub("{echo-version}"; "${{ steps.echo-version.outputs.version }}")),
+              "artifact-pattern": (
+                .["artifact-pattern"]
+                | gsub("{version}"; "${{ steps.docker-version.outputs.version }}")
+                | gsub("{echo-version}"; "${{ steps.echo-version.outputs.version }}")),
+              "additional-tags": (
+                if .["additional-tags"] then
+                  .["additional-tags"]
+                  | map(gsub("{version}"; "${{ steps.docker-version.outputs.version }}")
+                  | gsub("{echo-version}"; "${{ steps.echo-version.outputs.version }}"))
+                else null end)
+            })
+          | {manifests: .}
+
+    - name: Collect and push OCI artifacts
+      uses: envoyproxy/toolshed/actions/oci/collector@5171ddd579f53dcef432bc54e16e2d2c90864968  # actions-v0.4.13
+      with:
+        manifest-config: ${{ steps.manifest-config.outputs.value }}
+        run-id: ${{ fromJSON(needs.release.outputs.run-ids)['Docker CI'] }}
+        github-token: ${{ github.token }}
+        dry-run: ${{ inputs.dry-run }}
+        dockerhub-username: ${{ ! fromJSON(inputs.dry-run) && secrets.dockerhub-username || '' }}
+        dockerhub-password: ${{ ! fromJSON(inputs.dry-run) && secrets.dockerhub-password || '' }}
+        gcr-key: ${{ ! fromJSON(inputs.dry-run) && secrets.gcr-key || '' }}

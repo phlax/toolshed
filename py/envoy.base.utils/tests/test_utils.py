@@ -180,26 +180,6 @@ def test_typed(patches, assignable):
         == [(value, "TYPE"), {}])
 
 
-@pytest.mark.parametrize("filter", [True, False])
-async def test_async_list(filter):
-
-    async def async_generator():
-        for x in range(0, 20):
-            yield x
-
-    kwargs = (
-        dict(filter=lambda x: ((x % 2) and x))
-        if filter
-        else {})
-    expected = (
-        [x for x in range(0, 20) if (x % 2)]
-        if filter
-        else list(range(0, 20)))
-    assert (
-        await utils.async_list(async_generator(), **kwargs)
-        == expected)
-
-
 @pytest.mark.parametrize("path", ["/tmp", pathlib.Path("/tmp")])
 def test_cd_and_return(path):
     cwd = pathlib.Path.cwd()
@@ -209,15 +189,6 @@ def test_cd_and_return(path):
         assert pathlib.Path.cwd() == pathlib.Path("/tmp")
 
     assert pathlib.Path.cwd() == cwd
-
-
-@pytest.mark.parametrize("data", [b"BYTES", "STRING"])
-def test_to_bytes(data):
-    assert (
-        utils.to_bytes(data)
-        == (data.encode("utf-8")
-            if not isinstance(data, bytes)
-            else data))
 
 
 @pytest.mark.parametrize("length", [0, 10, 20, 30, 40, 50])
@@ -255,11 +226,11 @@ def test_is_sha(patches, length, raises):
 
 def test_dt_to_utc_isoformat(patches):
     patched = patches(
-        "pytz",
+        "timezone",
         prefix="envoy.base.utils.utils")
     dt = MagicMock()
 
-    with patched as (m_pytz, ):
+    with patched as (m_timezone, ):
         assert (
             utils.dt_to_utc_isoformat(dt)
             == (dt.replace.return_value.date
@@ -267,7 +238,7 @@ def test_dt_to_utc_isoformat(patches):
 
     assert (
         dt.replace.call_args
-        == [(), dict(tzinfo=m_pytz.UTC)])
+        == [(), dict(tzinfo=m_timezone.utc)])
     assert (
         dt.replace.return_value.date.call_args
         == [(), {}])

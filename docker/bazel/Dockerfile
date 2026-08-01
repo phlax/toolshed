@@ -5,7 +5,8 @@ ARG APT_BASE_PKGS="\
     curl \
     gnupg \
     language-pack-en-base \
-    software-properties-common"
+    software-properties-common \
+    sudo"
 ARG USER_NAME
 ARG USER_ID
 ARG GROUP_ID
@@ -19,6 +20,8 @@ RUN --mount=type=tmpfs,target=/var/cache/apt \
 set -e
 apt-get update
 apt-get install -y -qq --no-install-recommends $APT_BASE_PKGS
+curl -LO http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.2_amd64.deb
+apt install ./libtinfo5_6.3-2ubuntu0.2_amd64.deb
 EOF
 RUN <<EOF
 set -e

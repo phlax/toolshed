@@ -1,7 +1,8 @@
 
 import urllib
+from collections.abc import Callable
 from functools import cached_property, partial
-from typing import Any, Callable
+from typing import Any
 
 import gidgethub
 
@@ -92,7 +93,7 @@ class AGithubIssues(metaclass=abstracts.Abstraction):
         except gidgethub.GitHubException as e:
             raise exceptions.IssueCreateError(
                 f"Failed to create issue '{title}' in {repo.name}\n"
-                f"Recieved: {e}")
+                f"Received: {e}") from e
         return self.github.issue_class(repo, data)
 
     def inflater(

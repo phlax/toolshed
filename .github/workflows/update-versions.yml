@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8  # v6.0.1
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
     - name: Determine release tag
       id: release
       env:
@@ -73,6 +73,9 @@ jobs:
       id: hashes
       run: |
         cd /tmp/release-artifacts
+
+        # Read the LLVM version from versions.bzl so we can form exact artifact filenames.
+        LLVM_VERSION=$(grep '^LLVM_VERSION = ' "${GITHUB_WORKSPACE}/bazel/versions.bzl" | sed 's/.*"\(.*\)".*/\1/')
 
         # Calculate hashes for all files
         echo "## Calculating SHA256 hashes" >> $GITHUB_STEP_SUMMARY
@@ -138,6 +141,22 @@ jobs:
                 echo "⚠️ Warning: glint ${arch} binary not found" >> $GITHUB_STEP_SUMMARY
             fi
         done
+
+        # Minimal LLVM artifacts
+        for platform in "Linux-X64" "Linux-ARM64" "macOS-ARM64"; do
+            # Use the exact LLVM version in the filename to avoid ambiguity when
+            # multiple LLVM-version artifacts might be present in the same directory.
+            exact_name="llvm-minimal-${LLVM_VERSION}-${platform}.tar.zst"
+            if [[ -e "$exact_name" ]]; then
+                hash=$(sha256sum "$exact_name" | cut -d' ' -f1)
+                # Normalize platform key for GitHub Actions output name (no hyphens)
+                key=$(echo "$platform" | tr '-' '_' | tr '[:upper:]' '[:lower:]')
+                echo "llvm_minimal_${key}_sha256=${hash}" >> $GITHUB_OUTPUT
+                echo "- ${exact_name}: \`${hash}\`" >> $GITHUB_STEP_SUMMARY
+            else
+                echo "⚠️ Warning: llvm-minimal ${platform} artifact not found (expected ${exact_name})" >> $GITHUB_STEP_SUMMARY
+            fi
+        done
     - name: Update versions.bzl
       if: steps.release.outputs.skip != 'true'
       run: |
@@ -193,6 +212,20 @@ jobs:
             sed -i "s/\"sysroot_arm64_sha256\": \"[a-f0-9]*\"/\"sysroot_arm64_sha256\": \"${HASH}\"/" "$FILE"
         fi
 
+        # Update llvm_minimal_sha256 hashes in nested structure.
+        # The range /"llvm_minimal_sha256"/,/^    },/ works because the inner
+        # dict closes with exactly 4 spaces of indentation per Starlark style —
+        # the same approach used for glint_sha256 above.
+        update_llvm_minimal() {
+            local platform="$1" hash="$2"
+            [[ -z "$hash" ]] && return
+            sed -i '/"llvm_minimal_sha256"/,/^    },/{s/"'"$platform"'": "[a-f0-9]*"/"'"$platform"'": "'"$hash"'"/}' "$FILE"
+        }
+
+        update_llvm_minimal "Linux-X64"   "${{ steps.hashes.outputs.llvm_minimal_linux_x64_sha256 }}"
+        update_llvm_minimal "Linux-ARM64"  "${{ steps.hashes.outputs.llvm_minimal_linux_arm64_sha256 }}"
+        update_llvm_minimal "macOS-ARM64"  "${{ steps.hashes.outputs.llvm_minimal_macos_arm64_sha256 }}"
+
         echo "## Updated versions.bzl" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
         git diff bazel/versions.bzl >> $GITHUB_STEP_SUMMARY
@@ -212,7 +245,7 @@ jobs:
         fi
     - name: Create Pull Request
       if: github.event_name == 'workflow_dispatch' && steps.changes.outputs.changed == 'true' && steps.release.outputs.skip != 'true'
-      uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725  # v8
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1  # v8
       env:
         MSAN_SHA: >-
           ${{ steps.hashes.outputs.msan_libs_sha256

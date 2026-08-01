@@ -1,7 +1,8 @@
+"""Validated code-block directive for Envoy docs configuration snippets."""
 
 import os
 from functools import cached_property
-from typing import Dict, List
+from typing import cast
 
 from docutils.parsers.rst import directives
 
@@ -22,6 +23,7 @@ class ValidatingCodeBlock(CodeBlock):
     will be skipped if SPHINX_SKIP_CONFIG_VALIDATION environment
     variable is set.
     """
+
     has_content = True
     required_arguments = CodeBlock.required_arguments
     optional_arguments = CodeBlock.optional_arguments
@@ -30,10 +32,10 @@ class ValidatingCodeBlock(CodeBlock):
     option_spec.update(CodeBlock.option_spec)
 
     @cached_property
-    def configs(self) -> Dict:
-        _configs = dict(skip_validation=False)
+    def configs(self) -> dict[str, str | bool]:
+        _configs: dict[str, str | bool] = dict(skip_validation=False)
         if config_path := os.environ.get("ENVOY_DOCS_BUILD_CONFIG"):
-            _configs.update(from_yaml(config_path))
+            _configs.update(cast(dict[str, str], from_yaml(config_path)))
         return _configs
 
     @property
@@ -42,9 +44,9 @@ class ValidatingCodeBlock(CodeBlock):
 
     @cached_property
     def proto_validator(self) -> interface.IProtobufValidator:
-        return ProtobufValidator(self.configs["descriptor_path"])
+        return ProtobufValidator(cast(str, self.configs["descriptor_path"]))
 
-    def run(self) -> List:
+    def run(self) -> list:
         source, line = self.state_machine.get_source_and_line(self.lineno)
         # built-in directives.unchanged_required option validator produces
         # a confusing error message
@@ -62,14 +64,14 @@ class ValidatingCodeBlock(CodeBlock):
             self.proto_validator.validate_yaml(
                 '\n'.join(self.content),
                 self.options.get('type-name'))
-        except (ParseError, KeyError):
+        except (ParseError, KeyError) as e:
             raise ExtensionError(
                 "Failed config validation for type: "
                 f"'{self.options.get('type-name')}' in: {source} line: "
-                f"{line}")
+                f"{line}") from e
 
 
-def setup(app: Sphinx) -> Dict:
+def setup(app: Sphinx) -> dict:
     app.add_directive("validated-code-block", ValidatingCodeBlock)
     return dict(
         version="0.1",

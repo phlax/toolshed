@@ -1,9 +1,10 @@
-from typing import Dict
+import errno
 from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
 from envoy.docs import sphinx_runner
+from envoy.docs.sphinx_runner.runner import ENVOY_DOCS_BASE_URL
 
 
 class DummySphinxRunner(sphinx_runner.SphinxRunner):
@@ -15,7 +16,6 @@ class DummySphinxRunner(sphinx_runner.SphinxRunner):
 def test_sphinx_runner_constructor():
     runner = DummySphinxRunner()
     assert runner._build_sha == "UNKNOWN"
-    assert runner._build_dir == "."
 
 
 @pytest.mark.parametrize("docs_tag", [None, "", "SOME_DOCS_TAG"])
@@ -115,7 +115,7 @@ def test_sphinx_runner_config_file(patches):
         == [(m_utils.typed.return_value, m_fpath.return_value), {}])
     assert (
         m_utils.typed.call_args
-        == [(Dict, m_configs.return_value), {}])
+        == [(dict, m_configs.return_value), {}])
     assert "config_file" in runner.__dict__
 
 
@@ -134,6 +134,23 @@ def test_sphinx_runner_config_file_path(patches):
         m_build.return_value.joinpath.call_args
         == [('build.yaml',), {}])
     assert "config_file_path" not in runner.__dict__
+
+
+def test_sphinx_runner_warnings_file(patches):
+    runner = DummySphinxRunner()
+    patched = patches(
+        ("SphinxRunner.build_dir", dict(new_callable=PropertyMock)),
+        prefix="envoy.docs.sphinx_runner.runner")
+
+    with patched as (m_build, ):
+        assert (
+            runner.warnings_file
+            == m_build.return_value.joinpath.return_value)
+
+    assert (
+        m_build.return_value.joinpath.call_args
+        == [('sphinx-warnings.txt',), {}])
+    assert "warnings_file" not in runner.__dict__
 
 
 @pytest.mark.parametrize("validate", [True, False])
@@ -252,19 +269,22 @@ def test_sphinx_runner_docs_tag(patches, docs_tag, version_dev):
         == [("-dev", ), {}])
 
 
-def test_sphinx_runner_html_dir(patches):
+@pytest.mark.parametrize("build_target", ["html", "dirhtml"])
+def test_sphinx_runner_output_dir(patches, build_target):
     runner = DummySphinxRunner()
     patched = patches(
         ("SphinxRunner.build_dir", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.build_target", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
-    with patched as (m_build, ):
-        assert runner.html_dir == m_build.return_value.joinpath.return_value
+    with patched as (m_build, m_target):
+        m_target.return_value = build_target
+        assert runner.output_dir == m_build.return_value.joinpath.return_value
 
     assert (
         m_build.return_value.joinpath.call_args
-        == [('generated', 'html'), {}])
-    assert "html_dir" in runner.__dict__
+        == [('generated', build_target), {}])
+    assert "output_dir" in runner.__dict__
 
 
 @pytest.mark.parametrize("versions_exists", [True, False])
@@ -277,7 +297,7 @@ def test_sphinx_runner_intersphinx_mapping(patches, versions_exists):
     versions = {f"K{i}": f"V{i}" for i in range(0, 5)}
     mangled = {
         f"v{k}": [
-            f"https://www.envoyproxy.io/docs/envoy/v{v}",
+            f"{ENVOY_DOCS_BASE_URL}/v{v}",
             f"inventories/v{k}/objects.inv"]
         for k, v
         in versions.items()}
@@ -295,7 +315,7 @@ def test_sphinx_runner_intersphinx_mapping(patches, versions_exists):
     if versions_exists:
         assert (
             m_utils.from_yaml.call_args
-            == [(m_versions.return_value, Dict[str, str]), {}])
+            == [(m_versions.return_value, dict[str, str]), {}])
     else:
         assert not m_utils.from_yaml.called
 
@@ -340,29 +360,6 @@ def test_sphinx_runner_overwrite(patches):
     assert "overwrite" not in runner.__dict__
 
 
-@pytest.mark.parametrize("major", [2, 3, 4])
-@pytest.mark.parametrize("minor", [5, 6, 7, 8, 9])
-def test_sphinx_runner_py_compatible(patches, major, minor):
-    runner = DummySphinxRunner()
-    patched = patches(
-        "bool",
-        "sys",
-        prefix="envoy.docs.sphinx_runner.runner")
-
-    with patched as (m_bool, m_sys):
-        m_sys.version_info.major = major
-        m_sys.version_info.minor = minor
-        assert runner.py_compatible == m_bool.return_value
-    expected = (
-        True
-        if major == 3 and minor >= 8
-        else False)
-    assert (
-        m_bool.call_args
-        == [(expected,), {}])
-    assert "py_compatible" not in runner.__dict__
-
-
 @pytest.mark.parametrize("docs_tag", [None, "", "SOME_DOCS_TAG"])
 def test_sphinx_runner_release_level(patches, docs_tag):
     runner = DummySphinxRunner()
@@ -397,7 +394,7 @@ def test_sphinx_runner_rst_dir(patches, rst_tar):
         m_dir.return_value.joinpath.call_args
         == [('generated', 'rst'), {}])
 
-    if rst_tar:
+    if rst_tar is not None:
         assert (
             m_utils.extract.call_args
             == [(m_dir.return_value.joinpath.return_value, rst_tar), {}])
@@ -406,7 +403,8 @@ def test_sphinx_runner_rst_dir(patches, rst_tar):
     assert "rst_dir" in runner.__dict__
 
 
-def test_sphinx_runner_rst_tar(patches):
+@pytest.mark.parametrize("rst_tar", [None, "", "SOME_DOCS_TAG"])
+def test_sphinx_runner_rst_tar(patches, rst_tar):
     runner = DummySphinxRunner()
     patched = patches(
         "pathlib",
@@ -414,11 +412,17 @@ def test_sphinx_runner_rst_tar(patches):
         prefix="envoy.docs.sphinx_runner.runner")
 
     with patched as (m_plib, m_args):
-        assert runner.rst_tar == m_plib.Path.return_value
+        m_args.return_value.rst_tar = rst_tar
+        assert (
+            runner.rst_tar
+            == (m_plib.Path.return_value if rst_tar else None))
 
-    assert (
-        m_plib.Path.call_args
-        == [(m_args.return_value.rst_tar, ), {}])
+    if rst_tar:
+        assert (
+            m_plib.Path.call_args
+            == [(m_args.return_value.rst_tar, ), {}])
+    else:
+        assert not m_plib.Path.called
     assert "rst_tar" in runner.__dict__
 
 
@@ -429,23 +433,25 @@ def test_sphinx_runner_sphinx_args(patches, verbosity):
         ("SphinxRunner.args", dict(new_callable=PropertyMock)),
         ("SphinxRunner.build_target", dict(new_callable=PropertyMock)),
         ("SphinxRunner.jobs", dict(new_callable=PropertyMock)),
-        ("SphinxRunner.html_dir", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.output_dir", dict(new_callable=PropertyMock)),
         ("SphinxRunner.rst_dir", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.warnings_file", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
     sphinx_args = (
         []
         if verbosity == "info"
         else ["-q"])
 
-    with patched as (m_args, m_target, m_jobs, m_html, m_rst):
+    with patched as (m_args, m_target, m_jobs, m_output, m_rst, m_warn):
         m_args.return_value.verbosity = verbosity
         assert (
             runner.sphinx_args
             == sphinx_args + [
-                '-W', "-j", m_jobs.return_value,
+                '-W', "-w", str(m_warn.return_value),
+                "-j", m_jobs.return_value,
                 '--keep-going', '--color', '-b', m_target.return_value,
                 str(m_rst.return_value),
-                str(m_html.return_value)])
+                str(m_output.return_value)])
 
     assert "sphinx_args" not in runner.__dict__
 
@@ -621,53 +627,94 @@ def test_sphinx_runner_add_arguments(patches):
             [('output_path',), {}]])
 
 
-@pytest.mark.parametrize("fails", [True, False])
-def test_sphinx_runner_build_html(patches, fails):
+@pytest.mark.parametrize("warnings", ["", "SOME WARNING"])
+@pytest.mark.parametrize("rc", [0, 7])
+def test_sphinx_runner_build_html(patches, rc, warnings):
     runner = DummySphinxRunner()
     patched = patches(
-        "debug",
         "sphinx_build",
-        ("SphinxRunner.jobs", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.log", dict(new_callable=PropertyMock)),
+        "SphinxRunner._read_warnings",
+        ("SphinxRunner.warnings_file", dict(new_callable=PropertyMock)),
         ("SphinxRunner.sphinx_args", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
-    with patched as (m_debug, m_sphinx, m_jobs, m_args):
-        m_sphinx.side_effect = lambda s: fails
+    with patched as (m_sphinx, m_log, m_warn, m_file, m_args):
+        m_sphinx.side_effect = lambda s: rc
+        m_warn.return_value = warnings
         e = None
-        if fails:
+        if rc:
             with pytest.raises(sphinx_runner.SphinxBuildError) as e:
                 runner.build_html()
         else:
             runner.build_html()
 
     assert (
-        m_debug.call_args
-        == [(m_jobs.return_value,), {}])
-    assert (
         m_sphinx.call_args
         == [(m_args.return_value,), {}])
+    assert (
+        m_warn.call_args
+        == [(), {}])
 
-    if fails:
-        assert e.value.args == ('BUILD FAILED',)
+    if rc:
+        expected = f"BUILD FAILED (sphinx exit code {rc})"
+        if warnings:
+            expected = f"{expected}\n\nSphinx warnings:\n{warnings}"
+        assert e.value.args == (expected,)
+        assert not m_log.return_value.warning.called
     else:
         assert not e
+        if warnings:
+            assert (
+                m_log.return_value.warning.call_args
+                == [(("Sphinx emitted warnings despite successful build "
+                      f"(see {m_file.return_value})"),), {}])
+        else:
+            assert not m_log.return_value.warning.called
+
+
+def test_sphinx_runner__read_warnings(patches, tmp_path):
+    runner = DummySphinxRunner()
+    warnings_file = tmp_path.joinpath("sphinx-warnings.txt")
+    patched = patches(
+        ("SphinxRunner.warnings_file", dict(new_callable=PropertyMock)),
+        prefix="envoy.docs.sphinx_runner.runner")
+
+    with patched as (m_warnings, ):
+        m_warnings.return_value = warnings_file
+        assert runner._read_warnings() == ""
+
+        warnings_file.write_text("")
+        assert runner._read_warnings() == ""
+
+        warnings_file.write_text("line 1\nline 2\n")
+        assert runner._read_warnings() == "line 1\nline 2"
+
+        warnings_lines = [f"line {n}" for n in range(55)]
+        warnings_file.write_text("\n".join(warnings_lines))
+        warnings_tail = "\n".join(warnings_lines[-50:])
+        assert (
+            runner._read_warnings()
+            == ("...(truncated, full warnings in "
+                f"{warnings_file})\n"
+                f"{warnings_tail}"))
 
 
 def test_sphinx_runner_build_summary(patches):
     runner = DummySphinxRunner()
     patched = patches(
-        "print",
+        ("SphinxRunner.log", dict(new_callable=PropertyMock)),
         "SphinxRunner._color",
         ("SphinxRunner.configs", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
-    with patched as (m_print, m_color, m_configs):
+    with patched as (m_log, m_color, m_configs):
         m_configs.return_value.items.return_value = (("a", "A"), ("b", "B"))
         runner.build_summary()
 
     assert (
-        m_print.call_args_list
-        == [[(), {}],
+        m_log.return_value.info.call_args_list
+        == [[("",), {}],
             [(m_color.return_value,), {}],
             [(m_color.return_value,), {}],
             [(f"{m_color.return_value} {m_color.return_value}: "
@@ -676,7 +723,7 @@ def test_sphinx_runner_build_summary(patches):
               f"{m_color.return_value}",), {}],
             [(m_color.return_value,), {}],
             [(m_color.return_value,), {}],
-            [(), {}]])
+            [("",), {}]])
     assert (
         m_color.call_args_list
         == [[('#### Sphinx build configs #####################',), {}],
@@ -691,32 +738,27 @@ def test_sphinx_runner_build_summary(patches):
             [('###############################################',), {}]])
 
 
-@pytest.mark.parametrize("py_compat", [True, False])
 @pytest.mark.parametrize("release_level", ["pre-release", "tagged"])
 @pytest.mark.parametrize("version_number", ["1.17.0", "1.23.1", "1.43.7"])
 @pytest.mark.parametrize("docs_tag", ["v1.17.0", "v1.23.1", "v1.73.3"])
 @pytest.mark.parametrize(
     "current", ["XXX v1.17 ZZZ", "AAA v1.23 VVV", "BBB v1.73 EEE"])
 def test_sphinx_runner_check_env(
-        patches, py_compat, release_level, version_number, docs_tag, current):
+        patches, release_level, version_number, docs_tag, current):
     runner = DummySphinxRunner()
     patched = patches(
-        "platform",
         ("SphinxRunner.configs", dict(new_callable=PropertyMock)),
         ("SphinxRunner.version_number", dict(new_callable=PropertyMock)),
         ("SphinxRunner.docs_tag", dict(new_callable=PropertyMock)),
-        ("SphinxRunner.py_compatible", dict(new_callable=PropertyMock)),
         ("SphinxRunner.rst_dir", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
     fails = (
-        not py_compat
-        or (release_level == "tagged"
-            and (f"v{version_number}" != docs_tag
-                 or version_number not in current)))
+        release_level == "tagged"
+        and (f"v{version_number}" != docs_tag
+             or version_number not in current))
 
-    with patched as (m_platform, m_configs, m_version, m_tag, m_py, m_rst):
-        m_py.return_value = py_compat
+    with patched as (m_configs, m_version, m_tag, m_rst):
         m_configs.return_value.__getitem__.return_value = release_level
         m_version.return_value = version_number
         m_tag.return_value = docs_tag
@@ -728,13 +770,6 @@ def test_sphinx_runner_check_env(
                 runner.check_env()
         else:
             runner.check_env()
-
-    if not py_compat:
-        assert (
-            e.value.args
-            == ("ERROR: python version must be >= 3.8, "
-                f"you have {m_platform.python_version.return_value}", ))
-        return
 
     if release_level != "tagged":
         return
@@ -755,69 +790,189 @@ def test_sphinx_runner_check_env(
         assert (
             e.value.args
             == (f"Git tag ({version_number}) not found "
-                "in version_history/current.rst", ))
+                f"in version_history/{minor_version}/{docs_tag}.rst", ))
+
+
+@pytest.mark.parametrize(
+    "docs_tag,version_number,current",
+    [("v1.17.0",
+      "1.17.0",
+      FileNotFoundError(
+          errno.ENOENT,
+          "No such file or directory",
+          "version_history/v1.17/v1.17.0.rst")),
+     ("v1.23.1", "1.23.1", "XXX v1.23.1 ZZZ")])
+def test_sphinx_runner_check_env_missing_version_file(
+        patches, docs_tag, version_number, current):
+    runner = DummySphinxRunner()
+    patched = patches(
+        ("SphinxRunner.configs", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.version_number", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.docs_tag", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.rst_dir", dict(new_callable=PropertyMock)),
+        prefix="envoy.docs.sphinx_runner.runner")
+
+    with patched as (m_configs, m_version, m_tag, m_rst):
+        m_configs.return_value.__getitem__.return_value = "tagged"
+        m_version.return_value = version_number
+        m_tag.return_value = docs_tag
+        if isinstance(current, FileNotFoundError):
+            (m_rst.return_value.joinpath
+             .return_value.read_text.side_effect) = current
+        else:
+            (m_rst.return_value.joinpath
+             .return_value.read_text.return_value) = current
+
+        if isinstance(current, FileNotFoundError):
+            with pytest.raises(sphinx_runner.SphinxEnvError) as e:
+                runner.check_env()
+            assert "Version history file not found" in str(e.value)
+            assert docs_tag in str(e.value)
+            assert isinstance(e.value.__cause__, FileNotFoundError)
+        else:
+            runner.check_env()
 
 
 @pytest.mark.parametrize("tarlike", [True, False])
 @pytest.mark.parametrize("exists", [True, False])
-@pytest.mark.parametrize("is_file", [True, False])
-def test_sphinx_runner_save_html(patches, tarlike, exists, is_file):
+def test_sphinx_runner_save_html(patches, tarlike, exists):
     runner = DummySphinxRunner()
     patched = patches(
         "utils",
         "shutil",
         ("SphinxRunner.log", dict(new_callable=PropertyMock)),
         ("SphinxRunner.output_path", dict(new_callable=PropertyMock)),
-        ("SphinxRunner.html_dir", dict(new_callable=PropertyMock)),
-        ("SphinxRunner.tarmode", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.output_dir", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
-    with patched as (m_utils, m_shutil, m_log, m_out, m_html, m_mode):
+    with patched as (m_utils, m_shutil, m_log, m_out, m_html):
+        output_path = m_out.return_value
+        staging_path = MagicMock()
+        backup_path = MagicMock()
+        output_path.name = "OUTPUT"
+        output_path.with_name.side_effect = [staging_path, backup_path]
         m_utils.is_tarlike.return_value = tarlike
-        m_out.return_value.exists.return_value = exists
-        m_out.return_value.is_file.return_value = is_file
+        output_path.exists.return_value = exists
+        staging_path.exists.return_value = False
+        backup_path.exists.side_effect = [False, True]
+        backup_path.is_file.return_value = False
         runner.save_html()
+
+    assert (
+        output_path.with_name.call_args_list
+        == [(("OUTPUT.new",), {}), (("OUTPUT.old",), {})])
+    assert (
+        m_utils.is_tarlike.call_args
+        == [(output_path,), {}])
+
+    if not tarlike:
+        assert (
+            m_shutil.copytree.call_args
+            == [(m_html.return_value, staging_path), {}])
+        assert not m_utils.pack.called
+        assert (
+            staging_path.replace.call_args
+            == [(output_path,), {}])
+        if exists:
+            assert (
+                output_path.replace.call_args
+                == [(backup_path,), {}])
+            assert (
+                m_shutil.rmtree.call_args
+                == [(backup_path,), {}])
+        else:
+            assert not output_path.replace.called
+            assert not m_shutil.rmtree.called
+    else:
+        assert not m_shutil.copytree.called
+        assert (
+            m_utils.pack.call_args
+            == [(m_html.return_value, staging_path), {}])
+        assert (
+            staging_path.replace.call_args
+            == [(output_path,), {}])
+        assert not output_path.replace.called
+        assert not m_shutil.rmtree.called
 
     if exists:
         assert (
             m_log.return_value.warning.call_args
-            == [(f"Output path ({m_out.return_value}) exists, "
-                 "removing", ), {}])
-        assert (
-            m_out.return_value.is_file.call_args
-            == [(), {}])
-        if is_file:
+            == [(f"Output path ({output_path}) exists, replacing",), {}])
+    else:
+        assert not m_log.return_value.warning.called
+
+
+@pytest.mark.parametrize("tarlike", [True, False])
+@pytest.mark.parametrize("write_fails", [True, False])
+def test_sphinx_runner_save_html_write_preserves_existing_output(
+        patches, tarlike, write_fails):
+    runner = DummySphinxRunner()
+    patched = patches(
+        "utils",
+        "shutil",
+        ("SphinxRunner.log", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.output_path", dict(new_callable=PropertyMock)),
+        ("SphinxRunner.output_dir", dict(new_callable=PropertyMock)),
+        prefix="envoy.docs.sphinx_runner.runner")
+
+    with patched as (m_utils, m_shutil, m_log, m_out, m_html):
+        output_path = m_out.return_value
+        staging_path = MagicMock()
+        backup_path = MagicMock()
+        output_path.name = "OUTPUT"
+        output_path.with_name.side_effect = [staging_path, backup_path]
+        output_path.exists.return_value = True
+        m_utils.is_tarlike.return_value = tarlike
+        if write_fails:
+            staging_path.exists.side_effect = [False, True]
+            if tarlike:
+                staging_path.is_file.return_value = True
+                m_utils.pack.side_effect = RuntimeError("PACK FAILED")
+            else:
+                staging_path.is_file.return_value = False
+                m_shutil.copytree.side_effect = RuntimeError("COPY FAILED")
+            with pytest.raises(RuntimeError):
+                runner.save_html()
+        else:
+            staging_path.exists.return_value = False
+            backup_path.exists.side_effect = [False, True]
+            backup_path.is_file.return_value = False
+            runner.save_html()
+
+    if write_fails:
+        assert not output_path.replace.called
+        assert not staging_path.replace.called
+        assert not m_log.return_value.warning.called
+        if tarlike:
             assert (
-                m_out.return_value.unlink.call_args
+                staging_path.unlink.call_args
                 == [(), {}])
             assert not m_shutil.rmtree.called
         else:
-            assert not m_out.return_value.unlink.called
+            assert not staging_path.unlink.called
             assert (
                 m_shutil.rmtree.call_args
-                == [(m_out.return_value, ), {}])
-
-    else:
-        assert not m_log.called
-        assert not m_out.return_value.is_file.called
-        assert not m_out.return_value.unlink.called
-        assert not m_shutil.rmtree.called
-
-    assert (
-        m_utils.is_tarlike.call_args
-        == [(m_out.return_value, ), {}])
-
-    if not tarlike:
-        assert not m_utils.pack.called
-        assert (
-            m_shutil.copytree.call_args
-            == [(m_html.return_value, m_out.return_value, ), {}])
+                == [(staging_path,), {}])
         return
 
-    assert not m_shutil.copytree.called
+    if tarlike:
+        assert (
+            m_utils.pack.call_args
+            == [(m_html.return_value, staging_path), {}])
+        assert not output_path.replace.called
+    else:
+        assert (
+            m_shutil.copytree.call_args
+            == [(m_html.return_value, staging_path), {}])
+        assert (
+            output_path.replace.call_args
+            == [(backup_path,), {}])
     assert (
-        m_utils.pack.call_args
-        == [(m_html.return_value, m_out.return_value), {}])
+        staging_path.replace.call_args
+        == [(output_path,), {}])
+    assert (
+        m_log.return_value.warning.call_args
+        == [(f"Output path ({output_path}) exists, replacing",), {}])
 
 
 @pytest.mark.parametrize("check_fails", [True, False])
@@ -825,13 +980,13 @@ def test_sphinx_runner_save_html(patches, tarlike, exists, is_file):
 async def test_sphinx_runner_run(patches, check_fails, build_fails):
     runner = DummySphinxRunner()
     patched = patches(
-        "print",
         "os",
         "SphinxRunner.build_summary",
         "SphinxRunner.check_env",
         "SphinxRunner.build_html",
         "SphinxRunner.save_html",
         "SphinxRunner.validate_args",
+        ("SphinxRunner.log", dict(new_callable=PropertyMock)),
         ("SphinxRunner.config_file", dict(new_callable=PropertyMock)),
         prefix="envoy.docs.sphinx_runner.runner")
 
@@ -841,8 +996,8 @@ async def test_sphinx_runner_run(patches, check_fails, build_fails):
     assert runner.run.__wrapped__.__cleansup__
 
     with patched as patchy:
-        (m_print, m_os, m_summary,
-         m_check, m_build, m_save, m_validate, m_config) = patchy
+        (m_os, m_summary, m_check, m_build, m_save,
+         m_validate, m_log, m_config) = patchy
         if check_fails:
             _check_error = sphinx_runner.SphinxEnvError("CHECK FAILED")
             m_check.side_effect = lambda: _raise(_check_error)
@@ -865,8 +1020,8 @@ async def test_sphinx_runner_run(patches, check_fails, build_fails):
 
     if check_fails:
         assert (
-            m_print.call_args
-            == [(_check_error,), {}])
+            m_log.return_value.error.call_args
+            == [("CHECK FAILED",), {}])
         assert not m_summary.called
         assert not m_build.called
         assert not m_save.called
@@ -881,12 +1036,12 @@ async def test_sphinx_runner_run(patches, check_fails, build_fails):
 
     if build_fails:
         assert (
-            m_print.call_args
-            == [(_build_error,), {}])
+            m_log.return_value.error.call_args
+            == [("BUILD FAILED",), {}])
         assert not m_save.called
         return
 
-    assert not m_print.called
+    assert not m_log.return_value.error.called
     assert (
         m_save.call_args
         == [(), {}])
@@ -905,7 +1060,7 @@ def test_sphinx_runner_validate_args(patches, exists, overwrite):
         m_out.return_value.exists.return_value = exists
         m_overwrite.return_value = overwrite
         if exists and not overwrite:
-            with pytest.raises(sphinx_runner.SphinxBuildError) as e:
+            with pytest.raises(sphinx_runner.SphinxEnvError) as e:
                 runner.validate_args()
             assert (
                 e.value.args[0]

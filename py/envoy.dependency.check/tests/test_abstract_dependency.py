@@ -111,18 +111,6 @@ async def test_dependency_commits_since_current(patches, count):
         == result)
 
 
-@pytest.mark.parametrize(
-    "metadata", [dict(), dict(cpe="N/A"), dict(cpe="CPE")])
-def test_dependency_cpe(metadata):
-    dependency = DummyDependency2("ID", metadata, "GITHUB")
-    expected = (
-        metadata["cpe"]
-        if "cpe" in metadata and not metadata["cpe"] == "N/A"
-        else None)
-    assert dependency.cpe == expected
-    assert "cpe" in dependency.__dict__
-
-
 def test_dependency_display_sha(patches):
     dependency = DummyDependency2("ID", "METADATA", "GITHUB")
     patched = patches(
@@ -345,12 +333,15 @@ async def test_dependency_has_recent_commits(patches, commits):
 
     with patched as (m_recent, ):
         m_recent.return_value = AsyncMock(return_value=commits)()
-        assert await dependency.has_recent_commits == (commits > 1)
+        result = await dependency.has_recent_commits
+        assert result == (commits > 1)
 
-    assert not getattr(
-        dependency,
-        ADependency.has_recent_commits.cache_name,
-        None)
+    assert (
+        getattr(
+            dependency,
+            ADependency.has_recent_commits.cache_name)[
+                "has_recent_commits"]
+        == result)
 
 
 @pytest.mark.parametrize("newest", [None, "BINGO", "BLOOP"])
@@ -520,12 +511,15 @@ async def test_dependency_release_date_mismatch(patches, date1, date2):
     with patched as (m_release, m_date):
         m_date.return_value = date1
         m_release.return_value.date = AsyncMock(return_value=date2)()
-        assert await dependency.release_date_mismatch == (date1 != date2)
+        result = await dependency.release_date_mismatch
+        assert result == (date1 != date2)
 
-    assert not getattr(
-        dependency,
-        ADependency.release_date_mismatch.cache_name,
-        None)
+    assert (
+        getattr(
+            dependency,
+            ADependency.release_date_mismatch.cache_name)[
+                "release_date_mismatch"]
+        == result)
 
 
 def test_dependency_sha():
@@ -548,12 +542,15 @@ async def test_dependency_sha_mismatch(patches, sha1, sha2):
     with patched as (m_release, m_sha):
         m_sha.return_value = sha1
         m_release.return_value.sha = AsyncMock(return_value=sha2)()
-        assert await dependency.release_sha_mismatch == (sha1 != sha2)
+        result = await dependency.release_sha_mismatch
+        assert result == (sha1 != sha2)
 
-    assert not getattr(
-        dependency,
-        ADependency.release_sha_mismatch.cache_name,
-        None)
+    assert (
+        getattr(
+            dependency,
+            ADependency.release_sha_mismatch.cache_name)[
+                "release_sha_mismatch"]
+        == result)
 
 
 @pytest.mark.parametrize("raises", [None, version.InvalidVersion, Exception])
