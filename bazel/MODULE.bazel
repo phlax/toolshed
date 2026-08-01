@@ -123,6 +123,21 @@ llvm.toolchain(
     },
     llvm_version = "22.1.8",
 )
+llvm.toolchain_root(
+    name = "llvm_toolchain",
+    label = "@llvm_minimal_linux_x64//:BUILD.bazel",
+    targets = ["linux-x86_64"],
+)
+llvm.toolchain_root(
+    name = "llvm_toolchain",
+    label = "@llvm_minimal_linux_arm64//:BUILD.bazel",
+    targets = ["linux-aarch64"],
+)
+llvm.toolchain_root(
+    name = "llvm_toolchain",
+    label = "@llvm_minimal_macos_arm64//:BUILD.bazel",
+    targets = ["darwin-aarch64"],
+)
 llvm.sysroot(
     name = "llvm_toolchain",
     label = "@sysroot_linux_amd64//:sysroot",
