@@ -711,6 +711,6 @@ def setup_llvm_minimal(
         llvm_minimal_repo(
             name = repo_name,
             url = config["url"].format(**config),
-            sha256 = override_sha256 or config["sha256"],
+            sha256 = override_sha256 if override_sha256 != None else config["sha256"],
             strip_prefix = config["strip_prefix"].format(**config),
         )

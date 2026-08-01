@@ -148,9 +148,9 @@ def _llvm_minimal_ext_impl(module_ctx):
 
     if setup_tag:
         setup_llvm_minimal(
-            linux_x64_sha256 = setup_tag.linux_x64_sha256,
-            linux_arm64_sha256 = setup_tag.linux_arm64_sha256,
-            macos_arm64_sha256 = setup_tag.macos_arm64_sha256,
+            linux_x64_sha256 = setup_tag.linux_x64_sha256 or None,
+            linux_arm64_sha256 = setup_tag.linux_arm64_sha256 or None,
+            macos_arm64_sha256 = setup_tag.macos_arm64_sha256 or None,
         )
     else:
         setup_llvm_minimal()
