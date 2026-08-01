@@ -455,11 +455,23 @@ def _get_llvm_toolchain_alias_platform_info(ctx):
 
     fail("Unsupported host platform for llvm_toolchain_llvm alias: {} {}. Supported combinations are linux/x86_64, linux/aarch64, and macos/arm64.".format(ctx.os.name, ctx.os.arch))
 
+def _symlink_dir_children(ctx, source_dir, relpath):
+    """Symlink each child of source_dir individually into relpath in this repo.
+
+    A directory symlink (ctx.symlink on the dir itself) is NOT followed by
+    Bazel when sourcing individual files for a filegroup src, so bzlmod
+    reports "missing input file '...//:bin/llvm-nm'". Symlinking each child as
+    its own file/dir symlink makes every entry a real, stageable input under
+    both bzlmod and WORKSPACE.
+    """
+    for child in source_dir.readdir():
+        ctx.symlink(child, "{}/{}".format(relpath, child.basename))
+
 def _ensure_repo_dir(ctx, source_root, relpath):
-    """Symlink a directory into the generated repo, or create it if absent."""
+    """Populate relpath by per-child symlinks from the source dir, or create it."""
     source_dir = source_root.get_child(relpath)
     if source_dir.exists:
-        ctx.symlink(source_dir, relpath)
+        _symlink_dir_children(ctx, source_dir, relpath)
     else:
         result = ctx.execute(["mkdir", "-p", relpath])
         if result.return_code:
@@ -468,14 +480,16 @@ def _ensure_repo_dir(ctx, source_root, relpath):
 def _llvm_toolchain_alias_impl(ctx):
     """Create a host-arch alias repo backed by the matching minimal LLVM artifact.
 
-    bin/, include/ and lib/ are symlinked in from the host-arch minimal repo,
-    so the tools live in this repo's own package. Targets are therefore real
+    bin/, include/ and lib/ contents are symlinked in per-child from the
+    host-arch minimal repo, so every tool/header lives in this repo's own
+    package as a real (file or dir) symlink. Targets are therefore real
     filegroups over those local files (NOT alias() into the minimal repo):
     aliasing would leave the filegroup's source file (e.g. bin/llvm-nm) owned
     by the minimal repo, which fails runfiles staging with
-    "missing input file '...//:bin/llvm-nm'".
+    "missing input file '...//:bin/llvm-nm'". Per-child (not whole-directory)
+    symlinks are required because Bazel does not follow a symlinked package
+    directory when sourcing individual filegroup inputs.
     """
-    _get_llvm_toolchain_alias_platform_info(ctx)
     platform_info = _get_llvm_toolchain_alias_platform_info(ctx)
     minimal_repo = platform_info["minimal_repo"]
     minimal_root = ctx.path(Label("@{}//:BUILD.bazel".format(minimal_repo))).dirname
