@@ -413,25 +413,42 @@ llvm_tarball = repository_rule(
     doc = "Downloads and extracts an upstream LLVM tarball for hermetic minimal LLVM artifact builds.",
 )
 
+def _normalize_llvm_toolchain_alias_os(os_name):
+    """Normalize repository_ctx.os.name for llvm_toolchain_llvm alias selection."""
+    os_name = os_name.lower()
+    if os_name == "linux":
+        return "linux"
+    if os_name == "mac os x" or os_name == "darwin":
+        return "macos"
+    return None
+
+def _normalize_llvm_toolchain_alias_arch(arch):
+    """Normalize repository_ctx.os.arch for llvm_toolchain_llvm alias selection."""
+    arch = arch.lower()
+    if arch == "x86_64" or arch == "amd64":
+        return "x86_64"
+    if arch == "aarch64" or arch == "arm64":
+        return "aarch64"
+    return None
+
 def _get_llvm_toolchain_alias_platform_info(ctx):
     """Resolve the host platform to the matching llvm_minimal_* repo."""
-    os_name = ctx.os.name.lower()
-    arch = ctx.os.arch.lower()
+    os_name = _normalize_llvm_toolchain_alias_os(ctx.os.name)
+    arch = _normalize_llvm_toolchain_alias_arch(ctx.os.arch)
 
     if os_name == "linux":
-        if arch == "x86_64" or arch == "amd64":
+        if arch == "x86_64":
             return {
                 "minimal_repo": "llvm_minimal_linux_x64",
             }
-        elif arch == "aarch64" or arch == "arm64":
+        elif arch == "aarch64":
             return {
                 "minimal_repo": "llvm_minimal_linux_arm64",
             }
-    elif os_name == "mac os x" or os_name == "darwin" or os_name == "macos":
-        if arch == "aarch64" or arch == "arm64":
-            return {
-                "minimal_repo": "llvm_minimal_macos_arm64",
-            }
+    elif os_name == "macos" and arch == "aarch64":
+        return {
+            "minimal_repo": "llvm_minimal_macos_arm64",
+        }
 
     fail("Unsupported host platform for llvm_toolchain_llvm alias: {} {}. Supported combinations are linux/x86_64, linux/aarch64, and macos/arm64.".format(ctx.os.name, ctx.os.arch))
 
