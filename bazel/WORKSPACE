@@ -3,8 +3,14 @@ workspace(name = "envoy_toolshed")
 load(":archives.bzl", "load_archives")
 load_archives()
 
+load("//compile:llvm_minimal.bzl", "llvm_toolchain_alias")
+llvm_toolchain_alias(name = "llvm_toolchain_llvm")
+
 load(":deps.bzl", "resolve_dependencies")
 resolve_dependencies()
+
+load(":toolchains_llvm.bzl", "setup_llvm_toolchain")
+setup_llvm_toolchain()
 
 load(":toolchains.bzl", "load_toolchains")
 load_toolchains()
