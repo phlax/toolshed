@@ -315,11 +315,17 @@ LLVM_MINIMAL_LLVM_REPO_BUILD = render_llvm_repo_build(_llvm_version_major(LLVM_V
 def _llvm_minimal_repo_impl(ctx):
     """Downloads and extracts a released minimal LLVM artifact."""
     if ctx.attr.sha256:
+        extracted_root = ctx.path("_extracted")
         ctx.download_and_extract(
             url = ctx.attr.url,
             sha256 = ctx.attr.sha256,
             stripPrefix = ctx.attr.strip_prefix,
+            output = "_extracted",
         )
+        _ensure_repo_dir(ctx, extracted_root, "bin")
+        _ensure_repo_dir(ctx, extracted_root, "include")
+        _ensure_repo_dir(ctx, extracted_root, "lib")
+        _ensure_repo_dir(ctx, extracted_root, "share")
     else:
         # Placeholder state before first release: create an empty repo so callers
         # that do not reference it are not broken.
