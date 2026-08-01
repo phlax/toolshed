@@ -466,7 +466,16 @@ def _ensure_repo_dir(ctx, source_root, relpath):
             fail("Failed to create llvm_toolchain_llvm alias directory '{}': {}".format(relpath, result.stderr))
 
 def _llvm_toolchain_alias_impl(ctx):
-    """Create a host-arch alias repo backed by the matching minimal LLVM artifact."""
+    """Create a host-arch alias repo backed by the matching minimal LLVM artifact.
+
+    bin/, include/ and lib/ are symlinked in from the host-arch minimal repo,
+    so the tools live in this repo's own package. Targets are therefore real
+    filegroups over those local files (NOT alias() into the minimal repo):
+    aliasing would leave the filegroup's source file (e.g. bin/llvm-nm) owned
+    by the minimal repo, which fails runfiles staging with
+    "missing input file '...//:bin/llvm-nm'".
+    """
+    _get_llvm_toolchain_alias_platform_info(ctx)
     platform_info = _get_llvm_toolchain_alias_platform_info(ctx)
     minimal_repo = platform_info["minimal_repo"]
     minimal_root = ctx.path(Label("@{}//:BUILD.bazel".format(minimal_repo))).dirname
@@ -480,16 +489,16 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files(glob(["bin/**", "include/**", "lib/**"], allow_empty = True))
 
-alias(
+filegroup(
     name = "nm",
-    actual = "@{minimal_repo}//:nm",
+    srcs = ["bin/llvm-nm"],
 )
 
-alias(
+filegroup(
     name = "readelf",
-    actual = "@{minimal_repo}//:readelf",
+    srcs = ["bin/llvm-readelf"],
 )
-""".format(minimal_repo = minimal_repo))
+""")
 
 llvm_toolchain_alias = repository_rule(
     implementation = _llvm_toolchain_alias_impl,
