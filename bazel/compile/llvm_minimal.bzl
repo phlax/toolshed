@@ -5,7 +5,10 @@ This module defines:
   - LLVM_MINIMAL_LIB_GLOBS: lib/include directory patterns to keep
   - llvm_tarball: repository rule that downloads a raw upstream LLVM tarball (used when
     building the minimal artifacts from source)
+  - setup_llvm_minimal(): sets up llvm_minimal_* repos used by consumers
   - setup_llvm_minimal_build(): sets up llvm_tarball_* repos needed by genrule build targets
+  - llvm_toolchain_alias: repository rule that resolves llvm_toolchain_llvm to the
+    matching host-arch llvm_minimal_* repo
 
 To update the allowlist, edit LLVM_MINIMAL_BINS or LLVM_MINIMAL_LIB_GLOBS below and
 rebuild/re-release.
@@ -306,6 +309,39 @@ filegroup(
 
 LLVM_MINIMAL_LLVM_REPO_BUILD = render_llvm_repo_build(_llvm_version_major(LLVM_VERSION))
 
+def _llvm_minimal_repo_impl(ctx):
+    """Downloads and extracts a released minimal LLVM artifact."""
+    if ctx.attr.sha256:
+        ctx.download_and_extract(
+            url = ctx.attr.url,
+            sha256 = ctx.attr.sha256,
+            stripPrefix = ctx.attr.strip_prefix,
+        )
+    else:
+        # Placeholder state before first release: create an empty repo so callers
+        # that do not reference it are not broken.
+        ctx.execute(["mkdir", "-p", "bin", "include", "lib", "share/clang"])
+    ctx.file("BUILD.bazel", LLVM_MINIMAL_LLVM_REPO_BUILD)
+
+llvm_minimal_repo = repository_rule(
+    implementation = _llvm_minimal_repo_impl,
+    attrs = {
+        "url": attr.string(
+            mandatory = True,
+            doc = "URL of the released minimal LLVM artifact",
+        ),
+        "sha256": attr.string(
+            default = "",
+            doc = "SHA256 hash of the released minimal LLVM artifact. Empty string skips download.",
+        ),
+        "strip_prefix": attr.string(
+            mandatory = True,
+            doc = "Archive strip prefix for the released minimal LLVM artifact",
+        ),
+    },
+    doc = "Downloads and extracts a released minimal LLVM artifact.",
+)
+
 def _llvm_tarball_impl(ctx):
     """Downloads and extracts an LLVM upstream tarball hermetically.
 
@@ -327,6 +363,8 @@ def _llvm_tarball_impl(ctx):
     bin_globs = ["bin/{}".format(tool) for tool in LLVM_MINIMAL_BINS]
     ctx.file("BUILD.bazel", """
 package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["bin/**"], allow_empty = True))
 
 filegroup(
     name = "all",
@@ -373,6 +411,68 @@ llvm_tarball = repository_rule(
         ),
     },
     doc = "Downloads and extracts an upstream LLVM tarball for hermetic minimal LLVM artifact builds.",
+)
+
+def _get_llvm_toolchain_alias_platform_info(ctx):
+    """Resolve the host platform to the matching llvm_minimal_* repo."""
+    os_name = ctx.os.name.lower()
+    arch = ctx.os.arch.lower()
+
+    if os_name == "linux":
+        if arch == "x86_64" or arch == "amd64":
+            return {
+                "minimal_repo": "llvm_minimal_linux_x64",
+            }
+        elif arch == "aarch64" or arch == "arm64":
+            return {
+                "minimal_repo": "llvm_minimal_linux_arm64",
+            }
+    elif os_name == "mac os x" or os_name == "darwin" or os_name == "macos":
+        if arch == "aarch64" or arch == "arm64":
+            return {
+                "minimal_repo": "llvm_minimal_macos_arm64",
+            }
+
+    fail("Unsupported host platform for llvm_toolchain_llvm alias: {} {}. Supported combinations are linux/x86_64, linux/aarch64, and macos/arm64.".format(ctx.os.name, ctx.os.arch))
+
+def _ensure_repo_dir(ctx, source_root, relpath):
+    """Symlink a directory into the generated repo, or create it if absent."""
+    source_dir = source_root.get_child(relpath)
+    if source_dir.exists:
+        ctx.symlink(source_dir, relpath)
+    else:
+        ctx.execute(["mkdir", "-p", relpath])
+
+def _llvm_toolchain_alias_impl(ctx):
+    """Create a host-arch alias repo backed by the matching minimal LLVM artifact."""
+    platform_info = _get_llvm_toolchain_alias_platform_info(ctx)
+    minimal_repo = platform_info["minimal_repo"]
+    minimal_root = ctx.path(Label("@{}//:BUILD.bazel".format(minimal_repo))).dirname
+
+    _ensure_repo_dir(ctx, minimal_root, "bin")
+    _ensure_repo_dir(ctx, minimal_root, "include")
+    _ensure_repo_dir(ctx, minimal_root, "lib")
+
+    ctx.file("BUILD.bazel", """
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["bin/**", "include/**", "lib/**"], allow_empty = True))
+
+alias(
+    name = "nm",
+    actual = "@{minimal_repo}//:nm",
+)
+
+alias(
+    name = "readelf",
+    actual = "@{minimal_repo}//:readelf",
+)
+""".format(minimal_repo = minimal_repo))
+
+llvm_toolchain_alias = repository_rule(
+    implementation = _llvm_toolchain_alias_impl,
+    attrs = {},
+    doc = "Creates the host-arch llvm_toolchain_llvm alias backed by llvm_minimal_* repos.",
 )
 
 # =============================================================================
@@ -546,4 +646,23 @@ def setup_llvm_minimal_build():
             sha256 = sha256,
             version = LLVM_VERSION,
             platform = platform,
+        )
+
+def setup_llvm_minimal(
+        linux_x64_sha256 = None,
+        linux_arm64_sha256 = None,
+        macos_arm64_sha256 = None):
+    """Set up llvm_minimal_* repos used by consumers."""
+    platform_to_repo = {
+        "Linux-X64": ("llvm_minimal_linux_x64", linux_x64_sha256),
+        "Linux-ARM64": ("llvm_minimal_linux_arm64", linux_arm64_sha256),
+        "macOS-ARM64": ("llvm_minimal_macos_arm64", macos_arm64_sha256),
+    }
+    for platform, (repo_name, override_sha256) in platform_to_repo.items():
+        config = VERSIONS[repo_name]
+        llvm_minimal_repo(
+            name = repo_name,
+            url = config["url"].format(**config),
+            sha256 = override_sha256 if override_sha256 != None else config["sha256"],
+            strip_prefix = config["strip_prefix"].format(**config),
         )
