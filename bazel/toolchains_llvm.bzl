@@ -9,8 +9,8 @@ def setup_llvm_toolchain(llvm_version = None):
         llvm_version = llvm_version or VERSIONS["llvm"],
         extra_llvm_distributions = LLVM_DISTRIBUTIONS,
         cxx_cross_lib = {
-            "linux-aarch64": "@libcxx_libs_aarch64",
-            "linux-x86_64": "@libcxx_libs_x86_64",
+            "linux-aarch64": "@llvm_minimal_linux_arm64",
+            "linux-x86_64": "@llvm_minimal_linux_x64",
         },
         toolchain_roots = {
             "linux-x86_64": "@llvm_minimal_linux_x64//",
