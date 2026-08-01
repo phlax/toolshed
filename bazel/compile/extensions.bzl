@@ -158,12 +158,15 @@ def _llvm_minimal_ext_impl(module_ctx):
 _llvm_minimal_setup = tag_class(
     attrs = {
         "linux_x64_sha256": attr.string(
+            default = VERSIONS["llvm_minimal_linux_x64"]["sha256"],
             doc = "SHA256 hash of the Linux-X64 minimal LLVM artifact (default: VERSIONS['llvm_minimal_linux_x64']['sha256'] from //:versions.bzl)",
         ),
         "linux_arm64_sha256": attr.string(
+            default = VERSIONS["llvm_minimal_linux_arm64"]["sha256"],
             doc = "SHA256 hash of the Linux-ARM64 minimal LLVM artifact (default: VERSIONS['llvm_minimal_linux_arm64']['sha256'] from //:versions.bzl)",
         ),
         "macos_arm64_sha256": attr.string(
+            default = VERSIONS["llvm_minimal_macos_arm64"]["sha256"],
             doc = "SHA256 hash of the macOS-ARM64 minimal LLVM artifact (default: VERSIONS['llvm_minimal_macos_arm64']['sha256'] from //:versions.bzl)",
         ),
     },
