@@ -320,7 +320,9 @@ def _llvm_minimal_repo_impl(ctx):
     else:
         # Placeholder state before first release: create an empty repo so callers
         # that do not reference it are not broken.
-        ctx.execute(["mkdir", "-p", "bin", "include", "lib", "share/clang"])
+        result = ctx.execute(["mkdir", "-p", "bin", "include", "lib", "share/clang"])
+        if result.return_code:
+            fail("Failed to create placeholder llvm_minimal repo directories: " + result.stderr)
     ctx.file("BUILD.bazel", LLVM_MINIMAL_LLVM_REPO_BUILD)
 
 llvm_minimal_repo = repository_rule(
@@ -445,6 +447,7 @@ def _get_llvm_toolchain_alias_platform_info(ctx):
             return {
                 "minimal_repo": "llvm_minimal_linux_arm64",
             }
+    # Only macOS ARM64 minimal artifacts are currently published.
     elif os_name == "macos" and arch == "aarch64":
         return {
             "minimal_repo": "llvm_minimal_macos_arm64",
@@ -458,7 +461,9 @@ def _ensure_repo_dir(ctx, source_root, relpath):
     if source_dir.exists:
         ctx.symlink(source_dir, relpath)
     else:
-        ctx.execute(["mkdir", "-p", relpath])
+        result = ctx.execute(["mkdir", "-p", relpath])
+        if result.return_code:
+            fail("Failed to create llvm_toolchain_llvm alias directory '{}': {}".format(relpath, result.stderr))
 
 def _llvm_toolchain_alias_impl(ctx):
     """Create a host-arch alias repo backed by the matching minimal LLVM artifact."""
