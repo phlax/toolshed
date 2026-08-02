@@ -1031,30 +1031,65 @@ def test_changeschecker_check_entry_content(content, expected):
         assert substring in result
 
 
+@pytest.mark.parametrize(
+    "content,expected",
+    [(f"{'a' * 134} b", ()),
+     ("a" * 137, ()),
+     (f"{'a' * 135} b",
+      ("entry.rst:1: Changelog entry line is 137 characters "
+       "(maximum 136)", )),
+     (f"valid\n{'a' * 135} b\n{'a' * 136} c",
+      ("entry.rst:2: Changelog entry line is 137 characters "
+       "(maximum 136)",
+       "entry.rst:3: Changelog entry line is 138 characters "
+       "(maximum 136)"))])
+def test_changeschecker_check_entry_line_lengths(
+        tmp_path, content, expected):
+    changelog = DummyChangelogChangesChecker("SECTIONS")
+    path = tmp_path / "entry.rst"
+    path.write_text(content)
+
+    assert (
+        changelog.check_entry_line_lengths(path)
+        == tuple(f"{tmp_path}/{error}" for error in expected))
+
+
 def test_changeschecker_check_entry_files(patches):
     changelog = DummyChangelogChangesChecker("SECTIONS")
     patched = patches(
         "AChangelogChangesChecker.check_entry_content",
         "AChangelogChangesChecker.check_entry_filename",
+        "AChangelogChangesChecker.check_entry_line_lengths",
         prefix="envoy.code.check.abstract.changelog")
     paths = [MagicMock(), MagicMock(), MagicMock()]
-    # path 0: filename error + content error
+    # path 0: filename error + content error + line length error
     # path 1: no errors
-    # path 2: content error only
+    # path 2: content error + line length errors
     filename_returns = ["FILENAME_ERR", None, None]
     content_returns = ["CONTENT_ERR", None, "CONTENT_ERR2"]
+    line_length_returns = [
+        ("LINE_LENGTH_ERR", ),
+        (),
+        ("LINE_LENGTH_ERR2", "LINE_LENGTH_ERR3")]
 
-    with patched as (m_content, m_filename):
+    with patched as (m_content, m_filename, m_line_lengths):
         m_filename.side_effect = filename_returns
         m_content.side_effect = content_returns
+        m_line_lengths.side_effect = line_length_returns
         result = changelog.check_entry_files(paths)
 
-    assert result == ("FILENAME_ERR", "CONTENT_ERR", "CONTENT_ERR2")
+    assert (
+        result
+        == ("FILENAME_ERR", "CONTENT_ERR", "LINE_LENGTH_ERR",
+            "CONTENT_ERR2", "LINE_LENGTH_ERR2", "LINE_LENGTH_ERR3"))
     assert (
         m_filename.call_args_list
         == [[(p, ), {}] for p in paths])
     assert (
         m_content.call_args_list
+        == [[(p, ), {}] for p in paths])
+    assert (
+        m_line_lengths.call_args_list
         == [[(p, ), {}] for p in paths])
 
 
@@ -1066,11 +1101,9 @@ def test_changelogstatus_entry_dir(patches, is_current):
          dict(new_callable=PropertyMock)),
         ("AChangelogStatus.project",
          dict(new_callable=PropertyMock)),
-        ("AChangelogStatus.version",
-         dict(new_callable=PropertyMock)),
         prefix="envoy.code.check.abstract.changelog")
 
-    with patched as (m_current, m_project, m_version):
+    with patched as (m_current, m_project):
         m_current.return_value = is_current
         m_project.return_value.changelogs.current_dir_path = (
             MagicMock(name="CURRENT_DIR_PATH"))
@@ -1079,7 +1112,6 @@ def test_changelogstatus_entry_dir(patches, is_current):
     if not is_current:
         assert result is None
         assert not m_project.called
-        assert not m_version.called
         return
     assert result == m_project.return_value.changelogs.current_dir_path
     assert not m_project.return_value.changelogs.changelog_path.called
