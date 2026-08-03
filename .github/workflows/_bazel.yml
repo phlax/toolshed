@@ -87,7 +87,7 @@ jobs:
     - name: RBE auth check
       id: rbe
       if: inputs.rbe && github.event_name == 'pull_request'
-      uses: envoyproxy/toolshed/actions/github/container/auth@358540eca0af3a423fed5fe00ac656b73be3af2d
+      uses: envoyproxy/toolshed/actions/github/container/auth@6a376dc7f9b74ca79ef667f7a055b06c2ff9b99f
       with:
         container: hello-world
     - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }})
