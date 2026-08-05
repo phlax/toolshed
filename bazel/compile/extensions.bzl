@@ -2,7 +2,7 @@
 
 load("//:versions.bzl", "LLVM_CXX_BUILD", "SUPPORTED_ARCHES", "VERSIONS")
 load(":libcxx_libs.bzl", "setup_libcxx_libs")
-load(":llvm_minimal.bzl", "setup_llvm_minimal", "setup_llvm_minimal_build")
+load(":llvm_minimal.bzl", "llvm_toolchain_alias", "setup_llvm_minimal", "setup_llvm_minimal_build")
 load(":llvm_prebuilt.bzl", "llvm_prebuilt")
 load(":sanitizer_libs.bzl", "setup_sanitizer_libs")
 
@@ -204,4 +204,24 @@ llvm_minimal_extension = module_extension(
     tag_classes = {
         "setup": _llvm_minimal_setup,
     },
+)
+
+# =============================================================================
+# llvm_toolchain_alias_extension: creates a single @llvm_toolchain_llvm alias
+# repo pointing at the host-arch llvm_minimal_* repo.  Label attributes carry
+# their canonical repo identity so they resolve correctly across bzlmod
+# extension boundaries.
+# =============================================================================
+
+def _llvm_toolchain_alias_ext_impl(module_ctx):
+    """Set up the host-arch llvm_toolchain_llvm alias repo."""
+    llvm_toolchain_alias(
+        name = "llvm_toolchain_llvm",
+        minimal_linux_x64 = Label("@llvm_minimal_linux_x64//:BUILD.bazel"),
+        minimal_linux_arm64 = Label("@llvm_minimal_linux_arm64//:BUILD.bazel"),
+        minimal_macos_arm64 = Label("@llvm_minimal_macos_arm64//:BUILD.bazel"),
+    )
+
+llvm_toolchain_alias_extension = module_extension(
+    implementation = _llvm_toolchain_alias_ext_impl,
 )

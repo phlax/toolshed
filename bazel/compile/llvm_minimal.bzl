@@ -675,3 +675,60 @@ def setup_llvm_minimal(
             platform = platform,
             sha256 = sha256,
         )
+
+# =============================================================================
+# Repository rule: host-arch alias for the minimal LLVM repo
+# =============================================================================
+
+def _normalize_llvm_toolchain_alias_os(os_name):
+    """Normalise ctx.os.name to a canonical OS token."""
+    if os_name.startswith("linux"):
+        return "linux"
+    if os_name.startswith("mac"):
+        return "macos"
+    return os_name
+
+def _normalize_llvm_toolchain_alias_arch(arch):
+    """Normalise ctx.os.arch to a canonical architecture token."""
+    if arch in ("x86_64", "amd64"):
+        return "x86_64"
+    if arch in ("aarch64", "arm64"):
+        return "aarch64"
+    return arch
+
+def _llvm_toolchain_alias_impl(ctx):
+    """Creates a symlink-forest alias pointing at the host-arch minimal LLVM repo."""
+    os_name = _normalize_llvm_toolchain_alias_os(ctx.os.name)
+    arch = _normalize_llvm_toolchain_alias_arch(ctx.os.arch)
+
+    if os_name == "linux" and arch == "x86_64":
+        minimal_build_label = ctx.attr.minimal_linux_x64
+    elif os_name == "linux" and arch == "aarch64":
+        minimal_build_label = ctx.attr.minimal_linux_arm64
+    elif os_name == "macos" and arch == "aarch64":
+        minimal_build_label = ctx.attr.minimal_macos_arm64
+    else:
+        fail("Unsupported host platform: os={}, arch={}".format(os_name, arch))
+
+    minimal_root = ctx.path(minimal_build_label).dirname
+
+    ctx.symlink(minimal_root.get_child("bin"), "bin")
+    ctx.symlink(minimal_root.get_child("lib"), "lib")
+    ctx.symlink(minimal_root.get_child("include"), "include")
+    ctx.symlink(minimal_root.get_child("BUILD.bazel"), "BUILD.bazel")
+
+llvm_toolchain_alias = repository_rule(
+    implementation = _llvm_toolchain_alias_impl,
+    attrs = {
+        "minimal_linux_x64": attr.label(
+            doc = "BUILD.bazel of the linux-x86_64 minimal LLVM repo",
+        ),
+        "minimal_linux_arm64": attr.label(
+            doc = "BUILD.bazel of the linux-aarch64 minimal LLVM repo",
+        ),
+        "minimal_macos_arm64": attr.label(
+            doc = "BUILD.bazel of the macOS-arm64 minimal LLVM repo",
+        ),
+    },
+    doc = "Creates a host-arch alias pointing at the correct llvm_minimal_* repository.",
+)
