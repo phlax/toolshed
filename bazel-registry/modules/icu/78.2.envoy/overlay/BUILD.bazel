@@ -2,28 +2,23 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 exports_files(["source/data/in/icudt78l.dat"])
 
-genrule(
-    name = "icudata_obj",
+filegroup(
+    name = "icudata_dat",
     srcs = ["source/data/in/icudt78l.dat"],
-    outs = ["icudt78_dat.o"],
-    cmd = """
-set -eu
-cp $< "$(@D)/icudt78_dat.bin"
-cd "$(@D)"
-$(location @llvm_toolchain_llvm//:objcopy) \
-    -I binary -O elf64-x86-64 \
-    --rename-section .data=.rodata,alloc,load,readonly,data,contents \
-    --redefine-sym _binary_icudt78_dat_bin_start=icudt78_dat \
-    --redefine-sym _binary_icudt78_dat_bin_end=icudt78_dat_end \
-    --redefine-sym _binary_icudt78_dat_bin_size=icudt78_dat_size \
-    icudt78_dat.bin icudt78_dat.o
-""",
-    tools = ["@llvm_toolchain_llvm//:objcopy"],
+)
+
+genrule(
+    name = "icudata_dat_copy",
+    srcs = ["source/data/in/icudt78l.dat"],
+    outs = ["icudt78l.dat"],
+    cmd = "cp $< $@",
 )
 
 cc_library(
     name = "icudata",
-    srcs = [":icudata_obj"],
+    srcs = ["icudata.S"],
+    additional_compiler_inputs = [":icudata_dat_copy"],
+    copts = ["-I$(RULEDIR)"],
     alwayslink = 1,
     visibility = ["//visibility:public"],
 )

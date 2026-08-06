@@ -3,7 +3,8 @@
     "integrity": "sha256-Pploe1xDXUsgljDi0uu3mQbJhGheeGNQeLZy4DyJ3zU=",
     "strip_prefix": "icu",
     "overlay": {
-        "BUILD.bazel": "sha256-B+xNn0Q2yLonUyoZLtMf8DnCk4NqZh3MltHKNOQxTC8="
+        "BUILD.bazel": "sha256-kgzHIwfQWskiMDarmQh+VhD5IWmD1mgIViM2N3qXZFM=",
+        "icudata.S": "sha256-4lKTAJKP0URr2anESpveIejbYfROwZEUW0ody3xCS+g="
     },
     "patch_strip": 1,
     "patches": {
