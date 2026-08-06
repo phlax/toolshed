@@ -1,0 +1,17 @@
+{
+    "homepage": "https://github.com/envoyproxy/toolshed",
+    "maintainers": [
+        {
+            "email": "phlax@users.noreply.github.com",
+            "github": "phlax",
+            "name": "Ryan Northey"
+        }
+    ],
+    "repository": [
+        "github:envoyproxy/toolshed"
+    ],
+    "versions": [
+        "0.4.2"
+    ],
+    "yanked_versions": {}
+}
