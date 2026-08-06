@@ -237,10 +237,10 @@ index 23a836b..25283f2 100644
 +    visibility = ["//visibility:public"],
 +)
 diff --git a/third_party/BUILD b/third_party/BUILD
-index ff2dcae..8497a84 100644
+index ff2dcae..561edfc 100644
 --- a/third_party/BUILD
 +++ b/third_party/BUILD
-@@ -30,27 +30,49 @@ config_setting(
+@@ -30,21 +30,43 @@ config_setting(
      flag_values = {":grpc_use_openssl": "true"},
  )
  
@@ -284,22 +284,6 @@ index ff2dcae..8497a84 100644
 +alias(
 +    name = "libcrypto",
 +    actual = ":crypto_lib",
-     tags = ["manual"],
- )
- 
- alias(
-     name = "madler_zlib",
--    actual = "@zlib//:zlib",
-+    actual = "@envoy//bazel:zlib",
-     tags = ["manual"],
- )
- 
-@@ -81,7 +103,7 @@ alias(
- 
- alias(
-     name = "cares",
--    actual = "@com_github_cares_cares//:ares",
-+    actual = "@c-ares//:ares",
      tags = ["manual"],
  )
  
