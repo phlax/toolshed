@@ -3,7 +3,10 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 # Hermetic llvm-objcopy label from the toolchains_llvm-provided LLVM toolchain.
 # The canonical label bypasses repo mapping and is stable so long as the
 # consuming build names the toolchain repo "llvm_toolchain".
-_LLVM_OBJCOPY = "@@toolchains_llvm++llvm+llvm_toolchain//:bin/llvm-objcopy"
+# We reference llvm_toolchain_llvm (the binary download sub-repo) rather than
+# llvm_toolchain (the config repo whose bin/ entries are symlinks) so the actual
+# executable is available in the genrule sandbox.
+_LLVM_OBJCOPY = "@@toolchains_llvm++llvm+llvm_toolchain_llvm//:bin/llvm-objcopy"
 
 genrule(
     name = "icudata_obj",
@@ -12,14 +15,18 @@ genrule(
     # Copy input to a fixed basename so the auto-generated binary symbol name is
     # deterministic (_binary_icudt78_dat_bin_start), then rename it to the symbol
     # ICU expects (icudt78_dat) and place the data in a .rodata section.
+    # We capture the absolute tool path before cd-ing to RULEDIR (Bazel's
+    # $(execpath) returns a path relative to the execroot, which breaks after cd).
     cmd = (
+        "LLVM_OBJCOPY=\"$$(pwd)/$(execpath " + _LLVM_OBJCOPY + ")\" && " +
         "cp \"$<\" \"$(RULEDIR)/icudt78_dat.bin\" && " +
-        "$(execpath " + _LLVM_OBJCOPY + ")" +
+        "cd \"$(RULEDIR)\" && " +
+        "\"$$LLVM_OBJCOPY\"" +
         " -I binary -O elf64-x86-64" +
         " --rename-section .data=.rodata,alloc,load,readonly,data,contents" +
         " --redefine-sym _binary_icudt78_dat_bin_start=icudt78_dat" +
-        " \"$(RULEDIR)/icudt78_dat.bin\"" +
-        " \"$@\""
+        " icudt78_dat.bin" +
+        " icudt78_dat.o"
     ),
     tools = [_LLVM_OBJCOPY],
 )
