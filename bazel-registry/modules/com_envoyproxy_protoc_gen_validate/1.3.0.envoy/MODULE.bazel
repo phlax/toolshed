@@ -1,8 +1,7 @@
 module(
-    name = "protoc-gen-validate",
+    name = "com_envoyproxy_protoc_gen_validate",
     version = "1.3.0.envoy",
     compatibility_level = 1,
-    repo_name = "com_envoyproxy_protoc_gen_validate",
     bazel_compatibility = ['>=7.2.1'],
 )
 
