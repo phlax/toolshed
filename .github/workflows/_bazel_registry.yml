@@ -186,9 +186,11 @@ jobs:
             end
     - name: Install Bazel
       run: |
-        # Install the latest stable Bazel release via the official installer.
-        BAZEL_VERSION=$(curl -fsSL https://api.github.com/repos/bazelbuild/bazel/releases/latest \
-          | jq -r '.tag_name')
+        # Install the latest Bazel 7.x release.  Pinning to 7.x keeps us
+        # compatible with modules that declare bazel_compatibility = [">=7.2.1"]
+        # and avoids rules_cc/CcInfo drift that broke under Bazel 9.x.
+        BAZEL_VERSION=$(curl -fsSL "https://api.github.com/repos/bazelbuild/bazel/releases" \
+          | jq -r '[.[] | select(.prerelease == false) | select(.tag_name | startswith("7.")) | .tag_name] | first')
         curl -fsSL "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-installer-linux-x86_64.sh" \
           -o /tmp/bazel-installer.sh
         chmod +x /tmp/bazel-installer.sh
