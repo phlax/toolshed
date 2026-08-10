@@ -54,16 +54,16 @@ check "a non-testonly path to bazel_skylib exists" \
     "${SKYLIB} | .production" \
     "true"
 
-check "both surfaces reach bazel_skylib" \
-    "${SKYLIB} | [.reached_by[].surface] | sort | join(\",\")" \
-    "core,test"
+check "both roots reach bazel_skylib" \
+    "${SKYLIB} | [.reached_by[].root] | sort | join(\",\")" \
+    "//dependency/test:core_root,//dependency/test:test_root"
 
 check "core root reaches bazel_skylib in production" \
-    "${SKYLIB} | .reached_by[] | select(.surface == \"core\") | \"\(.root) \(.production)\"" \
+    "${SKYLIB} | .reached_by[] | select(.root == \"//dependency/test:core_root\") | \"\(.root) \(.production)\"" \
     "//dependency/test:core_root true"
 
 check "test root only reaches bazel_skylib via testonly paths" \
-    "${SKYLIB} | .reached_by[] | select(.surface == \"test\") | \"\(.root) \(.production)\"" \
+    "${SKYLIB} | .reached_by[] | select(.root == \"//dependency/test:test_root\") | \"\(.root) \(.production)\"" \
     "//dependency/test:test_root false"
 
 check "consumed external targets are recorded" \
@@ -74,13 +74,13 @@ check "in-repo consumers are recorded with testonly attribution" \
     "${SKYLIB} | [.consumers[] | select(.repo == \"\") | \"\(.target) \(.testonly)\"] | sort | join(\",\")" \
     "//dependency/test:external_consumer false,//dependency/test:test_root true"
 
-check "shared consumer is attributed to both surfaces" \
-    "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:external_consumer\") | .surfaces | join(\",\")" \
-    "core,test"
+check "shared consumer is attributed to both roots" \
+    "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:external_consumer\") | .roots | sort | join(\",\")" \
+    "//dependency/test:core_root,//dependency/test:test_root"
 
-check "testonly consumer is only attributed to the test surface" \
-    "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:test_root\") | .surfaces | join(\",\")" \
-    "test"
+check "testonly consumer is only attributed to the test root" \
+    "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:test_root\") | .roots | join(\",\")" \
+    "//dependency/test:test_root"
 
 if [ "${FAILED}" -ne 0 ]; then
     exit 1

@@ -41,10 +41,10 @@ filegroup(
 dependency_reachability(
     name = "reachability",
     testonly = True,
-    surfaces = {
-        ":core_root": "core",
-        ":test_root": "test",
-    },
+    roots = [
+        ":core_root",
+        ":test_root",
+    ],
 )
 
 sh_test(

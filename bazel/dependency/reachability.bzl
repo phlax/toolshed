@@ -1,10 +1,10 @@
 """Build-graph reachability data for external dependencies.
 
 Provides an aspect + rule that emit a JSON "reachability map" describing, for
-every external repository reachable from a set of root targets ("surfaces"),
-which targets actually reach it - with enough fidelity to validate dependency
-metadata (eg envoy's `deps.yaml` `use_category` markings) without any
-`bazel query` scraping or shelling out.
+every external repository reachable from a set of root targets, which targets
+actually reach it - with enough fidelity to validate dependency metadata (eg
+envoy's `deps.yaml` `use_category` markings) without any `bazel query`
+scraping or shelling out.
 
 The aspect runs inside the analysis graph, so it is bzlmod-native by
 construction: it sees canonical repository names directly and attributes each
@@ -16,15 +16,14 @@ Usage:
 load("@envoy_toolshed//dependency:reachability.bzl", "dependency_reachability")
 
 dependency_reachability(
-    name = "reachability",
-    surfaces = {
-        "//source/exe:core": "core",
-        "//source/extensions/filters/http/foo": "extension",
-        "//contrib/some/ext": "contrib",
-        "//test/integration:everything": "test",
-        "//source/common/http:everything": "dataplane",
-        "//source/common/config:everything": "controlplane",
-    },
+    name = "dep-reachability",
+    roots = ["//source/exe:envoy_main_common_with_core_extensions_lib"],
+)
+
+sh_test(
+    name = "validate_deps",
+    srcs = ["validate_deps.sh"],
+    data = [":dep-reachability", "//bazel:deps.yaml"],
 )
 ```
 
@@ -37,7 +36,7 @@ Building the target writes `<name>.json`:
       "name": "<apparent/module name>",
       "production": true,
       "reached_by": [
-        {"root": "//source/exe:core", "surface": "core", "production": true}
+        {"root": "//source/exe:envoy_main_common_with_core_extensions_lib", "production": true}
       ],
       "targets": ["@repo//pkg:target"],
       "consumers": [
@@ -45,8 +44,7 @@ Building the target writes `<name>.json`:
           "target": "//pkg:consumer",
           "repo": "",
           "testonly": false,
-          "roots": ["//source/exe:core"],
-          "surfaces": ["core"]
+          "roots": ["//source/exe:envoy_main_common_with_core_extensions_lib"]
         }
       ]
     }
@@ -56,18 +54,18 @@ Building the target writes `<name>.json`:
 
 - `name` joins the canonical repository name back to the apparent/module name
   used as key in dependency metadata (eg `deps.yaml`).
-- `reached_by` lists every root ("surface") whose transitive closure contains
-  the repository, retaining per-root identity so a mismatch can name the
+- `reached_by` lists every root whose transitive closure contains the
+  repository, retaining per-root identity so a mismatch can name the
   offending extension. `production` is true when a path exists from the root
   that does not traverse any `testonly` target.
 - `consumers` lists the exact targets with a direct edge into the repository,
-  each tagged with its `testonly` attribute and the roots/surfaces it is
-  reachable from. Consumers in other external repositories (`repo` != "")
-  allow untracked transitive repositories to be attributed back to the
-  tracking dependency.
+  each tagged with its `testonly` attribute and the roots it is reachable from.
+  Consumers in other external repositories (`repo` != "") allow untracked
+  transitive repositories to be attributed back to the tracking dependency.
 
 The aspect emits raw truth: no repository is filtered. Policy (ignore lists,
-test-only exemptions, etc) belongs in the consumer of the JSON.
+test-only exemptions, bucketing by surface/extension/contrib) belongs in the
+consumer of the JSON.
 """
 
 DependencyReachabilityInfo = provider(
@@ -172,7 +170,7 @@ reachability_aspect = aspect(
 
 def _dependency_reachability_impl(ctx):
     deps = {}
-    for target, surface in ctx.attr.surfaces.items():
+    for target in ctx.attr.roots:
         root = _label_string(target.label)
         info = target[DependencyReachabilityInfo]
         production = {edge: True for edge in info.production_edges.to_list()}
@@ -185,7 +183,6 @@ def _dependency_reachability_impl(ctx):
             ))
             entry["targets"][edge.target] = True
             reached = entry["reached_by"].setdefault(root, dict(
-                surface = surface,
                 production = False,
             ))
             if edge in production:
@@ -194,17 +191,14 @@ def _dependency_reachability_impl(ctx):
                 repo = edge.consumer_repo,
                 testonly = edge.testonly,
                 roots = {},
-                surfaces = {},
             ))
             consumer["roots"][root] = True
-            consumer["surfaces"][surface] = True
     dependencies = {}
     for repo in sorted(deps.keys()):
         entry = deps[repo]
         reached_by = [
             dict(
                 root = root,
-                surface = entry["reached_by"][root]["surface"],
                 production = entry["reached_by"][root]["production"],
             )
             for root in sorted(entry["reached_by"].keys())
@@ -223,7 +217,6 @@ def _dependency_reachability_impl(ctx):
                     repo = entry["consumers"][consumer]["repo"],
                     testonly = entry["consumers"][consumer]["testonly"],
                     roots = sorted(entry["consumers"][consumer]["roots"].keys()),
-                    surfaces = sorted(entry["consumers"][consumer]["surfaces"].keys()),
                 )
                 for consumer in sorted(entry["consumers"].keys())
             ],
@@ -241,21 +234,29 @@ def _dependency_reachability_impl(ctx):
 dependency_reachability = rule(
     implementation = _dependency_reachability_impl,
     attrs = {
-        "surfaces": attr.label_keyed_string_dict(
+        "roots": attr.label_list(
             aspects = [reachability_aspect],
             allow_files = True,
             mandatory = True,
             doc = (
-                "Root targets to analyze, mapped to the name of the " +
-                "surface they represent (eg core/extension/contrib/test). " +
-                "Per-root identity is retained in the output so extension " +
-                "roots remain individually attributable."
+                "Concrete root targets to analyze. Each entry must be a " +
+                "resolved label — Bazel target patterns such as " +
+                "`//source/extensions/...` are resolved at the command " +
+                "line / loading phase and CANNOT be used as rule attribute " +
+                "values (analysis phase requires resolved targets). To cover " +
+                "many targets under one root, pass a concrete umbrella " +
+                "target (eg a `filegroup` or existing aggregate) that " +
+                "depends on them. Per-consumer attribution still falls out " +
+                "of `consumers[].target` labels regardless of how coarse " +
+                "the root is."
             ),
         ),
     },
     doc = (
         "Writes a JSON reachability map describing, for every external " +
-        "repository reachable from the given surfaces, which targets and " +
-        "surfaces reach it and whether any non-testonly path exists."
+        "repository reachable from the given root targets, which targets " +
+        "reach it and whether any non-testonly path exists. Root targets " +
+        "must be concrete labels — Bazel target patterns like " +
+        "`//source/extensions/...` cannot be used as rule attribute values."
     ),
 )
