@@ -1,35 +1,18 @@
-From 6d46e1e3377f02d7039e73c649df47f55922f8af Mon Sep 17 00:00:00 2001
-From: Rohit Agrawal <rohit.agrawal@databricks.com>
-Date: Mon, 14 Apr 2025 10:15:18 -0700
-Subject: [PATCH] Remove Interfering Bazel Files
-
----
- .bazelignore                                  |   2 -
- third_party/googletest/BUILD.bazel            | 236 -------
- third_party/googletest/WORKSPACE              |  61 --
- .../googletest/googlemock/test/BUILD.bazel    | 118 ----
- .../googletest/googletest/test/BUILD.bazel    | 629 ------------------
- 5 files changed, 1046 deletions(-)
- delete mode 100644 .bazelignore
- delete mode 100644 third_party/googletest/BUILD.bazel
- delete mode 100644 third_party/googletest/WORKSPACE
- delete mode 100644 third_party/googletest/googlemock/test/BUILD.bazel
- delete mode 100644 third_party/googletest/googletest/test/BUILD.bazel
-
 diff --git a/.bazelignore b/.bazelignore
 deleted file mode 100644
-index 9dad64c6aa..0000000000
+index 56daf3d..0000000
 --- a/.bazelignore
 +++ /dev/null
-@@ -1,2 +0,0 @@
+@@ -1,3 +0,0 @@
+-third_party/benchmark
 -third_party/googletest
 -util/bazel-example
 diff --git a/third_party/googletest/BUILD.bazel b/third_party/googletest/BUILD.bazel
 deleted file mode 100644
-index 0306468e7f..0000000000
+index cc25445..0000000
 --- a/third_party/googletest/BUILD.bazel
 +++ /dev/null
-@@ -1,236 +0,0 @@
+@@ -1,247 +0,0 @@
 -# Copyright 2017 Google Inc.
 -# All Rights Reserved.
 -#
@@ -115,6 +98,10 @@ index 0306468e7f..0000000000
 -)
 -
 -# Google Test including Google Mock
+-
+-# For an actual test, use `gtest` and also `gtest_main` if you depend on gtest's
+-# main(). For a library, use `gtest_for_library` instead if the library can be
+-# testonly.
 -cc_library(
 -    name = "gtest",
 -    srcs = glob(
@@ -179,10 +166,7 @@ index 0306468e7f..0000000000
 -            "@abseil-cpp//absl/flags:reflection",
 -            "@abseil-cpp//absl/flags:usage",
 -            "@abseil-cpp//absl/strings",
--            "@abseil-cpp//absl/types:any",
--            "@abseil-cpp//absl/types:optional",
--            "@abseil-cpp//absl/types:variant",
--            "@re2//:re2",
+-            "@re2",
 -        ],
 -        "//conditions:default": [],
 -    }) + select({
@@ -199,6 +183,16 @@ index 0306468e7f..0000000000
 -    }),
 -)
 -
+-# `gtest`, but testonly. See guidance on `gtest` for when to use this.
+-alias(
+-    name = "gtest_for_library",
+-    testonly = True,
+-    actual = ":gtest",
+-)
+-
+-# Implements main() for tests using gtest. Prefer to depend on `gtest` as well
+-# to ensure compliance with the layering_check Bazel feature where only the
+-# direct hdrs values are available.
 -cc_library(
 -    name = "gtest_main",
 -    srcs = ["googlemock/src/gmock_main.cc"],
@@ -268,7 +262,7 @@ index 0306468e7f..0000000000
 -)
 diff --git a/third_party/googletest/WORKSPACE b/third_party/googletest/WORKSPACE
 deleted file mode 100644
-index 4c76102843..0000000000
+index 0ae5dee..0000000
 --- a/third_party/googletest/WORKSPACE
 +++ /dev/null
 @@ -1,61 +0,0 @@
@@ -311,9 +305,9 @@ index 4c76102843..0000000000
 -
 -http_archive(
 -    name = "rules_python",
--    sha256 = "9c6e26911a79fbf510a8f06d8eedb40f412023cf7fa6d1461def27116bff022c",
--    strip_prefix = "rules_python-1.1.0",
--    url = "https://github.com/bazelbuild/rules_python/releases/download/1.1.0/rules_python-1.1.0.tar.gz",
+-    sha256 = "2cc26bbd53854ceb76dd42a834b1002cd4ba7f8df35440cf03482e045affc244",
+-    strip_prefix = "rules_python-1.3.0",
+-    url = "https://github.com/bazelbuild/rules_python/releases/download/1.3.0/rules_python-1.3.0.tar.gz",
 -)
 -# https://github.com/bazelbuild/rules_python/releases/tag/1.1.0
 -load("@rules_python//python:repositories.bzl", "py_repositories")
@@ -328,14 +322,14 @@ index 4c76102843..0000000000
 -http_archive(
 -    name = "platforms",
 -    urls = [
--        "https://mirror.bazel.build/github.com/bazelbuild/platforms/releases/download/0.0.10/platforms-0.0.10.tar.gz",
--        "https://github.com/bazelbuild/platforms/releases/download/0.0.10/platforms-0.0.10.tar.gz",
+-        "https://mirror.bazel.build/github.com/bazelbuild/platforms/releases/download/0.0.11/platforms-0.0.11.tar.gz",
+-        "https://github.com/bazelbuild/platforms/releases/download/0.0.11/platforms-0.0.11.tar.gz",
 -    ],
--    sha256 = "218efe8ee736d26a3572663b374a253c012b716d8af0c07e842e82f238a0a7ee",
+-    sha256 = "29742e87275809b5e598dc2f04d86960cc7a55b3067d97221c9abbc9926bff0f",
 -)
 diff --git a/third_party/googletest/googlemock/test/BUILD.bazel b/third_party/googletest/googlemock/test/BUILD.bazel
 deleted file mode 100644
-index d4297c80fe..0000000000
+index d4297c8..0000000
 --- a/third_party/googletest/googlemock/test/BUILD.bazel
 +++ /dev/null
 @@ -1,118 +0,0 @@
@@ -459,7 +453,7 @@ index d4297c80fe..0000000000
 -)
 diff --git a/third_party/googletest/googletest/test/BUILD.bazel b/third_party/googletest/googletest/test/BUILD.bazel
 deleted file mode 100644
-index c561ef8b91..0000000000
+index c561ef8..0000000
 --- a/third_party/googletest/googletest/test/BUILD.bazel
 +++ /dev/null
 @@ -1,629 +0,0 @@

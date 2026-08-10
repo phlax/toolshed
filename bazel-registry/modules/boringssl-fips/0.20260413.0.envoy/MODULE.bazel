@@ -5,8 +5,68 @@ module(
     compatibility_level = 1,
 )
 
-bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
-bazel_dep(name = "go-fips", version = "1.24.12.envoy")
-bazel_dep(name = "rules_cc", version = "0.1.1")
-bazel_dep(name = "platforms", version = "0.0.11")
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "envoy_toolshed", version = "0.4.5.envoy")
+bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_cc", version = "0.1.1")
+bazel_dep(name = "rules_python", version = "1.7.0")
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.12",
+)
+use_repo(python, "python_3_12_host")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+BUILD_ALL_CONTENT = """filegroup(name = \"all\", srcs = glob([\"**\"]), visibility = [\"//visibility:public\"])"""
+GO_BUILD_CONTENT = """filegroup(name = \"all\", srcs = glob([\"**\"], exclude=[\"test/**\"]), visibility = [\"//visibility:public\"])
+exports_files([\"bin/go\"])
+"""
+NINJA_BUILD_CONTENT = BUILD_ALL_CONTENT + "\nexports_files([\"configure.py\"])"
+CMAKE_BUILD_CONTENT = BUILD_ALL_CONTENT + "\nexports_files([\"bin/cmake\"])"
+
+http_archive(
+    name = "fips_ninja",
+    url = "https://github.com/ninja-build/ninja/archive/refs/tags/v1.13.2.tar.gz",
+    sha256 = "974d6b2f4eeefa25625d34da3cb36bdcebe7fbce40f4c16ac0835fd1c0cbae17",
+    strip_prefix = "ninja-1.13.2",
+    build_file_content = NINJA_BUILD_CONTENT,
+)
+
+http_archive(
+    name = "fips_cmake_linux_x86_64",
+    url = "https://github.com/Kitware/CMake/releases/download/v4.4.0/cmake-4.4.0-linux-x86_64.tar.gz",
+    sha256 = "3864eb649b4466ae126a64bbde1657adad78efbbaa068bf38201de5cf1b5349f",
+    strip_prefix = "cmake-4.4.0-linux-x86_64",
+    build_file_content = CMAKE_BUILD_CONTENT,
+)
+
+http_archive(
+    name = "fips_cmake_linux_aarch64",
+    url = "https://github.com/Kitware/CMake/releases/download/v4.4.0/cmake-4.4.0-linux-aarch64.tar.gz",
+    sha256 = "e98bb53e0b00a8f672424517d34c05bb9b94fd1c888c89e0b81bc8df51d1a94b",
+    strip_prefix = "cmake-4.4.0-linux-aarch64",
+    build_file_content = CMAKE_BUILD_CONTENT,
+)
+
+http_archive(
+    name = "fips_go_linux_amd64",
+    url = "https://dl.google.com/go/go1.26.3.linux-amd64.tar.gz",
+    sha256 = "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556",
+    strip_prefix = "go",
+    build_file_content = GO_BUILD_CONTENT,
+)
+
+http_archive(
+    name = "fips_go_linux_arm64",
+    url = "https://dl.google.com/go/go1.26.3.linux-arm64.tar.gz",
+    sha256 = "9d89a3ea57d141c2b22d70083f2c8459ba3890f2d9e818e7e933b75614936565",
+    strip_prefix = "go",
+    build_file_content = GO_BUILD_CONTENT,
+)
+
+sysroot_ext = use_extension("@envoy_toolshed//sysroot:extensions.bzl", "sysroot_extension")
+sysroot_ext.setup()
+use_repo(sysroot_ext, "sysroot_linux_amd64", "sysroot_linux_arm64")
