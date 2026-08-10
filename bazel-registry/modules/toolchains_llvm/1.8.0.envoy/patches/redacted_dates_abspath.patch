@@ -8,7 +8,7 @@
 +# injected by toolchains_llvm's unfiltered_compile_flags) resolve even when the
 +# action's cwd is not the exec root (e.g. rules_rust CargoBuildScriptRun).
 +exec_root_abs=""
-+if [[ ${toolchain_path_prefix} != /* ]] && [[ "${script_dir}" == "/"* ]]; then
++if [[ "${script_dir}" == /* ]]; then
 +  exec_root_abs="$(dirname_shim "$(dirname_shim "$(dirname_shim "${script_dir}")")")"
 +fi
 +
