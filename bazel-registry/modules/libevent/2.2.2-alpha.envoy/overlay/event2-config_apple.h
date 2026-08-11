@@ -256,6 +256,9 @@
 /* Define to 1 if you have the `strlcpy' function. */
 #define EVENT__HAVE_STRLCPY 1
 
+/* Define to 1 if you have the `strndup' function. */
+#define EVENT__HAVE_STRNDUP 1
+
 /* Define to 1 if you have the `strsep' function. */
 #define EVENT__HAVE_STRSEP 1
 
