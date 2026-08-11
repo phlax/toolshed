@@ -43,8 +43,8 @@
 #define EVENT__HAVE_ARC4RANDOM_BUF 1
 #endif
 
-/* Define to 1 if you have the `arc4random_addrandom' function. */
-/* #undef EVENT__HAVE_ARC4RANDOM_ADDRANDOM */
+/* Define to 1 if you have the `arc4random_stir' function. */
+/* #undef EVENT__HAVE_ARC4RANDOM_STIR */
 
 /* Define if clock_gettime is available in libc */
 #define EVENT__DNS_USE_CPU_CLOCK_FOR_ID 1
@@ -91,8 +91,12 @@
 /* Define to 1 if you have the `epoll_create1' function. */
 #define EVENT__HAVE_EPOLL_CREATE1 1
 
-/* Define to 1 if you have the `epoll_ctl' function. */
-#define EVENT__HAVE_EPOLL_CTL 1
+/* Define to 1 if you have the `epoll_pwait2' function. */
+/* Requires Linux 5.11+; guard is the macro itself rather than a version check. */
+/* #undef EVENT__HAVE_EPOLL_PWAIT2 */
+
+/* Define if your system supports the wepoll module */
+/* #undef EVENT__HAVE_WEPOLL */
 
 /* Define to 1 if you have the `eventfd' function. */
 #define EVENT__HAVE_EVENTFD 1
@@ -179,6 +183,9 @@
 /* Define to 1 if you have the `mmap' function. */
 #define EVENT__HAVE_MMAP 1
 
+/* Define to 1 if you have the `mmap64' function. */
+#define EVENT__HAVE_MMAP64 1
+
 /* Define to 1 if you have the `nanosleep' function. */
 #define EVENT__HAVE_NANOSLEEP 1
 
@@ -197,11 +204,17 @@
 /* Define to 1 if you have the <sys/un.h> header file. */
 #define EVENT__HAVE_SYS_UN_H 1
 
+/* Define to 1 if you have the <sys/auxv.h> header file. */
+#define EVENT__HAVE_SYS_AUXV_H 1
+
 /* Define to 1 if you have the <afunix.h> header file. */
 /* #undef EVENT__HAVE_AFUNIX_H */
 
 /* Define if the system has openssl */
 #define EVENT__HAVE_OPENSSL 1
+
+/* Define if the system has mbedtls */
+/* #undef EVENT__HAVE_MBEDTLS */
 
 /* Define to 1 if you have the `pipe' function. */
 #define EVENT__HAVE_PIPE 1
@@ -224,6 +237,9 @@
 /* Define if we have pthreads on this system */
 #define EVENT__HAVE_PTHREADS 1
 
+/* Define to 1 if you have the `pthread_mutexattr_setprotocol' function. */
+#define EVENT__HAVE_PTHREAD_MUTEXATTR_SETPROTOCOL 1
+
 /* Define to 1 if you have the `putenv' function. */
 #define EVENT__HAVE_PUTENV 1
 
@@ -245,11 +261,20 @@
 /* Define to 1 if you have the `sendfile' function. */
 #define EVENT__HAVE_SENDFILE 1
 
+/* Define to 1 if you have the `pread' function. */
+#define EVENT__HAVE_PREAD 1
+
 /* Define to 1 if you have the `sigaction' function. */
 #define EVENT__HAVE_SIGACTION 1
 
 /* Define to 1 if you have the `signal' function. */
 #define EVENT__HAVE_SIGNAL 1
+
+/* Define to 1 if you have the `socketpair' function. */
+#define EVENT__HAVE_SOCKETPAIR 1
+
+/* Define to 1 if you have the `strsignal' function. */
+#define EVENT__HAVE_STRSIGNAL 1
 
 /* Define to 1 if you have the `splice' function. */
 #define EVENT__HAVE_SPLICE 1
@@ -291,6 +316,9 @@
 
 /* Define to 1 if you have the `_gmtime64' function. */
 /* #undef EVENT__HAVE__GMTIME64 */
+
+/* Define to 1 if you have the `BCryptGenRandom' function. */
+/* #undef EVENT__HAVE_BCRYPTGENRANDOM */
 
 /* Define to 1 if the system has the type `struct addrinfo'. */
 #define EVENT__HAVE_STRUCT_ADDRINFO 1
@@ -375,6 +403,9 @@
 
 /* Define to 1 if you have the <sys/timerfd.h> header file. */
 #define EVENT__HAVE_SYS_TIMERFD_H 1
+
+/* Define to 1 if you have the <sys/signalfd.h> header file. */
+#define EVENT__HAVE_SYS_SIGNALFD_H 1
 
 /* Define to 1 if you have the <sys/time.h> header file. */
 #define EVENT__HAVE_SYS_TIME_H 1
@@ -479,11 +510,14 @@
 
 /* The size of `socklen_t', as computed by sizeof. */
 /* There is no macro for this, but it is usually 4. */
-/* Since it is unused, we might as well #undef it. */
-#undef EVENT__SIZEOF_SOCKLEN_T
+#define EVENT__SIZEOF_SOCKLEN_T 4
 
 /* The size of 'void *', as computer by sizeof */
 #define EVENT__SIZEOF_VOID_P __SIZEOF_POINTER__
+
+/* The size of 'time_t', as computed by sizeof. */
+/* On Linux/glibc time_t is long (8 bytes on 64-bit). */
+#define EVENT__SIZEOF_TIME_T __SIZEOF_LONG__
 
 /* Define to `__inline__' or `__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */

@@ -78,6 +78,7 @@ cc_library(
         "strlcpy-internal.h",
         "time-internal.h",
         "util-internal.h",
+        "wepoll.h",
     ],
     visibility = [":__subpackages__"],
 )
@@ -129,6 +130,7 @@ cc_library(
         "poll.c",
         "select.c",
         "signal.c",
+        "signalfd.c",
         "strlcpy.c",
         "watch.c",
     ] + select({
@@ -137,6 +139,7 @@ cc_library(
             "bufferevent_async.c",
             "event_iocp.c",
             "evthread_win32.c",
+            "wepoll.c",
             "win32select.c",
         ],
         "//conditions:default": [],
@@ -241,6 +244,7 @@ cc_library(
 cc_library(
     name = "event_openssl_private_headers",
     hdrs = [
+        "mbedtls-compat.h",
         "openssl-compat.h",
         "ssl-compat.h",
     ],
