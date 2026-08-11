@@ -1,0 +1,25 @@
+matrix:
+  platform:
+  - debian11
+  - debian10
+  - fedora39
+  - ubuntu2004
+  - ubuntu2204
+  - ubuntu2404
+  bazel:
+  - 8.x
+  - 7.x
+tasks:
+  verify_targets:
+    name: Verify build targets
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets:
+    - '@bssl-compat//:test_data'
+    - '@bssl-compat//:ssl/ssl_x509.cc'
+    - '@bssl-compat//:crypto/mem.cc'
+    - '@bssl-compat//:crypto/internal.h'
+    - '@bssl-compat//:crypto/bytestring/cbb.cc'
+    - '@bssl-compat//:crypto/bytestring/cbs.cc'
+    - '@bssl-compat//:include/openssl/ssl.h'
+    - '@bssl-compat//:include/openssl/pki/certificate.h'
