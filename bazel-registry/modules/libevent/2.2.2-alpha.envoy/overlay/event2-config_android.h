@@ -37,7 +37,7 @@
  * This header targets 64-bit Android ABIs (arm64-v8a, x86_64).  For
  * 32-bit ABIs some sizeof values would differ; regenerate if needed.
  *
- * See the maintainer notes in //modules/libevent/README.md.
+ * See the maintainer notes in //bazel-registry/modules/libevent/README.md.
  *
  * Do not rely on macros in this file existing in later versions.
  */

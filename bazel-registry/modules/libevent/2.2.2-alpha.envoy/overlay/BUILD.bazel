@@ -78,8 +78,12 @@ cc_library(
         "strlcpy-internal.h",
         "time-internal.h",
         "util-internal.h",
-        "wepoll.h",
-    ],
+    ] + select({
+        "@platforms//os:windows": [
+            "wepoll.h",
+        ],
+        "//conditions:default": [],
+    }),
     visibility = [":__subpackages__"],
 )
 
@@ -130,10 +134,13 @@ cc_library(
         "poll.c",
         "select.c",
         "signal.c",
-        "signalfd.c",
         "strlcpy.c",
         "watch.c",
     ] + select({
+        "@platforms//os:linux": ["signalfd.c"],
+        "@platforms//os:android": ["signalfd.c"],
+        "//conditions:default": [],
+    }) + select({
         "@platforms//os:windows": [
             "buffer_iocp.c",
             "bufferevent_async.c",
