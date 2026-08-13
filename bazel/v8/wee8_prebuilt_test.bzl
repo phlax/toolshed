@@ -19,9 +19,15 @@ def _wee8_prebuilt_helpers_test_impl(ctx):
         "v8-wee8-1.2.3-linux-aarch64.tar.xz",
         wee8_legacy_archive_filename("1.2.3", "aarch64"),
     )
+    asserts.equals(
+        env,
+        "v8-wee8-1.2.3-linux-aarch64-libstdcxx.tar.xz",
+        wee8_archive_filename("1.2.3", "aarch64", "libstdcxx"),
+    )
     asserts.equals(env, "wee8_prebuilt_x86_64", wee8_prebuilt_repo_name("x86_64"))
     asserts.equals(env, "wee8_prebuilt_x86_64_libstdcxx", wee8_prebuilt_repo_name("x86_64", "libstdcxx"))
     asserts.equals(env, "wee8_prebuilt_aarch64", wee8_prebuilt_repo_name("aarch64"))
+    asserts.equals(env, "wee8_prebuilt_aarch64_libstdcxx", wee8_prebuilt_repo_name("aarch64", "libstdcxx"))
     asserts.equals(
         env,
         "abc",

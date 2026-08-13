@@ -70,11 +70,9 @@ def wee8_legacy_archive_filename(version, arch):
     return "v8-wee8-%s-linux-%s.tar.xz" % (version, arch)
 
 def wee8_prebuilt_repo_name(arch, stdlib = WEE8_DEFAULT_STDLIB):
-    if arch == "x86_64" and stdlib == "libstdcxx":
-        return "wee8_prebuilt_x86_64_libstdcxx"
-    if stdlib != WEE8_DEFAULT_STDLIB:
-        fail("Unsupported wee8 prebuilt stdlib %s for linux-%s" % (stdlib, arch))
-    return "wee8_prebuilt_%s" % arch
+    if stdlib == WEE8_DEFAULT_STDLIB:
+        return "wee8_prebuilt_%s" % arch
+    return "wee8_prebuilt_%s_libstdcxx" % arch
 
 def wee8_sha256(versions, arch, stdlib = WEE8_DEFAULT_STDLIB):
     arch_entry = versions.get("wee8_sha256", {}).get(arch, "")
@@ -122,15 +120,7 @@ def _wee8_prebuilt_impl(ctx):
 
     ctx.file("BUILD.bazel", _WEE8_BUILD)
 
-def _unsupported_target_impl(ctx):
-    fail(ctx.attr.message)
-
-unsupported_target = rule(
-    implementation = _unsupported_target_impl,
-    attrs = {
-        "message": attr.string(mandatory = True),
-    },
-)
+_ARCHES = ["x86_64", "aarch64"]
 
 wee8_prebuilt = repository_rule(
     implementation = _wee8_prebuilt_impl,
@@ -163,26 +153,36 @@ def setup_wee8_prebuilt(
         x86_64_libstdcxx_version = None,
         x86_64_libstdcxx_sha256 = None,
         aarch64_version = None,
-        aarch64_sha256 = None):
-    """Setup function for WORKSPACE."""
-    wee8_prebuilt(
-        name = wee8_prebuilt_repo_name("x86_64"),
-        version = x86_64_version or VERSIONS["bins_release"],
-        sha256 = x86_64_sha256 or wee8_sha256(VERSIONS, "x86_64"),
-        arch = "x86_64",
-    )
-
-    wee8_prebuilt(
-        name = wee8_prebuilt_repo_name("x86_64", "libstdcxx"),
-        version = x86_64_libstdcxx_version or x86_64_version or VERSIONS["bins_release"],
-        sha256 = x86_64_libstdcxx_sha256 or wee8_sha256(VERSIONS, "x86_64", "libstdcxx"),
-        arch = "x86_64",
-        stdlib = "libstdcxx",
-    )
-
-    wee8_prebuilt(
-        name = wee8_prebuilt_repo_name("aarch64"),
-        version = aarch64_version or VERSIONS["bins_release"],
-        sha256 = aarch64_sha256 or wee8_sha256(VERSIONS, "aarch64"),
-        arch = "aarch64",
-    )
+        aarch64_sha256 = None,
+        aarch64_libstdcxx_version = None,
+        aarch64_libstdcxx_sha256 = None):
+    """Setup function for WORKSPACE — instantiates all four wee8 prebuilt repos."""
+    _versions = {
+        "x86_64": {
+            "libcxx": x86_64_version,
+            "libstdcxx": x86_64_libstdcxx_version or x86_64_version,
+        },
+        "aarch64": {
+            "libcxx": aarch64_version,
+            "libstdcxx": aarch64_libstdcxx_version or aarch64_version,
+        },
+    }
+    _shas = {
+        "x86_64": {
+            "libcxx": x86_64_sha256,
+            "libstdcxx": x86_64_libstdcxx_sha256,
+        },
+        "aarch64": {
+            "libcxx": aarch64_sha256,
+            "libstdcxx": aarch64_libstdcxx_sha256,
+        },
+    }
+    for arch in _ARCHES:
+        for stdlib in WEE8_STDLIBS:
+            wee8_prebuilt(
+                name = wee8_prebuilt_repo_name(arch, stdlib),
+                version = _versions[arch][stdlib] or VERSIONS["bins_release"],
+                sha256 = _shas[arch][stdlib] or wee8_sha256(VERSIONS, arch, stdlib),
+                arch = arch,
+                stdlib = stdlib,
+            )

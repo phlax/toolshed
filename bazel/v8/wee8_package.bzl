@@ -17,11 +17,17 @@ _GCC_TOOLCHAINS = [
     "//toolchains/gcc:linux_arm64_toolchain",
 ]
 
+_ARCH_PLATFORMS = {
+    "x86_64": "@toolchains_llvm//platforms:linux-x86_64",
+    "aarch64": "@toolchains_llvm//platforms:linux-aarch64",
+}
+
 def _wee8_transition_impl(settings, attr):
     use_gcc = attr.stdlib == "libstdcxx"
     return {
         "//compile:use_gcc_toolchain": use_gcc,
         "//command_line_option:extra_toolchains": _GCC_TOOLCHAINS if use_gcc else [],
+        "//command_line_option:platforms": [_ARCH_PLATFORMS[attr.arch]],
     }
 
 _wee8_transition = transition(
@@ -30,6 +36,7 @@ _wee8_transition = transition(
     outputs = [
         "//compile:use_gcc_toolchain",
         "//command_line_option:extra_toolchains",
+        "//command_line_option:platforms",
     ],
 )
 
@@ -226,8 +233,6 @@ def wee8_package(name = None, arch = None, stdlib = WEE8_DEFAULT_STDLIB, version
       third_party/         canonical third_party/wasm-api/ paths
       src/                 internal V8 headers exported via CcInfo (e.g. src/wasm/c-api.h)
     """
-    if arch == "aarch64" and stdlib == "libstdcxx":
-        fail("linux-aarch64 libstdcxx wee8 packaging is intentionally unsupported")
     _wee8_package(
         name = name or wee8_package_target_name(arch, stdlib),
         wee8 = "@v8//:wee8",
