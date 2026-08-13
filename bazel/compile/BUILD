@@ -420,3 +420,17 @@ sh_test(
     },
     tags = ["manual"],
 )
+
+constraint_setting(name = "stdlib")
+
+constraint_value(
+    name = "libstdcxx",
+    constraint_setting = ":stdlib",
+)
+
+constraint_setting(name = "worker")
+
+constraint_value(
+    name = "gcc_worker",
+    constraint_setting = ":worker",
+)

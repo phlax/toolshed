@@ -22,30 +22,24 @@ load(":wee8_prebuilt.bzl", "WEE8_DEFAULT_STDLIB", "WEE8_STDLIBS", "wee8_archive_
 _V8_VERSION = V8_VERSION
 
 _ARCH_PLATFORMS = {
-    "x86_64": "@toolchains_llvm//platforms:linux-x86_64",
-    "aarch64": "@toolchains_llvm//platforms:linux-aarch64",
+    ("x86_64", "libcxx"): "@toolchains_llvm//platforms:linux-x86_64",
+    ("aarch64", "libcxx"): "@toolchains_llvm//platforms:linux-aarch64",
+    ("x86_64", "libstdcxx"): "//platforms:linux_x86_64_libstdcxx",
+    # This does not currently work as it would require x-libs similar to how we provision llvm
+    # ("aarch64", "libstdcxx"): "//platforms:linux_aarch64_libstdcxx",
 }
 
-# NOTE: do not set //command_line_option:extra_toolchains here. It is a global
-# option and takes highest priority in toolchain resolution for *every*
-# configuration, including exec. Registering the gcc toolchains that way made
-# host tools (abseil, simdutf, ...) resolve to the gcc toolchain and shell out
-# to /usr/bin/gcc, which is not present on the RBE worker image. The target-side
-# selection is driven by //compile:use_gcc_toolchain alone.
 def _wee8_transition_impl(settings, attr):
-    use_gcc = attr.stdlib == "libstdcxx"
     return {
-        "//compile:use_gcc_toolchain": use_gcc,
-        "//command_line_option:platforms": [_ARCH_PLATFORMS[attr.arch]],
+        "//command_line_option:platforms": [
+            _ARCH_PLATFORMS[(attr.arch, attr.stdlib)],
+        ],
     }
 
 _wee8_transition = transition(
     implementation = _wee8_transition_impl,
     inputs = [],
-    outputs = [
-        "//compile:use_gcc_toolchain",
-        "//command_line_option:platforms",
-    ],
+    outputs = ["//command_line_option:platforms"],
 )
 
 _TRANSITION_ATTRS = {
