@@ -30,32 +30,30 @@ alias(
 
 cc_test(
     name = "wee8_smoke_test",
+    srcs = ["wee8_smoke_test.cc"],
     copts = [
         "-DV8_ENABLE_WEBASSEMBLY=1",
         "-std=c++20",
     ],
-    srcs = ["wee8_smoke_test.cc"],
-    deps = [":wee8"],
-    tags = ["manual"],
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
+    deps = [":wee8"],
 )
 
 cc_binary(
     name = "wee8_smoke_link_aarch64",
+    srcs = ["wee8_smoke_test.cc"],
     copts = [
         "-DV8_ENABLE_WEBASSEMBLY=1",
         "-std=c++20",
     ],
-    srcs = ["wee8_smoke_test.cc"],
-    deps = [":wee8"],
-    tags = ["manual"],
     target_compatible_with = [
         "@platforms//cpu:aarch64",
         "@platforms//os:linux",
     ],
+    deps = [":wee8"],
 )
 
 # Per-arch packaging targets — tagged manual so they are not built by //...

@@ -44,15 +44,31 @@ cc_library(
 )
 """
 
+# BUILD content used when sha256 is missing (e.g. during a V8 version bump
+# before the new prebuilt has been published). The wee8 target is marked
+# incompatible so that wildcard builds skip it gracefully, but any target that
+# explicitly depends on //v8:wee8 will receive a clear error.
+#
+# V8-bump procedure: bump V8_VERSION in versions.bzl → land the producer job
+# (package-v8) which publishes the new bins release → run the bazel/prepare
+# workflow to fill in the wee8_sha256 entries → builds recover automatically.
+_WEE8_BUILD_MISSING_SHA = """\
+package(default_visibility = ["//visibility:public"])
+
+# wee8 prebuilt is unavailable: sha256 is not set in versions.bzl.
+# See the V8-bump procedure in bazel/v8/wee8_prebuilt.bzl.
+cc_library(
+    name = "wee8",
+    target_compatible_with = ["@platforms//:incompatible"],
+)
+"""
+
 def _wee8_prebuilt_impl(ctx):
     """Implementation for wee8 prebuilt repository rule."""
     sha256 = ctx.attr.sha256
     if not sha256:
-        fail(
-            "Missing wee8 SHA256 for arch '%s'. Set VERSIONS['wee8_sha256']['%s'] in //:versions.bzl " %
-            (ctx.attr.arch, ctx.attr.arch) +
-            "using the bazel/prepare workflow after publishing bins-v%s." % ctx.attr.version,
-        )
+        ctx.file("BUILD.bazel", _WEE8_BUILD_MISSING_SHA)
+        return
 
     ctx.download_and_extract(
         url = "https://github.com/envoyproxy/toolshed/releases/download/bins-v{version}/v8-wee8-{v8_version}-linux-{arch}.tar.xz".format(
