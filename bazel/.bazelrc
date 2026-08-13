@@ -70,17 +70,14 @@ common:remote-exec --define=engflow_rbe=true
 # WorkerInDockerActionRunner matches on; without these registered, dispatched
 # actions fail with `No matching action runner found`.
 common:remote-exec --host_platform=//platforms/rbe:linux_x64
-common:remote-exec --extra_execution_platforms=//platforms/rbe:linux_x64,//platforms/rbe:linux_arm64
-
+common:remote-exec --extra_execution_platforms=//platforms/rbe:linux_x64,//platforms/rbe:linux_arm64,//platforms/rbe:linux_x64_gcc,//platforms/rbe:linux_arm64_gcc
 
 #############################################################################
 # gcc
 #############################################################################
 
 common:gcc --//compile:use_gcc_toolchain=true
-common:gcc --extra_toolchains=//toolchains/gcc:linux_x64_toolchain
-common:gcc --extra_toolchains=//toolchains/gcc:linux_arm64_toolchain
-
+common:gcc --platforms=//platforms:linux_x86_64_libstdcxx
 
 #############################################################################
 # macos

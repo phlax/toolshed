@@ -22,29 +22,41 @@ load(":wee8_prebuilt.bzl", "WEE8_DEFAULT_STDLIB", "WEE8_STDLIBS", "wee8_archive_
 _V8_VERSION = V8_VERSION
 
 _ARCH_PLATFORMS = {
-    "x86_64": "@toolchains_llvm//platforms:linux-x86_64",
-    "aarch64": "@toolchains_llvm//platforms:linux-aarch64",
+    ("x86_64", "libcxx"): "@toolchains_llvm//platforms:linux-x86_64",
+    ("aarch64", "libcxx"): "@toolchains_llvm//platforms:linux-aarch64",
+    ("x86_64", "libstdcxx"): "//platforms:linux_x86_64_libstdcxx",
+    # This does not currently work as it would require x-libs similar to how we provision llvm
+    # ("aarch64", "libstdcxx"): "//platforms:linux_aarch64_libstdcxx",
 }
 
-# NOTE: do not set //command_line_option:extra_toolchains here. It is a global
-# option and takes highest priority in toolchain resolution for *every*
-# configuration, including exec. Registering the gcc toolchains that way made
-# host tools (abseil, simdutf, ...) resolve to the gcc toolchain and shell out
-# to /usr/bin/gcc, which is not present on the RBE worker image. The target-side
-# selection is driven by //compile:use_gcc_toolchain alone.
+# The target platform alone is not enough to select the gcc toolchain.
+#
+# //toolchains/gcc:linux_x64_toolchain matches the target platform via
+# //compile:libstdcxx, but also declares //compile:gcc_worker in its
+# exec_compatible_with. @platforms//host does not carry that constraint, so the
+# toolchain is rejected at the execution stage and resolution silently falls
+# through to LLVM - producing a libc++ build under a -libstdcxx artifact name.
+#
+# Registering an exec platform that carries //compile:gcc_worker lets the gcc
+# toolchain resolve.
+_GCC_EXEC_PLATFORMS = ["//platforms:linux_x86_64_gcc_worker"]
+
 def _wee8_transition_impl(settings, attr):
-    use_gcc = attr.stdlib == "libstdcxx"
     return {
-        "//compile:use_gcc_toolchain": use_gcc,
-        "//command_line_option:platforms": [_ARCH_PLATFORMS[attr.arch]],
+        "//command_line_option:platforms": [
+            _ARCH_PLATFORMS[(attr.arch, attr.stdlib)],
+        ],
+        "//command_line_option:extra_execution_platforms": (
+            _GCC_EXEC_PLATFORMS if attr.stdlib == "libstdcxx" else []
+        ),
     }
 
 _wee8_transition = transition(
     implementation = _wee8_transition_impl,
     inputs = [],
     outputs = [
-        "//compile:use_gcc_toolchain",
         "//command_line_option:platforms",
+        "//command_line_option:extra_execution_platforms",
     ],
 )
 
@@ -70,7 +82,7 @@ _TRANSITION_ATTRS = {
     ),
 }
 
-# ── Fat archive ─────────────────────────────────────────────────────────────
+# ── Fat archive ──────────────────────────────────────────────────────────────
 
 # argv[1]    archiver executable (from the resolved cc toolchain)
 # argv[2]    output libwee8.a path
@@ -187,7 +199,7 @@ wee8_fat_archive = rule(
     doc = "Merges @v8//:wee8 and its static deps into a single libwee8.a.",
 )
 
-# ── Headers ─────────────────────────────────────────────────────────────────
+# ── Headers ──────────────────────────────────────────────────────────────────
 
 def _wee8_headers_impl(ctx):
     cc_info = ctx.attr.wee8[0][CcInfo]
@@ -231,7 +243,7 @@ wee8_headers = rule(
     doc = "Maps @v8//:wee8 headers from execroot paths to tarball paths.",
 )
 
-# ── Public macro ────────────────────────────────────────────────────────────
+# ── Public macro ─────────────────────────────────────────────────────────────
 
 def wee8_package_target_name(arch, stdlib = WEE8_DEFAULT_STDLIB):
     return "wee8_package_linux_%s_%s" % (arch, stdlib)
