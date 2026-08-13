@@ -29,35 +29,31 @@ _ARCH_PLATFORMS = {
     # ("aarch64", "libstdcxx"): "//platforms:linux_aarch64_libstdcxx",
 }
 
-# The target platform alone is not enough to select the gcc toolchain.
+# The transition sets the target platform only. Execution platforms are supplied
+# by config, not here:
 #
-# //toolchains/gcc:linux_x64_toolchain matches the target platform via
-# //compile:libstdcxx, but also declares //compile:gcc_worker in its
-# exec_compatible_with. @platforms//host does not carry that constraint, so the
-# toolchain is rejected at the execution stage and resolution silently falls
-# through to LLVM - producing a libc++ build under a -libstdcxx artifact name.
+#   --config=gcc      registers //platforms:linux_x86_64_gcc_worker, which
+#                     carries //compile:gcc_worker so the gcc toolchain resolves
+#                     locally.
+#   --config=rbe-gcc  overrides that with the //platforms/rbe gcc platforms,
+#                     which also carry the `container-image` exec property that
+#                     EngFlow matches on.
 #
-# Registering an exec platform that carries //compile:gcc_worker lets the gcc
-# toolchain resolve.
-_GCC_EXEC_PLATFORMS = ["//platforms:linux_x86_64_gcc_worker"]
+# Setting --extra_execution_platforms from the transition would clobber the RBE
+# platforms, and dispatched actions would fail with `No matching action runner
+# found` because the injected platform has no exec properties.
 
 def _wee8_transition_impl(settings, attr):
     return {
         "//command_line_option:platforms": [
             _ARCH_PLATFORMS[(attr.arch, attr.stdlib)],
         ],
-        "//command_line_option:extra_execution_platforms": (
-            _GCC_EXEC_PLATFORMS if attr.stdlib == "libstdcxx" else []
-        ),
     }
 
 _wee8_transition = transition(
     implementation = _wee8_transition_impl,
     inputs = [],
-    outputs = [
-        "//command_line_option:platforms",
-        "//command_line_option:extra_execution_platforms",
-    ],
+    outputs = ["//command_line_option:platforms"],
 )
 
 _TRANSITION_ATTRS = {

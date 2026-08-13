@@ -50,6 +50,11 @@ common:rbe --config=remote-exec
 
 # Override the default RBE platforms to use the gcc worker container.
 # Use alongside --config=gcc for gcc RBE builds.
+#
+# This must come after --config=gcc on the command line: the local gcc exec
+# platform registered by :gcc carries //compile:gcc_worker but no
+# `container-image` exec property, so it must not win over the RBE platforms
+# when dispatching to EngFlow.
 common:rbe-gcc --config=rbe
 common:rbe-gcc --host_platform=//platforms/rbe:linux_x64_gcc
 common:rbe-gcc --extra_execution_platforms=//platforms/rbe:linux_x64_gcc,//platforms/rbe:linux_arm64_gcc
@@ -70,7 +75,7 @@ common:remote-exec --define=engflow_rbe=true
 # WorkerInDockerActionRunner matches on; without these registered, dispatched
 # actions fail with `No matching action runner found`.
 common:remote-exec --host_platform=//platforms/rbe:linux_x64
-common:remote-exec --extra_execution_platforms=//platforms/rbe:linux_x64,//platforms/rbe:linux_arm64,//platforms/rbe:linux_x64_gcc,//platforms/rbe:linux_arm64_gcc
+common:remote-exec --extra_execution_platforms=//platforms/rbe:linux_x64,//platforms/rbe:linux_arm64
 
 #############################################################################
 # gcc
@@ -78,6 +83,15 @@ common:remote-exec --extra_execution_platforms=//platforms/rbe:linux_x64,//platf
 
 common:gcc --//compile:use_gcc_toolchain=true
 common:gcc --platforms=//platforms:linux_x86_64_libstdcxx
+# //toolchains/gcc:*_toolchain declares //compile:gcc_worker in
+# exec_compatible_with. @platforms//host does not carry that constraint, so
+# without an exec platform that does, the gcc toolchain is rejected at the exec
+# stage and resolution silently falls through to LLVM - yielding a libc++ build
+# where libstdc++ was asked for.
+#
+# For RBE builds --config=rbe-gcc overrides this with the //platforms/rbe gcc
+# platforms, which additionally carry the `container-image` exec property.
+common:gcc --extra_execution_platforms=//platforms:linux_x86_64_gcc_worker
 
 #############################################################################
 # macos
