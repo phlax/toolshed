@@ -11,6 +11,7 @@ filegroup(
         [
             "include/**",
             "third_party/**/*.h",
+            "third_party/**/*.hh",
             "src/**/*.h",
         ],
     ),
@@ -30,29 +31,53 @@ cc_library(
         "include",
     ],
     linkstatic = True,
+    # wee8_package excludes abseil/icu archives from libwee8.a; consumers must
+    # link those separately.
+    deps = [
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/functional:overload",
+        "@abseil-cpp//absl/synchronization",
+        "@icu//:icu",
+    ],
+)
+"""
+
+# BUILD content used when sha256 is missing (e.g. during a V8 version bump
+# before the new prebuilt has been published). The wee8 target is marked
+# incompatible so that wildcard builds skip it gracefully, but any target that
+# explicitly depends on //v8:wee8 will receive a clear error.
+#
+# V8-bump procedure: bump V8_VERSION in versions.bzl → land the producer job
+# (package-v8) which publishes the new bins release → run the bazel/prepare
+# workflow to fill in the wee8_sha256 entries → builds recover automatically.
+_WEE8_BUILD_MISSING_SHA = """\
+package(default_visibility = ["//visibility:public"])
+
+# wee8 prebuilt is unavailable: sha256 is not set in versions.bzl.
+# See the V8-bump procedure in bazel/v8/wee8_prebuilt.bzl.
+cc_library(
+    name = "wee8",
+    target_compatible_with = ["@platforms//:incompatible"],
 )
 """
 
 def _wee8_prebuilt_impl(ctx):
     """Implementation for wee8 prebuilt repository rule."""
     sha256 = ctx.attr.sha256
-    if sha256:
-        ctx.download_and_extract(
-            url = "https://github.com/envoyproxy/toolshed/releases/download/bins-v{version}/v8-wee8-{v8_version}-linux-{arch}.tar.xz".format(
-                version = ctx.attr.version,
-                v8_version = V8_VERSION,
-                arch = ctx.attr.arch,
-            ),
-            sha256 = sha256,
-        )
-    else:
-        # No hash available yet — create a placeholder archive to keep setup non-fatal
-        # until the first release populates versions.bzl.
-        ctx.execute(["mkdir", "-p", "include", "lib", "src", "third_party"])
-        ctx.file(
-            "lib/libwee8.a",
-            "Wee8 prebuilt archive not available yet. Run release (bazel/prepare) workflow after a bins release containing wee8 artifacts.\n",
-        )
+    if not sha256:
+        ctx.file("BUILD.bazel", _WEE8_BUILD_MISSING_SHA)
+        return
+
+    ctx.download_and_extract(
+        url = "https://github.com/envoyproxy/toolshed/releases/download/bins-v{version}/v8-wee8-{v8_version}-linux-{arch}.tar.xz".format(
+            version = ctx.attr.version,
+            v8_version = V8_VERSION,
+            arch = ctx.attr.arch,
+        ),
+        sha256 = sha256,
+    )
 
     ctx.file("BUILD.bazel", _WEE8_BUILD)
 
