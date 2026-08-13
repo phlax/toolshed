@@ -20,6 +20,7 @@ platform(
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
+        "//compile:llvm_worker",
     ],
     exec_properties = {
         "container-image": WORKER_IMAGE,
@@ -32,6 +33,7 @@ platform(
     constraint_values = [
         "@platforms//os:linux",
         "@platforms//cpu:aarch64",
+        "//compile:llvm_worker",
     ],
     exec_properties = {
         "container-image": WORKER_IMAGE,

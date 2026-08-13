@@ -160,6 +160,10 @@ llvm.sysroot(
     label = "@sysroot_linux_arm64//:sysroot",
     targets = ["linux-aarch64"],
 )
+llvm.extra_exec_compatible_with(
+    name = "llvm_toolchain",
+    constraints = ["//compile:llvm_worker"],
+)
 use_repo(llvm, "llvm_toolchain")
 
 register_toolchains("@llvm_toolchain//:all", dev_dependency = True)

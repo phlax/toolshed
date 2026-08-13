@@ -428,7 +428,15 @@ constraint_value(
     constraint_setting = ":stdlib",
 )
 
-constraint_setting(name = "worker")
+constraint_setting(
+    name = "worker",
+    default_constraint_value = ":llvm_worker",
+)
+
+constraint_value(
+    name = "llvm_worker",
+    constraint_setting = ":worker",
+)
 
 constraint_value(
     name = "gcc_worker",
