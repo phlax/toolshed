@@ -53,12 +53,15 @@ jobs:
       targets: >-
         //...
         //sysroot:sysroots
+        ${{ matrix.extra_targets }}
     strategy:
       fail-fast: false
       matrix:
-        mode:
-        - workspace
-        - bzlmod
+        include:
+        - mode: workspace
+          extra_targets: ""
+        - mode: bzlmod
+          extra_targets: //v8:wee8_smoke_test
 
   build:
     permissions:
