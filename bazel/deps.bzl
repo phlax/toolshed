@@ -15,7 +15,7 @@ load("@toolchains_llvm//toolchain:deps.bzl", "bazel_toolchain_dependencies")
 load("//compile:libcxx_libs.bzl", "setup_libcxx_libs")
 load("//compile:llvm_minimal.bzl", "setup_llvm_minimal_build")
 load("//sysroot:sysroot.bzl", "setup_sysroots")
-load("//v8:wee8_prebuilt.bzl", "setup_wee8_prebuilt", "setup_wee8_workspace_deps")
+load("//v8:wee8_prebuilt.bzl", "setup_wee8_prebuilt")
 load("//:versions.bzl", "VERSIONS")
 
 def resolve_dependencies(
@@ -42,4 +42,3 @@ def resolve_dependencies(
     setup_llvm_minimal_build()
     setup_sysroots()
     setup_wee8_prebuilt()
-    setup_wee8_workspace_deps()

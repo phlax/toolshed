@@ -1,0 +1,6 @@
+exports_files([
+    "fix-shebangs.patch",
+    "icu.patch",
+    "icu4c_source_common_BUILD.bazel.patch",
+    "icu4c_source_common_putil.cpp.patch",
+])

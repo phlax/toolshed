@@ -108,6 +108,14 @@ VERSIONS = {
     },
 
     # external archives
+    "abseil-cpp": {
+        "type": "github_archive",
+        "repo": "abseil/abseil-cpp",
+        "version": "20260107.1",
+        "sha256": "4314e2a7cbac89cac25a2f2322870f343d81579756ceff7f431803c2c9090195",
+        "strip_prefix": "abseil-cpp-{version}",
+        "url": "https://github.com/{repo}/archive/{version}.tar.gz",
+    },
     "aspect_bazel_lib": {
         "type": "github_archive",
         "repo": "aspect-build/bazel-lib",
@@ -130,6 +138,22 @@ VERSIONS = {
         "version": "1.9.2",
         "sha256": "37cdfbc6faefea94f7b37760a305c98c08981116c2bc9e821e3b423221fad8c8",
         "url": "https://github.com/{repo}/releases/download/{version}/bazel-skylib-{version}.tar.gz",
+    },
+    "icu": {
+        "type": "http_archive",
+        "repo": "unicode-org/icu",
+        "version": "78.2",
+        "sha256": "af38c3d4904e47e1bc2dd7587922ee2aec312fefa677804582e3fecca3edb272",
+        "strip_prefix": "icu",
+        "url": "https://github.com/{repo}/releases/download/release-{version}/icu4c-{version}-sources.zip",
+        "build_file": "//v8:icu.BUILD.bazel",
+        "patch_args": ["-p1"],
+        "patches": [
+            "//v8/patches:fix-shebangs.patch",
+            "//v8/patches:icu.patch",
+            "//v8/patches:icu4c_source_common_putil.cpp.patch",
+            "//v8/patches:icu4c_source_common_BUILD.bazel.patch",
+        ],
     },
     "llvm_libcxx_aarch64": {
         "arch": "aarch64",
