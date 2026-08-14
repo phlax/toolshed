@@ -171,14 +171,48 @@ jobs:
               && format('--config={0}{1}',
                   inputs.rbe-config || 'rbe',
                   inputs.rbe-bes && ' --config=bes' || '') || ''
-          }} ${{ inputs.targets }}"
-        export DOCKER_COMMAND="${BAZEL_CMD}"
+          }} ${{ inputs.upload && inputs.artifacts && '--remote_download_toplevel' || '' }} ${{ inputs.targets }}"
+        # Write a run script into the bind-mounted workspace so it is
+        # visible inside the container at /source/_bazel_run.sh.
+        # The entrypoint executes: cd /source/bazel && exec ${DOCKER_COMMAND}
+        # so DOCKER_COMMAND="bash /source/_bazel_run.sh" works without
+        # needing to chain commands with && (which exec cannot handle).
+        #
+        # Single-quoted 'EOF' suppresses bash expansion inside the heredoc
+        # so that ${BAZEL_BIN} etc. are written literally and expanded later
+        # at container runtime. GitHub Actions expressions (${{ }}) are
+        # evaluated before bash runs, so the artifact patterns are baked in.
+        cat > "${GITHUB_WORKSPACE}/_bazel_run.sh" << 'EOF'
+        #!/usr/bin/env bash
+        set -euo pipefail
+        eval "${BAZEL_CMD}"
+        # Artifact patterns are embedded at workflow-template time.
+        # When inputs.artifacts is empty the variable is an empty string
+        # and the copy block is skipped.
+        PATTERNS='${{ inputs.artifacts }}'
+        if [[ -n "${PATTERNS}" ]]; then
+          BAZEL_BIN="$(bazel info bazel-bin)"
+          DIST_DIR=/source/dist
+          while IFS= read -r pattern; do
+            [[ -z "${pattern}" ]] && continue
+            dir="$(dirname "${pattern}")"
+            mkdir -p "${DIST_DIR}/${dir}"
+            # Expand the glob inside the container (where bazel-bin exists)
+            # and dereference symlinks so real files land in DIST_DIR.
+            for f in "${BAZEL_BIN}"/${pattern}; do
+              [[ -e "${f}" ]] && cp -L "${f}" "${DIST_DIR}/${dir}/"
+            done
+          done <<< "${PATTERNS}"
+        fi
+        EOF
+        export DOCKER_COMMAND="bash /source/_bazel_run.sh"
         exec docker compose \
           -f docker/docker-compose.yml \
           run \
           --rm \
           --volume /home/runner/.cache:/home/runner/.cache \
           -e DOCKER_COMMAND \
+          -e BAZEL_CMD \
           -e GITHUB_TOKEN \
           -e USER_NAME \
           ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
@@ -240,7 +274,7 @@ jobs:
         options: -Rr
         filter: |
           select(length > 0)
-          | "${{ inputs.bazel-path }}/bazel-bin/\(.)"
+          | "dist/\(.)"
     - name: Check artifact paths are non-empty
       if: inputs.upload && inputs.artifacts
       shell: bash
