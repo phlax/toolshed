@@ -134,12 +134,13 @@ jobs:
           --set "*.cache-from=type=gha,scope=bazel-container" \
           --set "*.cache-to=type=gha,scope=bazel-container,mode=max" \
           --load \
-          ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
+          "${BAZEL_SERVICE}"
       env:
         UID: ${{ steps.runner-ids.outputs.uid }}
         GID: ${{ steps.runner-ids.outputs.gid }}
         USER_NAME: runner
         SOURCE_DIR: ${{ github.workspace }}
+        BAZEL_SERVICE: ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
     - name: Register binfmt handlers (host-level, cross-compile only)
       if: runner.os == 'Linux' && inputs.privileged
       run: |
@@ -160,74 +161,89 @@ jobs:
       uses: envoyproxy/toolshed/actions/github/container/auth@5291901f6f40a2246c78b89698ead70d39a2559b  # actions-v0.4.20
       with:
         container: hello-world
+    - name: Compute RBE/download flags
+      id: bazel-flags
+      shell: bash
+      run: |
+        rbe_config_flag=""
+        bes_flag=""
+        download_toplevel=""
+        if [[ "${BAZEL_RBE}" == "true" ]]; then
+          if [[ "${RBE_AUTHORIZED}" == "true" || "${EVENT_NAME}" != "pull_request" ]]; then
+            rbe_config_flag="--config=${BAZEL_RBE_CONFIG}"
+            if [[ "${BAZEL_RBE_BES}" == "true" ]]; then
+              bes_flag="--config=bes"
+            fi
+          fi
+        fi
+        if [[ "${BAZEL_UPLOAD}" == "true" && -n "${ARTIFACT_PATTERNS}" ]]; then
+          download_toplevel="--remote_download_toplevel"
+        fi
+        echo "rbe-config-flag=${rbe_config_flag}" >> "${GITHUB_OUTPUT}"
+        echo "bes-flag=${bes_flag}" >> "${GITHUB_OUTPUT}"
+        echo "download-toplevel=${download_toplevel}" >> "${GITHUB_OUTPUT}"
+      env:
+        BAZEL_RBE: ${{ inputs.rbe }}
+        BAZEL_RBE_CONFIG: ${{ inputs.rbe-config || 'rbe' }}
+        BAZEL_RBE_BES: ${{ inputs.rbe-bes }}
+        BAZEL_UPLOAD: ${{ inputs.upload }}
+        ARTIFACT_PATTERNS: ${{ inputs.artifacts }}
+        RBE_AUTHORIZED: ${{ steps.rbe.outputs.authorized }}
+        EVENT_NAME: ${{ github.event_name }}
     - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }}) [container]
       if: runner.os == 'Linux'
       shell: bash
       run: |
-        BAZEL_CMD="bazel ${{ inputs.action }} \
-          ${{ inputs.bazel-args }} \
-          ${{ (steps.rbe.outputs.authorized == 'true'
-               || github.event_name != 'pull_request')
-              && format('--config={0}{1}',
-                  inputs.rbe-config || 'rbe',
-                  inputs.rbe-bes && ' --config=bes' || '') || '' }} \
-            ${{ inputs.upload && inputs.artifacts && '--remote_download_toplevel' || '' }} ${{ inputs.targets }}"
-        cat > "${GITHUB_WORKSPACE}/_bazel_run.sh" << 'EOF'
-        #!/usr/bin/env bash
-        set -euo pipefail
-        eval "${BAZEL_CMD}"
-        # Artifact patterns are embedded at workflow-template time.
-        # When inputs.artifacts is empty the variable is an empty string
-        # and the copy block is skipped.
-        PATTERNS="${ARTIFACT_PATTERNS}"
-        if [[ -n "${PATTERNS}" ]]; then
-          BAZEL_BIN="$(bazel info bazel-bin)"
-          DIST_DIR=/source/dist
-          while IFS= read -r pattern; do
-            [[ -z "${pattern}" ]] && continue
-            dir="$(dirname "${pattern}")"
-            mkdir -p "${DIST_DIR}/${dir}"
-            # Expand the glob inside the container (where bazel-bin exists)
-            # and dereference symlinks so real files land in DIST_DIR.
-            for f in "${BAZEL_BIN}"/${pattern}; do
-              [[ -e "${f}" ]] && cp -L "${f}" "${DIST_DIR}/${dir}/"
-            done
-          done <<< "${PATTERNS}"
-        fi
-        EOF
-        export DOCKER_COMMAND="bash /source/_bazel_run.sh"
         exec docker compose \
           -f docker/docker-compose.yml \
           run \
           --rm \
           --volume /home/runner/.cache:/home/runner/.cache \
           -e DOCKER_COMMAND \
-          -e BAZEL_CMD \
+          -e BAZEL_ACTION \
+          -e BAZEL_ARGS \
+          -e BAZEL_TARGETS \
+          -e RBE_CONFIG_FLAG \
+          -e BES_FLAG \
+          -e DOWNLOAD_TOPLEVEL \
+          -e ARTIFACT_PATTERNS \
           -e GITHUB_TOKEN \
           -e USER_NAME \
-          ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
+          "${CONTAINER_SERVICE}"
       env:
+        BAZEL_ACTION: ${{ inputs.action }}
+        BAZEL_ARGS: ${{ inputs.bazel-args }}
+        BAZEL_TARGETS: ${{ inputs.targets }}
+        RBE_CONFIG_FLAG: ${{ steps.bazel-flags.outputs.rbe-config-flag }}
+        BES_FLAG: ${{ steps.bazel-flags.outputs.bes-flag }}
+        DOWNLOAD_TOPLEVEL: ${{ steps.bazel-flags.outputs.download-toplevel }}
         ARTIFACT_PATTERNS: ${{ inputs.artifacts }}
+        DOCKER_COMMAND: bash /source/.github/scripts/bazel-run.sh
         GITHUB_TOKEN: ${{ github.token }}
         UID: ${{ steps.runner-ids.outputs.uid }}
         GID: ${{ steps.runner-ids.outputs.gid }}
         USER_NAME: runner
         SOURCE_DIR: ${{ github.workspace }}
+        CONTAINER_SERVICE: ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
     - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }}) [host]
       if: runner.os != 'Linux'
       shell: bash
-      run: >-
-        exec bazel ${{ inputs.action }}
-        ${{ inputs.bazel-args }}
-        ${{ inputs.rbe
-            && (steps.rbe.outputs.authorized == 'true'
-                || github.event_name != 'pull_request')
-            && format('--config={0}{1}',
-                inputs.rbe-config || 'rbe',
-                inputs.rbe-bes && ' --config=bes' || '') || ''
-        }} ${{ inputs.targets }}
+      run: |
+        BAZEL_CMD=(bazel "${BAZEL_ACTION}")
+        # shellcheck disable=SC2206
+        [[ -n "${BAZEL_ARGS:-}" ]] && BAZEL_CMD+=(${BAZEL_ARGS})
+        [[ -n "${RBE_CONFIG_FLAG:-}" ]] && BAZEL_CMD+=("${RBE_CONFIG_FLAG}")
+        [[ -n "${BES_FLAG:-}"        ]] && BAZEL_CMD+=("${BES_FLAG}")
+        # shellcheck disable=SC2206
+        BAZEL_CMD+=(${BAZEL_TARGETS})
+        exec "${BAZEL_CMD[@]}"
       working-directory: ${{ inputs.bazel-path }}
       env:
+        BAZEL_ACTION: ${{ inputs.action }}
+        BAZEL_ARGS: ${{ inputs.bazel-args }}
+        BAZEL_TARGETS: ${{ inputs.targets }}
+        RBE_CONFIG_FLAG: ${{ steps.bazel-flags.outputs.rbe-config-flag }}
+        BES_FLAG: ${{ steps.bazel-flags.outputs.bes-flag }}
         GITHUB_TOKEN: ${{ github.token }}
     - name: Create source tarball
       id: source-tarball
@@ -276,12 +292,14 @@ jobs:
           if ! compgen -G "$path" > /dev/null 2>&1; then
             MISSING+=("$path")
           fi
-        done <<< "${{ steps.artifact-paths.outputs.value }}"
+        done <<< "${ARTIFACT_PATH_LIST}"
         if [[ ${#MISSING[@]} -gt 0 ]]; then
           echo "ERROR: the following artifact paths matched no files:"
           printf '  %s\n' "${MISSING[@]}"
           exit 1
         fi
+      env:
+        ARTIFACT_PATH_LIST: ${{ steps.artifact-paths.outputs.value }}
     - name: Bazel artifacts
       if: ${{ inputs.upload && (steps.artifact-paths.outputs.value || steps.source-tarball.outputs.tarball) }}
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
