@@ -6,18 +6,18 @@ x-bazel-build: &bazel_build
     USER_ID: ${UID:-1000}
     GROUP_ID: ${GID:-${UID:-1000}}
 
+x-bazel-environment: &bazel_environment
+- DOCKER_COMMAND
+- GITHUB_TOKEN
+- USER_NAME
+
 x-bazel-entrypoint: &bazel_entrypoint
 - "/bin/bash"
 - "-c"
 - |
   set -e
-  # Run the passed command as the target user, defaulting to an interactive
-  # bash shell when no command is given (preserves the existing dev workflow).
-  if [ $# -eq 0 ]; then
-    exec sudo -EHs -u "${USER_NAME:-ubuntu}" bash
-  else
-    exec sudo -EHs -u "${USER_NAME:-ubuntu}" "$@"
-  fi
+  exec sudo -EHs -u "${USER_NAME:-ubuntu}" \
+    bash -c 'cd /source/bazel && exec ${DOCKER_COMMAND:-bash}'
 - "--"
 
 x-bazel-volumes: &bazel_volumes
@@ -29,6 +29,7 @@ services:
     stdin_open: true
     tty: true
     build: *bazel_build
+    environment: *bazel_environment
     entrypoint: *bazel_entrypoint
     volumes: *bazel_volumes
     working_dir: /source/bazel
@@ -60,6 +61,7 @@ services:
           qemu-user-static
           binfmt-support
           xz-utils
+    environment: *bazel_environment
     entrypoint: *bazel_entrypoint
     privileged: true
     volumes: *bazel_volumes

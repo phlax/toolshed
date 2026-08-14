@@ -150,14 +150,16 @@ jobs:
                   inputs.rbe-config || 'rbe',
                   inputs.rbe-bes && ' --config=bes' || '') || ''
           }} ${{ inputs.targets }}"
+        export DOCKER_COMMAND="${BAZEL_CMD}"
         exec docker compose \
           -f docker/docker-compose.yml \
           run \
           --rm \
           --volume /home/runner/.cache:/home/runner/.cache \
+          -e DOCKER_COMMAND \
           -e GITHUB_TOKEN \
-          ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }} \
-          "${BAZEL_CMD}"
+          -e USER_NAME \
+          ${{ inputs.privileged && 'bazel-privileged' || 'bazel' }}
       env:
         GITHUB_TOKEN: ${{ github.token }}
         UID: ${{ steps.runner-ids.outputs.uid }}
