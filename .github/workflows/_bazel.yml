@@ -10,6 +10,13 @@ on:
         description: Bazel action (build or test)
         required: true
         type: string
+      name:
+        description: >-
+          Unique name for this matrix leg. Used (with `action`) to scope the
+          concurrency group so that legs cancel their own previous runs
+          without cancelling each other.
+        required: true
+        type: string
       runner:
         description: GitHub Actions runner label
         type: string
@@ -63,6 +70,21 @@ on:
         description: Upload CI artifacts
         type: boolean
         default: false
+
+# Reusable workflows do not inherit the calling workflow's concurrency group,
+# so a cancelled parent can leave these jobs running (showing "waiting for
+# another run"). Adding an explicit group here ensures cancellation propagates.
+#
+# `github.workflow` resolves to the *calling* workflow's name inside a reusable
+# workflow, so the group stays caller-scoped.
+#
+# The `action`+`name` suffix keeps matrix legs in separate groups — without it
+# all legs share one group and serialise, each cancelling the last. `action` is
+# required because the `build` and `test` matrices both contain legs named
+# `workspace` and `bzlmod`, which would otherwise collide.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}-${{ inputs.action }}-${{ inputs.name }}
+  cancel-in-progress: true
 
 
 jobs:

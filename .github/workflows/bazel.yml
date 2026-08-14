@@ -49,6 +49,7 @@ jobs:
       bazel-path: bazel
       bazel-mode: ${{ matrix.bazel_mode }}
       create-source: ${{ matrix.create_source }}
+      name: ${{ matrix.name }}
       privileged: ${{ matrix.privileged }}
       rbe: ${{ matrix.rbe }}
       rbe-bes: ${{ matrix.rbe_bes }}
@@ -228,6 +229,7 @@ jobs:
       bazel-args: ${{ matrix.bazel_args }}
       bazel-mode: ${{ matrix.bazel_mode }}
       bazel-path: bazel
+      name: ${{ matrix.name }}
       privileged: ${{ matrix.privileged }}
       rbe: ${{ matrix.rbe }}
       runner: ${{ matrix.runner }}
