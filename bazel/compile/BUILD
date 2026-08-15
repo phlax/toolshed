@@ -421,7 +421,7 @@ _LLVM_MINIMAL_HOST_READOBJ = ":llvm_minimal_host_llvm_readobj"
         mtree_mutate(
             name = "llvm_minimal_%s_bins_mtree" % repo_suffix,
             mtree = ":llvm_minimal_%s_bins_mtree_src" % repo_suffix,
-            preserve_symlinks = False,
+            preserve_symlinks = True,
             srcs = [":llvm_minimal_%s_strip_bins" % repo_suffix],
             package_dir = "llvm-minimal-%s-%s" % (LLVM_VERSION, platform),
             strip_prefix = "compile/llvm_minimal_%s_bins_src" % repo_suffix,

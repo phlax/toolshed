@@ -18,6 +18,7 @@ def _libcxx_darwin_extract_impl(ctx):
         inputs = [tarball],
         tools = [install_name_tool, bsdtar.tarinfo.binary],
         outputs = [out_dir],
+        env = bsdtar.tarinfo.default_env,
         command = """
 set -euo pipefail
 

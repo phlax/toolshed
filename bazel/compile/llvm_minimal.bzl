@@ -16,6 +16,8 @@ rebuild/re-release.
 
 load("//:versions.bzl", "LLVM_DISTRIBUTIONS", "LLVM_VERSION", "VERSIONS")
 
+_TAR_TOOLCHAIN_TYPE = "@aspect_bazel_lib//lib:tar_toolchain_type"
+
 # =============================================================================
 # Allowlist: what to keep in the minimal LLVM extraction
 # =============================================================================
@@ -135,32 +137,14 @@ LLVM_TARBALL_STRIP_PREFIXES = {
 # Repository rule: LLVM tarball blob (for building minimal artifacts)
 # =============================================================================
 
-def _lib_glob_to_repo_globs(pattern):
-    """Convert one allowlist entry to file-matching repo BUILD glob patterns."""
+def _lib_glob_to_extract_spec(pattern):
+    """Convert one LLVM_MINIMAL_LIB_GLOBS entry to an extraction match spec."""
     final_segment = pattern.rsplit("/", 1)[-1]
     if "*" in final_segment and "." in final_segment:
-        return [pattern]
-    return [pattern + "/**/*"]
-
-def _lib_glob_to_tar_wildcards(strip_prefix, pattern):
-    """Convert one LLVM_MINIMAL_LIB_GLOBS entry to a tar --wildcards pattern.
-
-    The strip prefix (e.g. "LLVM-22.1.8-Linux-X64") is prepended so the
-    pattern matches paths as they appear inside the upstream tarball.
-
-    Requires --wildcards-match-slash in tar so that ** crosses directory
-    boundaries (needed for lib/**/libc++*.a deep-glob patterns).
-    """
-    final_segment = pattern.rsplit("/", 1)[-1]
-    if "*" in final_segment and "." in final_segment:
-        # File-glob pattern like lib/**/libc++*.a — pass as-is.
-        return [strip_prefix + "/" + pattern]
-    # Directory pattern — match everything underneath at any depth.
-    return [strip_prefix + "/" + pattern + "/**/*"]
-
-def _quoted_list(values):
-    """Render a list literal safely for generated BUILD file content."""
-    return repr(values)
+        return "glob:" + pattern
+    if "*" in pattern:
+        return "dir_glob:" + pattern
+    return "dir:" + pattern
 
 def _llvm_version_major(version):
     return version.split(".")[0]
@@ -525,30 +509,33 @@ llvm_toolchain_alias = repository_rule(
 # =============================================================================
 
 # Script: extract llvm-strip and llvm-readobj from the Linux-X64 tarball.
-# Arguments: TARBALL STRIP_PREFIX OUT_STRIP OUT_READOBJ OUT_INSTALL_NAME_TOOL
+# Arguments: BSDTAR TARBALL STRIP_PREFIX OUT_STRIP OUT_READOBJ OUT_INSTALL_NAME_TOOL
 _LLVM_EXTRACT_HOST_TOOLS_SCRIPT = """
 set -euo pipefail
-TARBALL="$1"
-STRIP_PREFIX="$2"
-OUT_STRIP="$3"
-OUT_READOBJ="$4"
-OUT_INSTALL_NAME_TOOL="$5"
+BSDTAR="$1"
+TARBALL="$2"
+STRIP_PREFIX="$3"
+OUT_STRIP="$4"
+OUT_READOBJ="$5"
+OUT_INSTALL_NAME_TOOL="$6"
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-tar xf "$TARBALL" \\
+"$BSDTAR" xf "$TARBALL" \\
     --strip-components=1 \\
     -C "$SCRATCH" \\
+    "$STRIP_PREFIX/bin/llvm-objcopy" \\
     "$STRIP_PREFIX/bin/llvm-strip" \\
     "$STRIP_PREFIX/bin/llvm-readobj" \\
     "$STRIP_PREFIX/bin/llvm-install-name-tool"
-cp "$SCRATCH/bin/llvm-strip" "$OUT_STRIP"
-cp "$SCRATCH/bin/llvm-readobj" "$OUT_READOBJ"
-cp "$SCRATCH/bin/llvm-install-name-tool" "$OUT_INSTALL_NAME_TOOL"
+cp -L "$SCRATCH/bin/llvm-strip" "$OUT_STRIP"
+cp -L "$SCRATCH/bin/llvm-readobj" "$OUT_READOBJ"
+cp -L "$SCRATCH/bin/llvm-install-name-tool" "$OUT_INSTALL_NAME_TOOL"
 """
 
 def _llvm_minimal_extract_host_tools_impl(ctx):
     """Extracts llvm-strip, llvm-readobj, and llvm-install-name-tool from the Linux-X64 tarball."""
+    bsdtar = ctx.toolchains[_TAR_TOOLCHAIN_TYPE]
     tarball = ctx.file.tarball
     strip_prefix = ctx.attr.strip_prefix
     out_strip = ctx.actions.declare_file("llvm_host_tools/llvm-strip")
@@ -556,9 +543,12 @@ def _llvm_minimal_extract_host_tools_impl(ctx):
     out_install_name_tool = ctx.actions.declare_file("llvm_host_tools/llvm-install-name-tool")
     ctx.actions.run_shell(
         inputs = [tarball],
+        tools = [bsdtar.tarinfo.binary],
         outputs = [out_strip, out_readobj, out_install_name_tool],
+        env = bsdtar.tarinfo.default_env,
         command = _LLVM_EXTRACT_HOST_TOOLS_SCRIPT,
         arguments = [
+            bsdtar.tarinfo.binary.path,
             tarball.path,
             strip_prefix,
             out_strip.path,
@@ -590,57 +580,112 @@ llvm_minimal_extract_host_tools = rule(
             doc = "Archive strip prefix (e.g. 'LLVM-22.1.8-Linux-X64').",
         ),
     },
+    toolchains = [_TAR_TOOLCHAIN_TYPE],
     doc = "Extracts llvm-strip, llvm-readobj, and llvm-install-name-tool from the Linux-X64 LLVM tarball.",
 )
 
 # Script: extract minimal lib/include tree matching LLVM_MINIMAL_LIB_GLOBS patterns.
-# Arguments: TARBALL STRIP_PREFIX OUT_DIR [wildcard ...]
+# Arguments: BSDTAR TARBALL STRIP_PREFIX OUT_DIR [match spec ...]
 _LLVM_EXTRACT_LIBS_SCRIPT = """
 set -euo pipefail
-TARBALL="$1"
-STRIP_PREFIX="$2"
-OUT_DIR="$3"
-shift 3
+BSDTAR="$1"
+TARBALL="$2"
+STRIP_PREFIX="$3"
+OUT_DIR="$4"
+shift 4
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-# Extract only matched paths from the tarball.  --wildcards-match-slash is
-# required for ** to cross directory boundaries in GNU tar.
-tar xf "$TARBALL" \\
+match_specs=("$@")
+matched_members=()
+
+while IFS= read -r member; do
+    rel="${member#"$STRIP_PREFIX"/}"
+    if [ "$rel" = "$member" ]; then
+        continue
+    fi
+    for spec in "${match_specs[@]}"; do
+        kind="${spec%%:*}"
+        pattern="${spec#*:}"
+        case "$kind" in
+            dir)
+                if [ "$rel" = "$pattern" ] || [[ "$rel" == "$pattern"/* ]]; then
+                    matched_members+=("$member")
+                    break
+                fi
+                ;;
+            dir_glob)
+                if [[ "$rel" == $pattern ]] || [[ "$rel" == $pattern/* ]]; then
+                    matched_members+=("$member")
+                    break
+                fi
+                ;;
+            glob)
+                if [[ "$rel" == $pattern ]]; then
+                    matched_members+=("$member")
+                    break
+                fi
+                ;;
+            *)
+                echo "ERROR: unknown LLVM lib extraction spec: $spec" >&2
+                exit 1
+                ;;
+        esac
+    done
+done < <("$BSDTAR" tf "$TARBALL")
+
+if [ "${#matched_members[@]}" -eq 0 ]; then
+    echo "ERROR: no LLVM lib/include members matched the allowlist for $STRIP_PREFIX" >&2
+    exit 1
+fi
+
+"$BSDTAR" xf "$TARBALL" \\
     --strip-components=1 \\
     -C "$SCRATCH" \\
-    --wildcards \\
-    --wildcards-match-slash \\
-    "$@" \\
-    2>/dev/null || true
+    "${matched_members[@]}"
+
+require_non_empty_dir() {
+    local path="$1"
+    local label="$2"
+    if [ ! -d "$path" ]; then
+        echo "ERROR: expected LLVM $label subtree missing after extraction: $path" >&2
+        exit 1
+    fi
+    local first_entry
+    first_entry="$(find "$path" -mindepth 1 -print -quit)"
+    if [ -z "$first_entry" ]; then
+        echo "ERROR: expected LLVM $label subtree to be non-empty after extraction: $path" >&2
+        exit 1
+    fi
+}
+
+require_non_empty_dir "$SCRATCH/lib" "lib"
+require_non_empty_dir "$SCRATCH/include" "include"
 
 # Copy extracted lib/ and include/ subtrees into OUT_DIR.
 mkdir -p "$OUT_DIR"
-if [ -d "$SCRATCH/lib" ]; then
-    cp -r "$SCRATCH/lib" "$OUT_DIR/"
-fi
-if [ -d "$SCRATCH/include" ]; then
-    cp -r "$SCRATCH/include" "$OUT_DIR/"
-fi
+cp -r "$SCRATCH/lib" "$OUT_DIR/"
+cp -r "$SCRATCH/include" "$OUT_DIR/"
 """
 
 def _llvm_minimal_extract_libs_impl(ctx):
     """Extracts the minimal lib/include tree from an LLVM tarball blob."""
+    bsdtar = ctx.toolchains[_TAR_TOOLCHAIN_TYPE]
     tarball = ctx.file.tarball
     strip_prefix = ctx.attr.strip_prefix
     out_dir = ctx.actions.declare_directory(
         "llvm_minimal_%s_libs_src" % ctx.attr.repo_suffix,
     )
 
-    wildcards = []
-    for pattern in ctx.attr.lib_globs:
-        wildcards.extend(_lib_glob_to_tar_wildcards(strip_prefix, pattern))
+    match_specs = [_lib_glob_to_extract_spec(pattern) for pattern in ctx.attr.lib_globs]
 
     ctx.actions.run_shell(
         inputs = [tarball],
+        tools = [bsdtar.tarinfo.binary],
         outputs = [out_dir],
+        env = bsdtar.tarinfo.default_env,
         command = _LLVM_EXTRACT_LIBS_SCRIPT,
-        arguments = [tarball.path, strip_prefix, out_dir.path] + wildcards,
+        arguments = [bsdtar.tarinfo.binary.path, tarball.path, strip_prefix, out_dir.path] + match_specs,
         mnemonic = "LlvmExtractLibs",
         progress_message = "Extracting LLVM minimal libs for " + ctx.attr.platform,
     )
@@ -671,6 +716,7 @@ llvm_minimal_extract_libs = rule(
             doc = "Human-readable platform name used in progress messages.",
         ),
     },
+    toolchains = [_TAR_TOOLCHAIN_TYPE],
     doc = "Extracts the minimal lib/include tree from an LLVM tarball blob.",
 )
 
@@ -685,7 +731,7 @@ llvm_minimal_extract_libs = rule(
 #            `find -maxdepth 1 -type f` skips symlinks; the readobj probe skips
 #            scripts like git-clang-format that are not valid object files.
 #
-# Arguments: DEST STRIPPER READOBJ TARBALL STRIP_PREFIX [name ...]
+# Arguments: DEST STRIPPER READOBJ BSDTAR TARBALL STRIP_PREFIX [name ...]
 #   name        — allowlisted tool basename (e.g. "clang" or "clang-22")
 #
 # Tools absent from the tarball's bin/ (e.g. macOS-only tools on a Linux
@@ -695,22 +741,47 @@ set -euo pipefail
 DEST="$1"
 STRIPPER="$2"
 READOBJ="$3"
-TARBALL="$4"
-STRIP_PREFIX="$5"
-shift 5
+BSDTAR="$4"
+TARBALL="$5"
+STRIP_PREFIX="$6"
+shift 6
 mkdir -p "$DEST"
 SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 
-# Pass 0: extract bin/ subtree from the tarball.
-tar xf "$TARBALL" --strip-components=1 -C "$SCRATCH" "$STRIP_PREFIX/bin"
+# Pass 0: extract only allowlisted bin entries present in the tarball.
+extract_members=()
+while IFS= read -r member; do
+    case "$member" in
+        "$STRIP_PREFIX/bin/"*)
+            for name in "$@"; do
+                if [ "$member" = "$STRIP_PREFIX/bin/$name" ]; then
+                    extract_members+=("$member")
+                    break
+                fi
+            done
+            ;;
+    esac
+done < <("$BSDTAR" tf "$TARBALL")
+
+if [ "${#extract_members[@]}" -gt 0 ]; then
+    "$BSDTAR" xf "$TARBALL" --strip-components=1 -C "$SCRATCH" "${extract_members[@]}"
+fi
 
 # Pass 1: exact copy of allowlisted tools present in the tarball; cp -P never
 # dereferences symlinks.
 for name in "$@"; do
     src="$SCRATCH/bin/$name"
     if [ -e "$src" ] || [ -L "$src" ]; then
-        cp -P "$src" "$DEST/$name"
+        if [ -L "$src" ]; then
+            target="$(readlink "$src")"
+            while [ -L "$SCRATCH/bin/$target" ]; do
+                target="$(readlink "$SCRATCH/bin/$target")"
+            done
+            ln -s "$target" "$DEST/$name"
+        else
+            cp -P "$src" "$DEST/$name"
+        fi
     fi
 done
 
@@ -756,18 +827,21 @@ def _llvm_minimal_strip_bins_impl(ctx):
     tarball = ctx.file.tarball
     stripper = ctx.file.stripper
     readobj = ctx.file.readobj
+    bsdtar = ctx.toolchains[_TAR_TOOLCHAIN_TYPE]
 
     ctx.actions.run_shell(
         inputs = [tarball],
         # stripper and readobj are declared as tools so Bazel tracks them in the
         # exec configuration and provides their runfiles automatically.
-        tools = [stripper, readobj],
+        tools = [stripper, readobj, bsdtar.tarinfo.binary],
         outputs = [out_dir],
+        env = bsdtar.tarinfo.default_env,
         command = _LLVM_STRIP_BINS_SCRIPT,
         arguments = [
             out_dir.path + "/bin",
             stripper.path,
             readobj.path,
+            bsdtar.tarinfo.binary.path,
             tarball.path,
             ctx.attr.strip_prefix,
         ] + ctx.attr.bins,
@@ -812,6 +886,7 @@ llvm_minimal_strip_bins = rule(
             doc = "Human-readable platform name used in progress messages.",
         ),
     },
+    toolchains = [_TAR_TOOLCHAIN_TYPE],
     doc = "Assembles and strips the minimal LLVM bin/ tree for one platform.",
 )
 
