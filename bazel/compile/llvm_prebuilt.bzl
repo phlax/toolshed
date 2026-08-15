@@ -1,5 +1,7 @@
 """Repository rule and extraction rule for prebuilt LLVM libcxx artifacts."""
 
+load("//:versions.bzl", "SUPPORTED_ARCHES", "VERSIONS")
+
 _TAR_TOOLCHAIN_TYPE = "@aspect_bazel_lib//lib:tar_toolchain_type"
 
 def _llvm_prebuilt_impl(ctx):
@@ -19,6 +21,20 @@ llvm_prebuilt = repository_rule(
         "url": attr.string(mandatory = True),
     },
 )
+
+def setup_llvm_prebuilt():
+    """Set up llvm_libcxx_* repos used by WORKSPACE and bzlmod."""
+    for arch in SUPPORTED_ARCHES:
+        repo_name = "llvm_libcxx_%s" % arch
+        if repo_name in native.existing_rules():
+            continue
+        config = VERSIONS[repo_name]
+        llvm_prebuilt(
+            name = repo_name,
+            sha256 = config["sha256"],
+            strip_prefix = config["strip_prefix"].format(**config),
+            url = config["url"].format(**config),
+        )
 
 _LLVM_PREBUILT_EXTRACT_SCRIPT = """
 set -euo pipefail
