@@ -156,7 +156,6 @@ jobs:
             then .entries
             else .entries | with_entries(select(.key | IN($keys[])))
             end
-
     - name: Bazel caches
       id: repo-cache-resolve
       uses: ./actions/bazel/cache/resolve
@@ -220,7 +219,7 @@ jobs:
         if [[ "${BAZEL_UPLOAD}" == "true" && -n "${ARTIFACT_PATTERNS}" ]]; then
            download_toplevel="--remote_download_toplevel"
         fi
-        if [[ -n "${REPO_CACHE_PATH}" ]]; then
+        if [[ -n "${REPO_CACHE_PATH}" && -n "${CACHE_ENTRIES}" ]]; then
             repository_cache_flag="--repository_cache=${REPO_CACHE_PATH}"
             if [[ ! -e "${REPO_CACHE_PATH}" ]]; then
                 mkdir -p "${REPO_CACHE_PATH}"
@@ -238,6 +237,7 @@ jobs:
         ARTIFACT_PATTERNS: ${{ inputs.artifacts }}
         RBE_AUTHORIZED: ${{ steps.rbe.outputs.authorized }}
         EVENT_NAME: ${{ github.event_name }}
+        CACHE_ENTRIES: ${{ inputs.cache-entries != 'NONE' && inputs.cache-entries || '' }}
         REPO_CACHE_PATH: ${{ inputs.cache-path }}
     - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }}) [container]
       if: runner.os == 'Linux'
