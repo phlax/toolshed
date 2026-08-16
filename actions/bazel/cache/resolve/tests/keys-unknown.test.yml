@@ -21,3 +21,32 @@ after:
   run: |
     . "${ACTION_TEST_PATH}/test_fun.sh"
     test_output_equals '${{ steps.resolve.outcome }}' "failure" "Unknown cache key fails resolution"
+    UNKNOWN_ERROR=$(
+      jq -n \
+        --argjson keys '["llvm", "missing"]' \
+        --argjson entries '{
+          "llvm": {"extension": "my_extension", "repo": "my_repo"},
+          "llvm-other": {"extension": "my_extension", "repo": "my_other_repo"}
+        }' \
+        '
+        $entries
+        | . as $entries
+        | (if ($keys | type) == "string"
+           then [($keys | splits("\\s+") | select(length > 0))]
+           else $keys
+           end) as $keys
+        | ([$keys[] | . as $key | select($entries | has($key) | not)] | unique) as $unknown
+        | if ($unknown | length) > 0
+          then error("unknown cache keys: \($unknown | join(", "))")
+          elif ($keys | length) == 0
+          then $entries
+          else $entries | with_entries(select(.key | IN($keys[])))
+          end
+        ' \
+        2>&1 > /dev/null
+    ) || true
+    if [[ "$UNKNOWN_ERROR" == *"unknown cache keys: missing"* ]]; then
+        echo "success:Unknown cache key error names missing key" >> "$TEST_OUTPUT"
+    else
+        echo "fail:Unknown cache key error mismatch: $UNKNOWN_ERROR" >> "$TEST_OUTPUT"
+    fi
