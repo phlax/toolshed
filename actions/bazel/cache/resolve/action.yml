@@ -55,7 +55,7 @@ runs:
            then [($keys | splits("\\s+") | select(length > 0))]
            else $keys
            end) as $keys
-        | [$keys[] | . as $key | select($entries | has($key) | not)] | unique as $unknown
+        | ([$keys[] | . as $key | select($entries | has($key) | not)] | unique) as $unknown
         | if ($unknown | length) > 0
           then error("unknown cache keys: \($unknown | join(", "))")
           elif ($keys | length) == 0
