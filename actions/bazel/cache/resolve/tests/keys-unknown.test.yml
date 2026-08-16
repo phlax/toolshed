@@ -1,0 +1,23 @@
+uses: ./actions/bazel/cache/resolve
+id: resolve
+with:
+  cache-all: false
+  cache-path: /tmp/cache
+  lock-file: ${{ env.ACTION_TEST_PATH }}/fixtures/extension.lock.yml
+  entries: |
+    llvm:
+      extension: my_extension
+      repo: my_repo
+    llvm-other:
+      extension: my_extension
+      repo: my_other_repo
+  keys: |
+    llvm
+    missing
+
+after:
+- if: always()
+  shell: bash
+  run: |
+    . "${ACTION_TEST_PATH}/test_fun.sh"
+    test_output_equals '${{ steps.resolve.outcome }}' "failure" "Unknown cache key fails resolution"
