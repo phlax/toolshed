@@ -50,10 +50,18 @@ runs:
       input: ${{ inputs.entries }}
       options: --argjson keys '${{ steps.keys.outputs.value || '[]' }}'
       filter: |
-        if ($keys | length) == 0
-        then .
-        else with_entries(select(.key | IN($keys[])))
-        end
+        . as $entries
+        | (if ($keys | type) == "string"
+           then [($keys | splits("\\s+") | select(length > 0))]
+           else $keys
+           end) as $keys
+        | [$keys[] | . as $key | select($entries | has($key) | not)] | unique as $unknown
+        | if ($unknown | length) > 0
+          then error("unknown cache keys: \($unknown | join(", "))")
+          elif ($keys | length) == 0
+          then $entries
+          else $entries | with_entries(select(.key | IN($keys[])))
+          end
 
   - id: resolved
     uses: envoyproxy/toolshed/actions/jq@81f14242f0c4d8cae0964c85ae0c830a37b38d53
