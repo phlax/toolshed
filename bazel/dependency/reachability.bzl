@@ -77,7 +77,30 @@ Bazel but excluded from recorded edges and provider accumulation. Edges are
 recorded over all public attributes, including ones that carry build-time-only
 deps (e.g. `tools`-style attrs on custom rules); consumers that need to
 distinguish build-time from runtime paths should apply that policy themselves.
+
+Exclusion settings (`excluded_edges`, `excluded_patterns`) are transported via
+Starlark build settings rather than `--features`, so they survive Bazel's exec
+configuration transition. They therefore apply uniformly across target and exec
+configurations: edges reached through `cfg = "exec"` attributes are excluded
+just as reliably as edges in the target configuration.
+
+Note on exclusion semantics: an excluded repository is neither recorded nor
+descended into. Pruning descent means that repositories reachable *only through*
+an excluded repository also disappear from the output, even if they do not
+themselves match any exclusion pattern. This is a deliberate trade-off: it keeps
+the walk bounded but means the output can depend on which repository sits first
+on a path.
 """
+
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+
+# Private build settings used to transport excluded_edges and excluded_patterns
+# through the configuration transition. Build settings survive the exec
+# configuration transition (unlike --features, which Bazel resets to
+# --host_features when entering exec config). These settings are not intended
+# for direct use; they are an implementation detail of dependency_reachability.
+_EXCLUDED_EDGES_SETTING = "//dependency:_excluded_edges"
+_EXCLUDED_PATTERNS_SETTING = "//dependency:_excluded_patterns"
 
 DependencyReachabilityInfo = provider(
     doc = "Cross-repository dependency edges in a target's transitive closure.",
@@ -127,43 +150,39 @@ def _matches_repo_pattern(repo_name, pattern):
     return repo_name == pattern
 
 def _repo_is_excluded(repo_name, patterns):
+    """Return True if repo_name matches any exclusion pattern.
+
+    An excluded repository is neither recorded as a dependency edge nor
+    descended into during traversal. Pruning descent means that repositories
+    reachable *only through* an excluded repository also disappear from the
+    output, even if they do not themselves match any exclusion pattern.
+    """
     for pattern in patterns:
         if _matches_repo_pattern(repo_name, pattern):
             return True
     return False
 
-_EXCLUDED_EDGE_FEATURE = "reachability_excluded_edge="
-_EXCLUDED_PATTERN_FEATURE = "reachability_excluded_pattern="
-
-def _excluded_values(features, prefix):
-    values = []
-    for feature in features:
-        if feature.startswith(prefix):
-            values.append(feature[len(prefix):])
-    return values
-
 def _reachability_transition_impl(settings, attr):
-    features = list(settings["//command_line_option:features"])
-    for edge in attr.excluded_edges:
-        features.append(_EXCLUDED_EDGE_FEATURE + edge)
-    for pattern in attr.excluded_patterns:
-        features.append(_EXCLUDED_PATTERN_FEATURE + pattern)
     return {
-        "//command_line_option:features": features,
+        _EXCLUDED_EDGES_SETTING: attr.excluded_edges,
+        _EXCLUDED_PATTERNS_SETTING: attr.excluded_patterns,
     }
 
 _reachability_transition = transition(
     implementation = _reachability_transition_impl,
-    inputs = ["//command_line_option:features"],
-    outputs = ["//command_line_option:features"],
+    inputs = [],
+    outputs = [
+        _EXCLUDED_EDGES_SETTING,
+        _EXCLUDED_PATTERNS_SETTING,
+    ],
 )
 
 def _reachability_aspect_impl(target, ctx):
     consumer = _label_string(target.label)
     consumer_repo = target.label.repo_name
     testonly = bool(getattr(ctx.rule.attr, "testonly", False))
-    excluded_edges = {edge: True for edge in _excluded_values(ctx.features, _EXCLUDED_EDGE_FEATURE)}
-    excluded_patterns = _excluded_values(ctx.features, _EXCLUDED_PATTERN_FEATURE)
+    excluded_edges = {edge: True for edge in ctx.attr._excluded_edges[BuildSettingInfo].value}
+    excluded_patterns = ctx.attr._excluded_patterns[BuildSettingInfo].value
     edges = []
     transitive = []
     transitive_production = []
@@ -199,12 +218,26 @@ def _reachability_aspect_impl(target, ctx):
 reachability_aspect = aspect(
     implementation = _reachability_aspect_impl,
     attr_aspects = ["*"],
+    attrs = {
+        "_excluded_edges": attr.label(
+            default = _EXCLUDED_EDGES_SETTING,
+            providers = [BuildSettingInfo],
+        ),
+        "_excluded_patterns": attr.label(
+            default = _EXCLUDED_PATTERNS_SETTING,
+            providers = [BuildSettingInfo],
+        ),
+    },
     doc = (
         "Collects cross-repository dependency edges over all public " +
         "attributes, tracking whether each edge is reachable without " +
         "traversing a testonly target. Implicit/private attributes " +
         "(_-prefixed) are skipped at recording time. Resolved toolchain " +
-        "dependencies are not visited because toolchains_aspects is not set."
+        "dependencies are not visited because toolchains_aspects is not set. " +
+        "Exclusion settings are read from Starlark build settings " +
+        "(_excluded_edges, _excluded_patterns) that survive the exec " +
+        "configuration transition, so exclusions apply uniformly across " +
+        "target and exec configurations."
     ),
 )
 
