@@ -15,6 +15,17 @@ def _reachability_config_validation_test_impl(ctx):
         message,
     )
 
+    message = config_validation_error(
+        {"invalid_define": {"wasm": "wasmtime"}},
+        ["//dependency/test:reachability_mode"],
+        False,
+    )
+    asserts.equals(
+        env,
+        "Config 'invalid_define' varies define 'wasm' but this rule was constructed with defines = False",
+        message,
+    )
+
     return unittest.end(env)
 
 reachability_config_validation_test = unittest.make(_reachability_config_validation_test_impl)

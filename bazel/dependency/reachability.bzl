@@ -33,13 +33,16 @@ outputs are fixed up front, then pass a config matrix:
 ```starlark
 load(
     "@envoy_toolshed//dependency:reachability.bzl",
+    "dependency_reachability_macro",
     "dependency_reachability_rule",
 )
 
-envoy_dependency_reachability = dependency_reachability_rule(
+_envoy_dependency_reachability = dependency_reachability_rule(
     flags = ["//bazel:wasm_runtime"],
     defines = True,
 )
+
+envoy_dependency_reachability = dependency_reachability_macro(_envoy_dependency_reachability)
 
 envoy_dependency_reachability(
     name = "dep-reachability",
@@ -215,6 +218,8 @@ def _merge_defines(existing, values):
             merged[key] = values[key]
     return ["{}={}".format(key, merged[key]) for key in sorted(merged.keys())]
 
+merge_defines = _merge_defines
+
 def _reachability_aspect_impl(target, ctx):
     consumer = _label_string(target.label)
     consumer_repo = target.label.repo_name
@@ -257,38 +262,24 @@ reachability_aspect = aspect(
     ),
 )
 
-def _dependency_reachability_impl(flags, defines):
+def _dependency_reachability_impl():
     def _impl(ctx):
-        configs = _decode_configs(ctx.attr.configs)
-        _validate_config_labels(configs, flags, defines)
         deps = {}
+        # Split transitions fan out each root once per config, so flattening
+        # depsets here scales with the declared matrix size.
         for config in sorted(ctx.split_attr.roots.keys()):
             for target in ctx.split_attr.roots[config]:
                 root = _label_string(target.label)
                 info = target[DependencyReachabilityInfo]
                 production = {edge: True for edge in info.production_edges.to_list()}
                 for edge in info.edges.to_list():
-                    entry = deps.setdefault(edge.repo, dict(
-                        name = edge.name,
-                        reached_by = {},
-                        targets = {},
-                        consumers = {},
-                        configs = {},
-                    ))
-                    entry["configs"][config] = True
-                    entry["targets"][edge.target] = True
-                    reached = entry["reached_by"].setdefault(root, dict(
-                        production = False,
-                    ))
-                    if edge in production:
-                        reached["production"] = True
-                    consumer = entry["consumers"].setdefault(edge.consumer, dict(
-                        repo = edge.consumer_repo,
-                        testonly = False,
-                        roots = {},
-                    ))
-                    consumer["testonly"] = consumer["testonly"] or edge.testonly
-                    consumer["roots"][root] = True
+                    _record_edge(
+                        deps,
+                        config,
+                        root,
+                        edge,
+                        production = edge in production,
+                    )
         dependencies = {}
         for repo in sorted(deps.keys()):
             entry = deps[repo]
@@ -357,8 +348,31 @@ def _dependency_reachability_transition(flags, defines):
         outputs = transition_outputs,
     )
 
-def dependency_reachability_rule(flags = [], defines = False):
-    """Construct a dependency_reachability rule varying the given build settings.
+def _record_edge(deps, config, root, edge, production):
+    entry = deps.setdefault(edge.repo, dict(
+        name = edge.name,
+        reached_by = {},
+        targets = {},
+        consumers = {},
+        configs = {},
+    ))
+    entry["configs"][config] = True
+    entry["targets"][edge.target] = True
+    reached = entry["reached_by"].setdefault(root, dict(
+        production = False,
+    ))
+    if production:
+        reached["production"] = True
+    consumer = entry["consumers"].setdefault(edge.consumer, dict(
+        repo = edge.consumer_repo,
+        testonly = False,
+        roots = {},
+    ))
+    consumer["testonly"] = consumer["testonly"] or edge.testonly
+    consumer["roots"][root] = True
+
+def _dependency_reachability_rule(flags = [], defines = False):
+    """Construct the internal dependency_reachability rule.
 
     flags: list of build setting labels (string_flag/bool_flag/label_flag) that
         instantiated targets may vary. Fixed at construction because transition
@@ -369,7 +383,7 @@ def dependency_reachability_rule(flags = [], defines = False):
     """
     reachability_transition = _dependency_reachability_transition(flags, defines)
     return rule(
-        implementation = _dependency_reachability_impl(flags, defines),
+        implementation = _dependency_reachability_impl(),
         attrs = {
             "roots": attr.label_list(
                 aspects = [reachability_aspect],
@@ -411,7 +425,16 @@ def dependency_reachability_rule(flags = [], defines = False):
         ),
     )
 
-_dependency_reachability = dependency_reachability_rule()
+def dependency_reachability_macro(impl):
+    def _macro(name, roots, configs = None, **kwargs):
+        impl(
+            name = name,
+            roots = roots,
+            configs = _encode_configs(configs),
+            **kwargs
+        )
+
+    return _macro
 
 def _encode_configs(configs):
     if configs == None:
@@ -431,10 +454,18 @@ def _encode_configs(configs):
         ]
     return encoded
 
-def dependency_reachability(name, roots, configs = None, **kwargs):
-    _dependency_reachability(
-        name = name,
-        roots = roots,
-        configs = _encode_configs(configs),
-        **kwargs
-    )
+def dependency_reachability_rule(flags = [], defines = False):
+    """Construct a dependency_reachability rule varying the given build settings.
+
+    flags: list of build setting labels (string_flag/bool_flag/label_flag) that
+        instantiated targets may vary. Fixed at construction because transition
+        outputs must be static.
+    defines: whether --define may also be varied (adds
+        //command_line_option:define to outputs). Prefer Starlark settings;
+        this exists for legacy define-based consumers.
+    """
+    return _dependency_reachability_rule(flags, defines)
+
+_dependency_reachability = dependency_reachability_rule()
+
+dependency_reachability = dependency_reachability_macro(_dependency_reachability)
