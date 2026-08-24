@@ -103,6 +103,107 @@ sh_test(
     toolchains = ["@jq_toolchains//:resolved_toolchain"],
 )
 
+custom_library_rule(
+    name = "excluded_edge_to_skylib",
+    library = "@bazel_skylib//lib:paths",
+)
+
+custom_library_rule(
+    name = "excluded_edge_to_rules_shell",
+    library = "@rules_shell//shell:toolchain_type",
+)
+
+filegroup(
+    name = "excluded_edge_root",
+    srcs = [
+        ":excluded_edge_to_skylib",
+        ":excluded_edge_to_rules_shell",
+        "@bazel_skylib//lib:sets",
+    ],
+)
+
+dependency_reachability(
+    name = "reachability_excluded_edge",
+    testonly = True,
+    roots = [":excluded_edge_root"],
+    excluded_edges = ["library"],
+)
+
+dependency_reachability(
+    name = "reachability_edge_and_pattern",
+    testonly = True,
+    roots = [":excluded_edge_root"],
+    excluded_edges = ["library"],
+    excluded_patterns = ["bazel_skylib*"],
+)
+
+filegroup(
+    name = "pattern_root",
+    srcs = [
+        "@bazel_skylib//lib:paths",
+        "@bazel_tools//tools/bash/runfiles:runfiles",
+    ],
+)
+
+dependency_reachability(
+    name = "reachability_excluded_pattern",
+    testonly = True,
+    roots = [":pattern_root"],
+    excluded_patterns = ["bazel_*"],
+)
+
+filegroup(
+    name = "rules_pkg_root",
+    srcs = ["@rules_pkg//pkg:filter_directory"],
+)
+
+dependency_reachability(
+    name = "reachability_rules_pkg_transitive",
+    testonly = True,
+    roots = [":rules_pkg_root"],
+)
+
+dependency_reachability(
+    name = "reachability_excluded_rules_pkg_transitive",
+    testonly = True,
+    roots = [":rules_pkg_root"],
+    excluded_patterns = ["rules_pkg*"],
+)
+
+dependency_reachability(
+    name = "reachability_empty_exclusions",
+    testonly = True,
+    roots = [":core_root"],
+)
+
+dependency_reachability(
+    name = "reachability_empty_exclusions_explicit",
+    testonly = True,
+    roots = [":core_root"],
+    excluded_edges = [],
+    excluded_patterns = [],
+)
+
+sh_test(
+    name = "exclusions_reachability_test",
+    size = "small",
+    srcs = ["exclusions_reachability_test.sh"],
+    data = [
+        ":reachability_excluded_edge",
+        ":reachability_edge_and_pattern",
+        ":reachability_excluded_pattern",
+        ":reachability_rules_pkg_transitive",
+        ":reachability_excluded_rules_pkg_transitive",
+        ":reachability_empty_exclusions",
+        ":reachability_empty_exclusions_explicit",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {
+        "JQ_BIN": "$(JQ_BIN)",
+    },
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
+)
+
 bzl_library(
     name = "reachability_apparent_name_test_lib",
     srcs = ["reachability_apparent_name_test.bzl"],
