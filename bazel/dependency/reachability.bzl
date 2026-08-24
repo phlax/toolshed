@@ -66,6 +66,17 @@ Building the target writes `<name>.json`:
 The aspect emits raw truth: no repository is filtered. Policy (ignore lists,
 test-only exemptions, bucketing by surface/extension/contrib) belongs in the
 consumer of the JSON.
+
+Note on attribute coverage: the aspect uses `attr_aspects = ["*"]` so it
+propagates along every attribute of every rule it visits, including
+non-standard attributes on custom rules (e.g. `library` on
+`v8_lib_no_pointer_compression`). Resolved toolchain dependencies are *not*
+included because `toolchains_aspects` is not set, so `["*"]` alone does not
+reach them. Implicit/private attributes (`_`-prefixed names) are visited by
+Bazel but excluded from recorded edges and provider accumulation. Edges are
+recorded over all public attributes, including ones that carry build-time-only
+deps (e.g. `tools`-style attrs on custom rules); consumers that need to
+distinguish build-time from runtime paths should apply that policy themselves.
 """
 
 DependencyReachabilityInfo = provider(
@@ -78,22 +89,6 @@ DependencyReachabilityInfo = provider(
         ),
     },
 )
-
-# Attributes constituting "production reachability". Deliberately excludes
-# implicit/private attributes (toolchains etc) which the old query-based
-# prefilters existed to suppress.
-_EDGE_ATTRS = [
-    "actual",
-    "data",
-    "deps",
-    "exports",
-    "hdrs",
-    "implementation_deps",
-    "runtime_deps",
-    "src",
-    "srcs",
-    "textual_hdrs",
-]
 
 def apparent_name(repo_name):
     """Best-effort apparent/module name for a canonical repository name.
@@ -126,16 +121,59 @@ def _attr_targets(rule_attr, name):
         return [item for item in value if type(item) == "Target"]
     return []
 
+def _matches_repo_pattern(repo_name, pattern):
+    if pattern.endswith("*"):
+        return repo_name.startswith(pattern[:-1])
+    return repo_name == pattern
+
+def _repo_is_excluded(repo_name, patterns):
+    for pattern in patterns:
+        if _matches_repo_pattern(repo_name, pattern):
+            return True
+    return False
+
+_EXCLUDED_EDGE_FEATURE = "reachability_excluded_edge="
+_EXCLUDED_PATTERN_FEATURE = "reachability_excluded_pattern="
+
+def _excluded_values(features, prefix):
+    values = []
+    for feature in features:
+        if feature.startswith(prefix):
+            values.append(feature[len(prefix):])
+    return values
+
+def _reachability_transition_impl(settings, attr):
+    features = list(settings["//command_line_option:features"])
+    for edge in attr.excluded_edges:
+        features.append(_EXCLUDED_EDGE_FEATURE + edge)
+    for pattern in attr.excluded_patterns:
+        features.append(_EXCLUDED_PATTERN_FEATURE + pattern)
+    return {
+        "//command_line_option:features": features,
+    }
+
+_reachability_transition = transition(
+    implementation = _reachability_transition_impl,
+    inputs = ["//command_line_option:features"],
+    outputs = ["//command_line_option:features"],
+)
+
 def _reachability_aspect_impl(target, ctx):
     consumer = _label_string(target.label)
     consumer_repo = target.label.repo_name
     testonly = bool(getattr(ctx.rule.attr, "testonly", False))
+    excluded_edges = {edge: True for edge in _excluded_values(ctx.features, _EXCLUDED_EDGE_FEATURE)}
+    excluded_patterns = _excluded_values(ctx.features, _EXCLUDED_PATTERN_FEATURE)
     edges = []
     transitive = []
     transitive_production = []
-    for attr_name in _EDGE_ATTRS:
+    for attr_name in [a for a in dir(ctx.rule.attr) if not a.startswith("_")]:
+        if attr_name in excluded_edges:
+            continue
         for dep in _attr_targets(ctx.rule.attr, attr_name):
             dep_repo = dep.label.repo_name
+            if dep_repo and _repo_is_excluded(dep_repo, excluded_patterns):
+                continue
             if dep_repo and dep_repo != consumer_repo:
                 edges.append(struct(
                     consumer = consumer,
@@ -160,11 +198,13 @@ def _reachability_aspect_impl(target, ctx):
 
 reachability_aspect = aspect(
     implementation = _reachability_aspect_impl,
-    attr_aspects = _EDGE_ATTRS,
+    attr_aspects = ["*"],
     doc = (
-        "Collects cross-repository dependency edges over production " +
+        "Collects cross-repository dependency edges over all public " +
         "attributes, tracking whether each edge is reachable without " +
-        "traversing a testonly target."
+        "traversing a testonly target. Implicit/private attributes " +
+        "(_-prefixed) are skipped at recording time. Resolved toolchain " +
+        "dependencies are not visited because toolchains_aspects is not set."
     ),
 )
 
@@ -231,32 +271,56 @@ def _dependency_reachability_impl(ctx):
     )
     return [DefaultInfo(files = depset([output]))]
 
-dependency_reachability = rule(
-    implementation = _dependency_reachability_impl,
-    attrs = {
-        "roots": attr.label_list(
-            aspects = [reachability_aspect],
-            allow_files = True,
-            mandatory = True,
-            doc = (
-                "Concrete root targets to analyze. Each entry must be a " +
-                "resolved label — Bazel target patterns such as " +
-                "`//source/extensions/...` are resolved at the command " +
-                "line / loading phase and CANNOT be used as rule attribute " +
-                "values (analysis phase requires resolved targets). To cover " +
-                "many targets under one root, pass a concrete umbrella " +
-                "target (eg a `filegroup` or existing aggregate) that " +
-                "depends on them. Per-consumer attribution still falls out " +
-                "of `consumers[].target` labels regardless of how coarse " +
-                "the root is."
+def dependency_reachability_rule():
+    return rule(
+        implementation = _dependency_reachability_impl,
+        attrs = {
+            "roots": attr.label_list(
+                aspects = [reachability_aspect],
+                allow_files = True,
+                mandatory = True,
+                cfg = _reachability_transition,
+                doc = (
+                    "Concrete root targets to analyze. Each entry must be a " +
+                    "resolved label — Bazel target patterns such as " +
+                    "`//source/extensions/...` are resolved at the command " +
+                    "line / loading phase and CANNOT be used as rule attribute " +
+                    "values (analysis phase requires resolved targets). To cover " +
+                    "many targets under one root, pass a concrete umbrella " +
+                    "target (eg a `filegroup` or existing aggregate) that " +
+                    "depends on them. Per-consumer attribution still falls out " +
+                    "of `consumers[].target` labels regardless of how coarse " +
+                    "the root is."
+                ),
             ),
+            "excluded_edges": attr.string_list(
+                default = [],
+                doc = (
+                    "Rule attribute names excluded from traversal. Any edge " +
+                    "carried on these attributes is not recorded and not " +
+                    "traversed."
+                ),
+            ),
+            "excluded_patterns": attr.string_list(
+                default = [],
+                doc = (
+                    "Canonical repository-name patterns excluded from " +
+                    "traversal. Supported forms are exact matches (`repo_name`) " +
+                    "and a single trailing `*` wildcard (`prefix*`) for prefix " +
+                    "matching."
+                ),
+            ),
+            "_allowlist_function_transition": attr.label(
+                default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+            ),
+        },
+        doc = (
+            "Writes a JSON reachability map describing, for every external " +
+            "repository reachable from the given root targets, which targets " +
+            "reach it and whether any non-testonly path exists. Root targets " +
+            "must be concrete labels — Bazel target patterns like " +
+            "`//source/extensions/...` cannot be used as rule attribute values."
         ),
-    },
-    doc = (
-        "Writes a JSON reachability map describing, for every external " +
-        "repository reachable from the given root targets, which targets " +
-        "reach it and whether any non-testonly path exists. Root targets " +
-        "must be concrete labels — Bazel target patterns like " +
-        "`//source/extensions/...` cannot be used as rule attribute values."
-    ),
-)
+    )
+
+dependency_reachability = dependency_reachability_rule()
