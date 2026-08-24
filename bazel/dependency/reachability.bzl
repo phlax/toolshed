@@ -206,12 +206,12 @@ DependencyReachabilityInfo = provider(
             "non-testonly path when package attribution is enabled, else None"
         ),
         "attributed_packages": (
-            "dict(repo -> depset(package strings)) for matching main-repo " +
-            "packages that transitively reach each repo, else None"
+            "depset of struct(package=..., repo=...) pairs for matching " +
+            "main-repo packages that transitively reach each repo, else None"
         ),
         "production_attributed_packages": (
-            "dict(repo -> depset(package strings)) for matching main-repo " +
-            "packages with at least one non-testonly path to each repo, else None"
+            "depset of struct(package=..., repo=...) pairs for matching " +
+            "main-repo packages with at least one non-testonly path to each repo, else None"
         ),
     },
 )
@@ -286,28 +286,6 @@ def _package_matches_patterns(package, patterns):
 
 package_pattern_matches = _matches_package_pattern
 
-def _append_repo_package_depsets(dest, source):
-    if source == None:
-        return
-    for repo in source.keys():
-        dest.setdefault(repo, []).append(source[repo])
-
-def _add_repo_package(dest, repo, package):
-    dest.setdefault(repo, {})[package] = True
-
-def _materialize_repo_packages(direct, transitive):
-    repos = {}
-    for repo in direct.keys():
-        repos[repo] = True
-    for repo in transitive.keys():
-        repos[repo] = True
-    return {
-        repo: depset(
-            direct = sorted(direct.get(repo, {}).keys()),
-            transitive = transitive.get(repo, []),
-        )
-        for repo in sorted(repos.keys())
-    }
 
 def _decode_configs(configs_attr):
     configs = {}
@@ -377,10 +355,28 @@ def _reachability_aspect_impl(target, ctx):
     reachable_repos_transitive = []
     production_reachable_repos = []
     production_reachable_repos_transitive = []
-    attributed_packages_direct = {}
-    attributed_packages_transitive = {}
-    production_attributed_packages_direct = {}
-    production_attributed_packages_transitive = {}
+    # Flat lists of struct(package=..., repo=...) pairs accumulated at this node.
+    # Transitive pairs from deps flow up as depsets without per-node flattening,
+    # eliminating the dict-of-depsets allocation of the previous design (Issue 2).
+    #
+    # NOTE (Issue 1): the .to_list() calls in the matching-package block below
+    # are unavoidable with a pure bottom-up aspect. Attribution requires pairing
+    # a matching package with *all* repos in its transitive closure, but in a
+    # bottom-up traversal the package's ancestors have not yet been visited when
+    # the node is processed, so there is no way to know which packages above a
+    # given repo edge will eventually match. The only correct alternative would
+    # require top-down information (e.g. a second pass), which is not available
+    # in a single Bazel aspect. The cross-product-at-root approximation
+    # (propagate matching_packages and repos as independent depsets, multiply at
+    # the rule) is deliberately rejected: it would incorrectly attribute package
+    # B to repo R1 whenever any other matching package A also reaches R1, even
+    # if B has no path to R1. The per-node flatten is therefore kept, but its
+    # cost is bounded: it fires only at nodes whose package matches
+    # attribution_patterns, and only when attribution is enabled.
+    attributed_pairs_direct = []
+    attributed_pairs_transitive = []
+    production_attributed_pairs_direct = []
+    production_attributed_pairs_transitive = []
     for attr_name in [a for a in dir(ctx.rule.attr) if not a.startswith("_")]:
         if attr_name in excluded_edges:
             continue
@@ -407,27 +403,26 @@ def _reachability_aspect_impl(target, ctx):
                 transitive.append(info.edges)
                 transitive_production.append(info.production_edges)
                 if collect_attributions:
-                    reachable_repos_transitive.append(info.repos)
-                    if not testonly:
+                    if info.repos != None:
+                        reachable_repos_transitive.append(info.repos)
+                    if not testonly and info.production_repos != None:
                         production_reachable_repos_transitive.append(info.production_repos)
-                    _append_repo_package_depsets(attributed_packages_transitive, info.attributed_packages)
-                    if not testonly:
-                        _append_repo_package_depsets(
-                            production_attributed_packages_transitive,
-                            info.production_attributed_packages,
-                        )
+                    if info.attributed_packages != None:
+                        attributed_pairs_transitive.append(info.attributed_packages)
+                    if not testonly and info.production_attributed_packages != None:
+                        production_attributed_pairs_transitive.append(info.production_attributed_packages)
     if collect_attributions and not consumer_repo and _package_matches_patterns(consumer_package, attribution_patterns):
         for repo in depset(
             direct = reachable_repos,
             transitive = reachable_repos_transitive,
         ).to_list():
-            _add_repo_package(attributed_packages_direct, repo, consumer_package)
+            attributed_pairs_direct.append(struct(package = consumer_package, repo = repo))
         if not testonly:
             for repo in depset(
                 direct = production_reachable_repos,
                 transitive = production_reachable_repos_transitive,
             ).to_list():
-                _add_repo_package(production_attributed_packages_direct, repo, consumer_package)
+                production_attributed_pairs_direct.append(struct(package = consumer_package, repo = repo))
     return [DependencyReachabilityInfo(
         edges = depset(edges, transitive = transitive),
         production_edges = (
@@ -458,17 +453,21 @@ def _reachability_aspect_impl(target, ctx):
         attributed_packages = (
             None
             if not collect_attributions
-            else _materialize_repo_packages(
-                attributed_packages_direct,
-                attributed_packages_transitive,
+            else depset(
+                direct = attributed_pairs_direct,
+                transitive = attributed_pairs_transitive,
             )
         ),
         production_attributed_packages = (
             None
             if not collect_attributions
-            else _materialize_repo_packages(
-                production_attributed_packages_direct,
-                production_attributed_packages_transitive,
+            else (
+                depset()
+                if testonly
+                else depset(
+                    direct = production_attributed_pairs_direct,
+                    transitive = production_attributed_pairs_transitive,
+                )
             )
         ),
     )]
@@ -561,23 +560,18 @@ def _dependency_reachability_impl():
                         production = edge in production,
                     )
                 if emit_attributed_packages:
-                    production_attributed_packages = {
-                        repo: {
-                            package: True
-                            for package in info.production_attributed_packages[repo].to_list()
-                        }
-                        for repo in sorted(info.production_attributed_packages.keys())
-                    }
-                    for repo in sorted(info.attributed_packages.keys()):
-                        for package in info.attributed_packages[repo].to_list():
-                            _record_attributed_package(
-                                deps,
-                                config,
-                                root,
-                                repo,
-                                package,
-                                production = package in production_attributed_packages.get(repo, {}),
-                            )
+                    prod_pairs = {}
+                    for p in info.production_attributed_packages.to_list():
+                        prod_pairs.setdefault(p.repo, {})[p.package] = True
+                    for pair in info.attributed_packages.to_list():
+                        _record_attributed_package(
+                            deps,
+                            config,
+                            root,
+                            pair.repo,
+                            pair.package,
+                            production = pair.package in prod_pairs.get(pair.repo, {}),
+                        )
         dependencies = {}
         for repo in sorted(deps.keys()):
             entry = deps[repo]
