@@ -15,6 +15,9 @@ if [ -n "${TEST_SRCDIR:-}" ]; then
         RUNFILES_DIR="${TEST_SRCDIR}/_main"
     fi
     REACHABILITY_JSON="${RUNFILES_DIR}/dependency/test/reachability.json"
+    REACHABILITY_ATTRIBUTION_JSON="${RUNFILES_DIR}/dependency/test/reachability_attribution.json"
+    REACHABILITY_ATTRIBUTION_MULTICONFIG_JSON="${RUNFILES_DIR}/dependency/test/reachability_attribution_multiconfig.json"
+    REACHABILITY_EMPTY_ATTRIBUTION_PATTERNS_JSON="${RUNFILES_DIR}/dependency/test/reachability_empty_attribution_patterns.json"
     REACHABILITY_MULTICONFIG_JSON="${RUNFILES_DIR}/dependency/test/reachability_multiconfig.json"
 else
     echo "This test must be run under Bazel" >&2
@@ -77,6 +80,13 @@ check "in-repo consumers are recorded with testonly attribution" \
     "${SKYLIB} | [.consumers[] | select(.repo == \"\") | \"\(.target) \(.testonly)\"] | sort | join(\",\")" \
     "//dependency/test:external_consumer false,//dependency/test:test_root true"
 
+if ! cmp -s "${REACHABILITY_JSON}" "${REACHABILITY_EMPTY_ATTRIBUTION_PATTERNS_JSON}"; then
+    echo "FAIL: explicit empty attribution patterns must be byte-identical to defaults" >&2
+    FAILED=1
+else
+    echo "PASS: explicit empty attribution patterns must be byte-identical to defaults"
+fi
+
 check "shared consumer is attributed to both roots" \
     "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:external_consumer\") | .roots | sort | join(\",\")" \
     "//dependency/test:core_root,//dependency/test:test_root"
@@ -129,6 +139,36 @@ check "multi-config bazel_skylib consumer attrs are recorded" \
     "${SKYLIB} | .consumers[] | select(.target == \"//dependency/test:variant_external_consumer\") | .attrs | join(\",\")" \
     "srcs" \
     "${REACHABILITY_MULTICONFIG_JSON}"
+
+check "transitive attribution includes extension-like packages through shared intermediates" \
+    "${SKYLIB} | [.attributed_packages[].package] | sort | join(\",\")" \
+    "//dependency/test/transitive/ext/deep,//dependency/test/transitive/ext/direct,//dependency/test/transitive/ext/one,//dependency/test/transitive/ext/testonly,//dependency/test/transitive/ext/two" \
+    "${REACHABILITY_ATTRIBUTION_JSON}"
+
+check "transitive attribution roots are unioned per package" \
+    "${SKYLIB} | .attributed_packages[] | select(.package == \"//dependency/test/transitive/ext/one\") | .roots | join(\",\")" \
+    "//dependency/test:attribution_root" \
+    "${REACHABILITY_ATTRIBUTION_JSON}"
+
+check "multiple levels of intermediate targets still attribute the originating package" \
+    "${SKYLIB} | [.attributed_packages[] | select(.package == \"//dependency/test/transitive/ext/deep\") | .production] | join(\",\")" \
+    "true" \
+    "${REACHABILITY_ATTRIBUTION_JSON}"
+
+check "testonly-only attribution remains distinguishable from production attribution" \
+    "${SKYLIB} | [.attributed_packages[] | select(.package == \"//dependency/test/transitive/ext/direct\" or .package == \"//dependency/test/transitive/ext/testonly\") | \"\(.package) \(.production)\"] | sort | join(\",\")" \
+    "//dependency/test/transitive/ext/direct true,//dependency/test/transitive/ext/testonly false" \
+    "${REACHABILITY_ATTRIBUTION_JSON}"
+
+check "attribution unions matching packages across multiconfig analysis" \
+    "${SKYLIB} | [.attributed_packages[].package] | sort | join(\",\")" \
+    "//dependency/test/transitive/ext/config_default,//dependency/test/transitive/ext/config_extra" \
+    "${REACHABILITY_ATTRIBUTION_MULTICONFIG_JSON}"
+
+check "attribution multiconfig still records merged config names" \
+    "${SKYLIB} | .configs | sort | join(\",\")" \
+    "default,extra" \
+    "${REACHABILITY_ATTRIBUTION_MULTICONFIG_JSON}"
 
 if [ "${FAILED}" -ne 0 ]; then
     exit 1

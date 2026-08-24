@@ -81,6 +81,13 @@ Building the target writes `<name>.json`:
           "attrs": ["deps"],
           "roots": ["//source/exe:envoy_main_common_with_core_extensions_lib"]
         }
+      ],
+      "attributed_packages": [
+        {
+          "package": "//source/extensions/filters/network/example",
+          "production": true,
+          "roots": ["//source/exe:envoy_main_common_with_core_extensions_lib"]
+        }
       ]
     }
   }
@@ -107,15 +114,30 @@ Building the target writes `<name>.json`:
          | "\\(.target)\\t\\(.attrs | join(","))"' dep-reachability.json
   ```
 
+- `attributed_packages` is present only when `attribution_patterns` is
+  non-empty. It lists the matching main-repo packages whose transitive closure
+  reaches the external repository, even when the only direct cross-repo edge is
+  inside a shared non-matching package. `production` is true when at least one
+  non-testonly path exists from that package to the repository; otherwise the
+  attribution is testonly-only. This keeps the output proportional to the
+  number of matching packages rather than to every intra-repo edge. For
+  example, to ask which extension packages consume a repository:
+
+  ```console
+  jq -r '.dependencies["<repo>"].attributed_packages[]
+         | select(.production)
+         | .package' dep-reachability.json
+  ```
+
 - `configs` lists the analyzed config names in which the repository is reached.
   Reachability data is only as complete as the declared matrix: if a dependency
   is reachable in no declared config, it is absent from the emitted JSON.
 
 When a dependency is reached in multiple analyzed configs, data is merged by
 union semantics: `targets`/`configs` are unioned, `consumers[*].roots` and
-`consumers[*].attrs` are unioned, and
-`production`/`reached_by[*].production`/`consumers[*].testonly` are merged
-with logical OR.
+`consumers[*].attrs` are unioned, `attributed_packages[*].roots` are unioned,
+and `production`/`reached_by[*].production`/`consumers[*].testonly`/
+`attributed_packages[*].production` are merged with logical OR.
 
 The aspect emits raw truth: no repository is filtered. Policy (ignore lists,
 test-only exemptions, bucketing by surface/extension/contrib) belongs in the
@@ -136,16 +158,24 @@ Exclusion settings (`excluded_edges`, `excluded_patterns`) are transported via
 Starlark build settings rather than `--features`, so they survive Bazel's exec
 configuration transition. They therefore apply uniformly across target and exec
 configurations: edges reached through `cfg = "exec"` attributes are excluded
-just as reliably as edges in the target configuration. The exclusion settings
-are carried through every branch of the split transition so they apply
-uniformly across all analyzed configurations.
+just as reliably as edges in the target configuration. The same transport is
+used for `attribution_patterns`, so opted-in package attribution applies
+uniformly across all analyzed configurations. All three settings are carried
+through every branch of the split transition.
 
 Note on exclusion semantics: an excluded repository is neither recorded nor
 descended into. Pruning descent means that repositories reachable *only through*
 an excluded repository also disappear from the output, even if they do not
 themselves match any exclusion pattern. This is a deliberate trade-off: it keeps
 the walk bounded but means the output can depend on which repository sits first
-on a path.
+on a path. The same pruning applies to `attributed_packages`: excluded
+repositories are not attributed, and packages are not attributed to repositories
+reachable only through an excluded repository.
+
+`attribution_patterns` is opt-in and defaults to empty. When left unset, the
+emitted JSON is byte-identical to the historical output and no attribution sets
+are propagated through the aspect. Opt in only when a consumer specifically
+needs transitive main-repo package attribution.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
@@ -157,14 +187,31 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 # for direct use; they are an implementation detail of dependency_reachability.
 _EXCLUDED_EDGES_SETTING = "//dependency:_excluded_edges"
 _EXCLUDED_PATTERNS_SETTING = "//dependency:_excluded_patterns"
+_ATTRIBUTION_PATTERNS_SETTING = "//dependency:_attribution_patterns"
 
 DependencyReachabilityInfo = provider(
-    doc = "Cross-repository dependency edges in a target's transitive closure.",
+    doc = "Cross-repository dependency edges (and optional package attributions) in a target's transitive closure.",
     fields = {
         "edges": "depset of edge structs for all reachable cross-repo edges",
         "production_edges": (
             "depset of edge structs reachable without traversing any " +
             "testonly target"
+        ),
+        "repos": (
+            "depset of reachable canonical repository names when package " +
+            "attribution is enabled, else None"
+        ),
+        "production_repos": (
+            "depset of reachable canonical repository names on at least one " +
+            "non-testonly path when package attribution is enabled, else None"
+        ),
+        "attributed_packages": (
+            "dict(repo -> depset(package strings)) for matching main-repo " +
+            "packages that transitively reach each repo, else None"
+        ),
+        "production_attributed_packages": (
+            "dict(repo -> depset(package strings)) for matching main-repo " +
+            "packages with at least one non-testonly path to each repo, else None"
         ),
     },
 )
@@ -189,6 +236,11 @@ def _label_string(label):
     if not label.repo_name:
         return "//%s:%s" % (label.package, label.name)
     return str(label)
+
+def _package_string(label):
+    if label.package:
+        return "//%s" % label.package
+    return "//"
 
 def _attr_targets(rule_attr, name):
     value = getattr(rule_attr, name, None)
@@ -217,6 +269,45 @@ def _repo_is_excluded(repo_name, patterns):
         if _matches_repo_pattern(repo_name, pattern):
             return True
     return False
+
+def _matches_package_pattern(package, pattern):
+    if pattern == "//...":
+        return True
+    if pattern.endswith("/..."):
+        prefix = pattern[:-4]
+        return package == prefix or package.startswith(prefix + "/")
+    return package == pattern
+
+def _package_matches_patterns(package, patterns):
+    for pattern in patterns:
+        if _matches_package_pattern(package, pattern):
+            return True
+    return False
+
+package_pattern_matches = _matches_package_pattern
+
+def _append_repo_package_depsets(dest, source):
+    if source == None:
+        return
+    for repo in source.keys():
+        dest.setdefault(repo, []).append(source[repo])
+
+def _add_repo_package(dest, repo, package):
+    dest.setdefault(repo, {})[package] = True
+
+def _materialize_repo_packages(direct, transitive):
+    repos = {}
+    for repo in direct.keys():
+        repos[repo] = True
+    for repo in transitive.keys():
+        repos[repo] = True
+    return {
+        repo: depset(
+            direct = sorted(direct.get(repo, {}).keys()),
+            transitive = transitive.get(repo, []),
+        )
+        for repo in sorted(repos.keys())
+    }
 
 def _decode_configs(configs_attr):
     configs = {}
@@ -273,12 +364,23 @@ merge_defines = _merge_defines
 def _reachability_aspect_impl(target, ctx):
     consumer = _label_string(target.label)
     consumer_repo = target.label.repo_name
+    consumer_package = _package_string(target.label)
     testonly = bool(getattr(ctx.rule.attr, "testonly", False))
     excluded_edges = {edge: True for edge in ctx.attr._excluded_edges[BuildSettingInfo].value}
     excluded_patterns = ctx.attr._excluded_patterns[BuildSettingInfo].value
+    attribution_patterns = ctx.attr._attribution_patterns[BuildSettingInfo].value
+    collect_attributions = bool(attribution_patterns)
     edges = []
     transitive = []
     transitive_production = []
+    reachable_repos = []
+    reachable_repos_transitive = []
+    production_reachable_repos = []
+    production_reachable_repos_transitive = []
+    attributed_packages_direct = {}
+    attributed_packages_transitive = {}
+    production_attributed_packages_direct = {}
+    production_attributed_packages_transitive = {}
     for attr_name in [a for a in dir(ctx.rule.attr) if not a.startswith("_")]:
         if attr_name in excluded_edges:
             continue
@@ -296,16 +398,78 @@ def _reachability_aspect_impl(target, ctx):
                     target = _label_string(dep.label),
                     testonly = testonly,
                 ))
+                if collect_attributions:
+                    reachable_repos.append(dep_repo)
+                    if not testonly:
+                        production_reachable_repos.append(dep_repo)
             if DependencyReachabilityInfo in dep:
                 info = dep[DependencyReachabilityInfo]
                 transitive.append(info.edges)
                 transitive_production.append(info.production_edges)
+                if collect_attributions:
+                    reachable_repos_transitive.append(info.repos)
+                    if not testonly:
+                        production_reachable_repos_transitive.append(info.production_repos)
+                    _append_repo_package_depsets(attributed_packages_transitive, info.attributed_packages)
+                    if not testonly:
+                        _append_repo_package_depsets(
+                            production_attributed_packages_transitive,
+                            info.production_attributed_packages,
+                        )
+    if collect_attributions and not consumer_repo and _package_matches_patterns(consumer_package, attribution_patterns):
+        for repo in depset(
+            direct = reachable_repos,
+            transitive = reachable_repos_transitive,
+        ).to_list():
+            _add_repo_package(attributed_packages_direct, repo, consumer_package)
+        if not testonly:
+            for repo in depset(
+                direct = production_reachable_repos,
+                transitive = production_reachable_repos_transitive,
+            ).to_list():
+                _add_repo_package(production_attributed_packages_direct, repo, consumer_package)
     return [DependencyReachabilityInfo(
         edges = depset(edges, transitive = transitive),
         production_edges = (
             depset()
             if testonly
             else depset(edges, transitive = transitive_production)
+        ),
+        repos = (
+            None
+            if not collect_attributions
+            else depset(
+                direct = reachable_repos,
+                transitive = reachable_repos_transitive,
+            )
+        ),
+        production_repos = (
+            None
+            if not collect_attributions
+            else (
+                depset()
+                if testonly
+                else depset(
+                    direct = production_reachable_repos,
+                    transitive = production_reachable_repos_transitive,
+                )
+            )
+        ),
+        attributed_packages = (
+            None
+            if not collect_attributions
+            else _materialize_repo_packages(
+                attributed_packages_direct,
+                attributed_packages_transitive,
+            )
+        ),
+        production_attributed_packages = (
+            None
+            if not collect_attributions
+            else _materialize_repo_packages(
+                production_attributed_packages_direct,
+                production_attributed_packages_transitive,
+            )
         ),
     )]
 
@@ -321,6 +485,10 @@ reachability_aspect = aspect(
             default = _EXCLUDED_PATTERNS_SETTING,
             providers = [BuildSettingInfo],
         ),
+        "_attribution_patterns": attr.label(
+            default = _ATTRIBUTION_PATTERNS_SETTING,
+            providers = [BuildSettingInfo],
+        ),
     },
     doc = (
         "Collects cross-repository dependency edges over all public " +
@@ -329,10 +497,10 @@ reachability_aspect = aspect(
         "each edge arrives on. Implicit/private attributes " +
         "(_-prefixed) are skipped at recording time. Resolved toolchain " +
         "dependencies are not visited because toolchains_aspects is not set. " +
-        "Exclusion settings are read from Starlark build settings " +
-        "(_excluded_edges, _excluded_patterns) that survive the exec " +
-        "configuration transition, so exclusions apply uniformly across " +
-        "target and exec configurations."
+        "Exclusion settings and optional attribution patterns are read from " +
+        "Starlark build settings that survive the exec configuration " +
+        "transition, so they apply uniformly across target and exec " +
+        "configurations."
     ),
 )
 
@@ -343,6 +511,7 @@ def _record_edge(deps, config, root, edge, production):
         targets = {},
         consumers = {},
         configs = {},
+        attributed_packages = {},
     ))
     entry["configs"][config] = True
     entry["targets"][edge.target] = True
@@ -361,9 +530,21 @@ def _record_edge(deps, config, root, edge, production):
     consumer["attrs"][edge.attr] = True
     consumer["roots"][root] = True
 
+def _record_attributed_package(deps, config, root, repo, package, production):
+    entry = deps[repo]
+    entry["configs"][config] = True
+    attributed = entry["attributed_packages"].setdefault(package, dict(
+        production = False,
+        roots = {},
+    ))
+    if production:
+        attributed["production"] = True
+    attributed["roots"][root] = True
+
 def _dependency_reachability_impl():
     def _impl(ctx):
         deps = {}
+        emit_attributed_packages = bool(ctx.attr.attribution_patterns)
         # Split transitions fan out each root once per config, so flattening
         # depsets here scales with the declared matrix size.
         for config in sorted(ctx.split_attr.roots.keys()):
@@ -379,6 +560,24 @@ def _dependency_reachability_impl():
                         edge,
                         production = edge in production,
                     )
+                if emit_attributed_packages:
+                    production_attributed_packages = {
+                        repo: {
+                            package: True
+                            for package in info.production_attributed_packages[repo].to_list()
+                        }
+                        for repo in sorted(info.production_attributed_packages.keys())
+                    }
+                    for repo in sorted(info.attributed_packages.keys()):
+                        for package in info.attributed_packages[repo].to_list():
+                            _record_attributed_package(
+                                deps,
+                                config,
+                                root,
+                                repo,
+                                package,
+                                production = package in production_attributed_packages.get(repo, {}),
+                            )
         dependencies = {}
         for repo in sorted(deps.keys()):
             entry = deps[repo]
@@ -409,6 +608,15 @@ def _dependency_reachability_impl():
                     for consumer in sorted(entry["consumers"].keys())
                 ],
             )
+            if emit_attributed_packages:
+                dependencies[repo]["attributed_packages"] = [
+                    dict(
+                        package = package,
+                        production = entry["attributed_packages"][package]["production"],
+                        roots = sorted(entry["attributed_packages"][package]["roots"].keys()),
+                    )
+                    for package in sorted(entry["attributed_packages"].keys())
+                ]
         output = ctx.actions.declare_file("%s.json" % ctx.label.name)
         ctx.actions.write(
             output = output,
@@ -440,13 +648,18 @@ def _dependency_reachability_transition(flags, defines):
             # apply uniformly across all analyzed configurations.
             output[_EXCLUDED_EDGES_SETTING] = attr.excluded_edges
             output[_EXCLUDED_PATTERNS_SETTING] = attr.excluded_patterns
+            output[_ATTRIBUTION_PATTERNS_SETTING] = attr.attribution_patterns
             transitioned[config] = output
         return transitioned
 
     flag_inputs = list(flags)
     if defines:
         flag_inputs.append("//command_line_option:define")
-    transition_outputs = flag_inputs + [_EXCLUDED_EDGES_SETTING, _EXCLUDED_PATTERNS_SETTING]
+    transition_outputs = flag_inputs + [
+        _EXCLUDED_EDGES_SETTING,
+        _EXCLUDED_PATTERNS_SETTING,
+        _ATTRIBUTION_PATTERNS_SETTING,
+    ]
     return transition(
         implementation = _impl,
         inputs = flag_inputs,
@@ -512,6 +725,17 @@ def _dependency_reachability_rule(flags = [], defines = False):
                     "matching."
                 ),
             ),
+            "attribution_patterns": attr.string_list(
+                default = [],
+                doc = (
+                    "Optional main-repo package patterns to attribute " +
+                    "transitively to each reachable external repository. " +
+                    "Supported forms are exact package matches (`//pkg`) and " +
+                    "recursive subtree matches (`//pkg/...`). When empty, " +
+                    "attributed_packages is omitted and no attribution sets are " +
+                    "propagated through the aspect."
+                ),
+            ),
             "_allowlist_function_transition": attr.label(
                 default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
             ),
@@ -519,9 +743,11 @@ def _dependency_reachability_rule(flags = [], defines = False):
         doc = (
             "Writes a JSON reachability map describing, for every external " +
             "repository reachable from the given root targets, which targets " +
-            "reach it and whether any non-testonly path exists. Root targets " +
-            "must be concrete labels — Bazel target patterns like " +
-            "`//source/extensions/...` cannot be used as rule attribute values."
+            "reach it and whether any non-testonly path exists. Optionally, " +
+            "matching main-repo packages can also be attributed transitively " +
+            "via attribution_patterns. Root targets must be concrete labels — " +
+            "Bazel target patterns like `//source/extensions/...` cannot be " +
+            "used as rule attribute values."
         ),
     )
 

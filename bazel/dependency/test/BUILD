@@ -6,6 +6,7 @@ load(":custom_rule_test.bzl", "custom_library_rule")
 load(":reachability_apparent_name_test.bzl", "apparent_name_test")
 load(":reachability_config_validation_test.bzl", "reachability_config_validation_test")
 load(":reachability_merge_defines_test.bzl", "reachability_merge_defines_test")
+load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
 load(":reachability_test_rules.bzl", "dependency_reachability_with_mode")
 
 sh_test(
@@ -50,6 +51,16 @@ dependency_reachability(
         ":core_root",
         ":test_root",
     ],
+)
+
+dependency_reachability(
+    name = "reachability_empty_attribution_patterns",
+    testonly = True,
+    roots = [
+        ":core_root",
+        ":test_root",
+    ],
+    attribution_patterns = [],
 )
 
 string_flag(
@@ -100,12 +111,75 @@ dependency_reachability_with_mode(
     },
 )
 
+filegroup(
+    name = "attribution_root",
+    srcs = [
+        "//dependency/test/transitive/ext/deep:root",
+        "//dependency/test/transitive/ext/direct:root",
+        "//dependency/test/transitive/ext/one:root",
+        "//dependency/test/transitive/ext/two:root",
+    ],
+)
+
+filegroup(
+    name = "attribution_testonly_root",
+    testonly = True,
+    srcs = ["//dependency/test/transitive/ext/testonly:root"],
+)
+
+dependency_reachability(
+    name = "reachability_attribution",
+    testonly = True,
+    roots = [
+        ":attribution_root",
+        ":attribution_testonly_root",
+    ],
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
+)
+
+filegroup(
+    name = "attribution_variant_root",
+    srcs = select({
+        ":reachability_mode_extra": ["//dependency/test/transitive/ext/config_extra:root"],
+        "//conditions:default": ["//dependency/test/transitive/ext/config_default:root"],
+    }),
+)
+
+dependency_reachability_with_mode(
+    name = "reachability_attribution_multiconfig",
+    testonly = True,
+    roots = [":attribution_variant_root"],
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
+    configs = {
+        "default": {},
+        "extra": {"//dependency/test:reachability_mode": "extra"},
+    },
+)
+
+dependency_reachability(
+    name = "reachability_attribution_excluded_baseline",
+    testonly = True,
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
+)
+
+dependency_reachability(
+    name = "reachability_attribution_excluded",
+    testonly = True,
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
+    excluded_patterns = ["rules_pkg*"],
+)
+
 sh_test(
     name = "reachability_test",
     size = "small",
     srcs = ["reachability_test.sh"],
     data = [
         ":reachability",
+        ":reachability_empty_attribution_patterns",
+        ":reachability_attribution",
+        ":reachability_attribution_multiconfig",
         ":reachability_multiconfig",
         "@jq_toolchains//:resolved_toolchain",
     ],
@@ -249,6 +323,8 @@ sh_test(
         ":reachability_excluded_rules_pkg_transitive",
         ":reachability_empty_exclusions",
         ":reachability_empty_exclusions_explicit",
+        ":reachability_attribution_excluded_baseline",
+        ":reachability_attribution_excluded",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {
@@ -263,6 +339,7 @@ bzl_library(
         "reachability_apparent_name_test.bzl",
         "reachability_config_validation_test.bzl",
         "reachability_merge_defines_test.bzl",
+        "reachability_package_pattern_test.bzl",
         "reachability_test_rules.bzl",
     ],
     deps = [
@@ -280,4 +357,8 @@ reachability_config_validation_test(
 
 reachability_merge_defines_test(
     name = "reachability_merge_defines_test",
+)
+
+reachability_package_pattern_test(
+    name = "reachability_package_pattern_test",
 )
