@@ -5,7 +5,6 @@ load("//dependency:reachability.bzl", "dependency_reachability")
 load(":custom_rule_test.bzl", "custom_library_rule")
 load(":reachability_apparent_name_test.bzl", "apparent_name_test")
 load(":reachability_config_validation_test.bzl", "reachability_config_validation_test")
-load(":reachability_merge_defines_test.bzl", "reachability_merge_defines_test")
 load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
 load(":reachability_test_rules.bzl", "dependency_reachability_with_mode")
 
@@ -338,7 +337,6 @@ bzl_library(
     srcs = [
         "reachability_apparent_name_test.bzl",
         "reachability_config_validation_test.bzl",
-        "reachability_merge_defines_test.bzl",
         "reachability_package_pattern_test.bzl",
         "reachability_test_rules.bzl",
     ],
@@ -353,10 +351,6 @@ apparent_name_test(
 
 reachability_config_validation_test(
     name = "reachability_config_validation_test",
-)
-
-reachability_merge_defines_test(
-    name = "reachability_merge_defines_test",
 )
 
 reachability_package_pattern_test(

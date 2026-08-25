@@ -39,7 +39,6 @@ load(
 
 _envoy_dependency_reachability = dependency_reachability_rule(
     flags = ["//bazel:wasm_runtime"],
-    defines = True,
 )
 
 envoy_dependency_reachability = dependency_reachability_macro(_envoy_dependency_reachability)
@@ -51,14 +50,15 @@ envoy_dependency_reachability(
         "default": {},
         "wasmtime": {"//bazel:wasm_runtime": "wasmtime"},
         "wamr": {"//bazel:wasm_runtime": "wamr"},
-        "legacy-define": {"wasm": "v8"},
     },
 )
 ```
 
 `flags` must be fixed at construction because transition `outputs` are static:
 they cannot vary per target instantiation. Prefer Starlark build settings where
-possible. `defines = True` is supported for legacy `--define`-based matrices.
+possible. Note: `--define` cannot be varied because Bazel does not support
+Starlark transitions on it; use a build setting instead
+(https://bazel.build/rules/config#user-defined-build-settings).
 
 Building the target writes `<name>.json`:
 
@@ -301,7 +301,7 @@ def _decode_configs(configs_attr):
         return {"default": {}}
     return configs
 
-def config_validation_error(configs, flags, defines):
+def config_validation_error(configs, flags):
     allowed = {flag: True for flag in flags}
     declared = sorted(flags)
     for config in sorted(configs.keys()):
@@ -313,31 +313,18 @@ def config_validation_error(configs, flags, defines):
                         label,
                         declared,
                     )
-            elif not defines:
-                return "Config '{}' varies define '{}' but this rule was constructed with defines = False".format(
-                    config,
-                    label,
-                )
+            else:
+                return (
+                    "Config '{}' varies '{}', but config keys must be build setting labels starting with '//'. " +
+                    "Bazel does not support Starlark transitions on --define; use a build setting instead " +
+                    "(https://bazel.build/rules/config#user-defined-build-settings)."
+                ).format(config, label)
     return None
 
-def _validate_config_labels(configs, flags, defines):
-    error = config_validation_error(configs, flags, defines)
+def _validate_config_labels(configs, flags):
+    error = config_validation_error(configs, flags)
     if error != None:
         fail(error)
-
-def _merge_defines(existing, values):
-    merged = {}
-    for define in existing:
-        if "=" not in define:
-            continue
-        key, value = define.split("=", 1)
-        merged[key] = value
-    for key in sorted(values.keys()):
-        if not key.startswith("//"):
-            merged[key] = values[key]
-    return ["{}={}".format(key, merged[key]) for key in sorted(merged.keys())]
-
-merge_defines = _merge_defines
 
 def _reachability_aspect_impl(target, ctx):
     consumer = _label_string(target.label)
@@ -623,21 +610,16 @@ def _dependency_reachability_impl():
 
     return _impl
 
-def _dependency_reachability_transition(flags, defines):
+def _dependency_reachability_transition(flags):
     def _impl(settings, attr):
         configs = _decode_configs(attr.configs)
-        _validate_config_labels(configs, flags, defines)
+        _validate_config_labels(configs, flags)
         transitioned = {}
         for config in sorted(configs.keys()):
             values = configs[config]
             output = {}
             for flag in flags:
                 output[flag] = values.get(flag, settings[flag])
-            if defines:
-                output["//command_line_option:define"] = _merge_defines(
-                    settings["//command_line_option:define"],
-                    values,
-                )
             # Carry exclusion settings through every branch of the split so they
             # apply uniformly across all analyzed configurations.
             output[_EXCLUDED_EDGES_SETTING] = attr.excluded_edges
@@ -647,8 +629,6 @@ def _dependency_reachability_transition(flags, defines):
         return transitioned
 
     flag_inputs = list(flags)
-    if defines:
-        flag_inputs.append("//command_line_option:define")
     transition_outputs = flag_inputs + [
         _EXCLUDED_EDGES_SETTING,
         _EXCLUDED_PATTERNS_SETTING,
@@ -660,17 +640,14 @@ def _dependency_reachability_transition(flags, defines):
         outputs = transition_outputs,
     )
 
-def _dependency_reachability_rule(flags = [], defines = False):
+def _dependency_reachability_rule(flags = []):
     """Construct the internal dependency_reachability rule.
 
     flags: list of build setting labels (string_flag/bool_flag/label_flag) that
         instantiated targets may vary. Fixed at construction because transition
         outputs must be static.
-    defines: whether --define may also be varied (adds
-        //command_line_option:define to outputs). Prefer Starlark settings;
-        this exists for legacy define-based consumers.
     """
-    reachability_transition = _dependency_reachability_transition(flags, defines)
+    reachability_transition = _dependency_reachability_transition(flags)
     return rule(
         implementation = _dependency_reachability_impl(),
         attrs = {
@@ -696,7 +673,8 @@ def _dependency_reachability_rule(flags = [], defines = False):
                 default = {"default": []},
                 doc = (
                     "Configuration matrix keyed by config name. Each value is " +
-                    "a list of '<flag_or_define>=<value>' assignments. " +
+                    "a list of '<flag>=<value>' assignments where each key must " +
+                    "be a build setting label starting with '//'. " +
                     "Use the dependency_reachability macro form to pass a " +
                     "dict of assignment maps."
                 ),
@@ -774,17 +752,14 @@ def _encode_configs(configs):
         ]
     return encoded
 
-def dependency_reachability_rule(flags = [], defines = False):
+def dependency_reachability_rule(flags = []):
     """Construct a dependency_reachability rule varying the given build settings.
 
     flags: list of build setting labels (string_flag/bool_flag/label_flag) that
         instantiated targets may vary. Fixed at construction because transition
         outputs must be static.
-    defines: whether --define may also be varied (adds
-        //command_line_option:define to outputs). Prefer Starlark settings;
-        this exists for legacy define-based consumers.
     """
-    return _dependency_reachability_rule(flags, defines)
+    return _dependency_reachability_rule(flags)
 
 _dependency_reachability = dependency_reachability_rule()
 

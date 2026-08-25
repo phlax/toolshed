@@ -7,7 +7,6 @@ def _reachability_config_validation_test_impl(ctx):
     message = config_validation_error(
         {"invalid": {"//dependency/test:reachability_mode": "extra"}},
         [],
-        False,
     )
     asserts.equals(
         env,
@@ -16,13 +15,16 @@ def _reachability_config_validation_test_impl(ctx):
     )
 
     message = config_validation_error(
-        {"invalid_define": {"wasm": "wasmtime"}},
+        {"bare_key": {"wasm": "wasmtime"}},
         ["//dependency/test:reachability_mode"],
-        False,
     )
     asserts.equals(
         env,
-        "Config 'invalid_define' varies define 'wasm' but this rule was constructed with defines = False",
+        (
+            "Config 'bare_key' varies 'wasm', but config keys must be build setting labels starting with '//'. " +
+            "Bazel does not support Starlark transitions on --define; use a build setting instead " +
+            "(https://bazel.build/rules/config#user-defined-build-settings)."
+        ),
         message,
     )
 
