@@ -29,6 +29,21 @@ def _reachability_config_validation_test_impl(ctx):
         message,
     )
 
+    message = config_validation_error(
+        {"invalid_repo_form": {"@foo": "wasmtime"}},
+        ["//dependency/test:reachability_mode"],
+    )
+    asserts.equals(
+        env,
+        (
+            "Config 'invalid_repo_form' varies '@foo', but config keys must be build setting labels " +
+            "starting with '//', '@//' or '@@'. " +
+            "Bazel does not support Starlark transitions on --define; use a build setting instead " +
+            "(https://bazel.build/rules/config#user-defined-build-settings)."
+        ),
+        message,
+    )
+
     # A consumer in another repository must resolve its own flag labels, eg
     # `str(Label("//bazel:wasm_runtime"))`, because a bare `//` label in a .bzl
     # resolves against the repo defining it - the toolshed - rather than the

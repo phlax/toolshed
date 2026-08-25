@@ -111,6 +111,8 @@ Building the target writes `<name>.json`:
   that does not traverse any `testonly` target.
 - `consumers` lists the exact targets with a direct edge into the repository,
   each tagged with its `testonly` attribute and the roots it is reachable from.
+  For a repeated consumer label, `testonly` is the logical OR across all
+  recorded edges for that consumer.
   Consumers in other external repositories (`repo` != "") allow untracked
   transitive repositories to be attributed back to the tracking dependency.
 - `consumers[].attrs` names the rule attributes the edges arrive on. This is
@@ -145,8 +147,8 @@ Building the target writes `<name>.json`:
 When a dependency is reached in multiple analyzed configs, data is merged by
 union semantics: `targets`/`configs` are unioned, `consumers[*].roots` and
 `consumers[*].attrs` are unioned, `attributed_packages[*].roots` are unioned,
-and `production`/`reached_by[*].production`/`consumers[*].testonly`/
-`attributed_packages[*].production` are merged with logical OR.
+and `production`/`reached_by[*].production`/`attributed_packages[*].production`
+are merged with logical OR.
 
 The aspect emits raw truth: no repository is filtered. Policy (ignore lists,
 test-only exemptions, bucketing by surface/extension/contrib) belongs in the
@@ -293,8 +295,8 @@ def _package_matches_patterns(package, patterns):
             return True
     return False
 
+# Exported for testing only; not part of the public API.
 package_pattern_matches = _matches_package_pattern
-
 
 def _decode_configs(configs_attr):
     configs = {}
@@ -320,8 +322,9 @@ def _is_flag_label(label):
     resolved against the repository defining the transition rather than the
     consumer's - so the resolved, repo-qualified forms must be accepted here.
     """
-    return label.startswith("//") or label.startswith("@")
+    return label.startswith("//") or (label.startswith("@") and "//" in label)
 
+# Exported for testing only; not part of the public API.
 def config_validation_error(configs, flags):
     allowed = {flag: True for flag in flags}
     declared = sorted(flags)
@@ -364,11 +367,12 @@ def _reachability_aspect_impl(target, ctx):
     reachable_repos_transitive = []
     production_reachable_repos = []
     production_reachable_repos_transitive = []
+
     # Flat lists of struct(package=..., repo=...) pairs accumulated at this node.
     # Transitive pairs from deps flow up as depsets without per-node flattening,
-    # eliminating the dict-of-depsets allocation of the previous design (Issue 2).
+    # eliminating the dict-of-depsets allocation of the previous design.
     #
-    # NOTE (Issue 1): the .to_list() calls in the matching-package block below
+    # The .to_list() calls in the matching-package block below
     # are unavoidable with a pure bottom-up aspect. Attribution requires pairing
     # a matching package with *all* repos in its transitive closure, but in a
     # bottom-up traversal the package's ancestors have not yet been visited when
@@ -435,45 +439,31 @@ def _reachability_aspect_impl(target, ctx):
     return [DependencyReachabilityInfo(
         edges = depset(edges, transitive = transitive),
         production_edges = (
-            depset()
-            if testonly
-            else depset(edges, transitive = transitive_production)
+            depset() if testonly else depset(edges, transitive = transitive_production)
         ),
         repos = (
-            None
-            if not collect_attributions
-            else depset(
+            None if not collect_attributions else depset(
                 direct = reachable_repos,
                 transitive = reachable_repos_transitive,
             )
         ),
         production_repos = (
-            None
-            if not collect_attributions
-            else (
-                depset()
-                if testonly
-                else depset(
+            None if not collect_attributions else (
+                depset() if testonly else depset(
                     direct = production_reachable_repos,
                     transitive = production_reachable_repos_transitive,
                 )
             )
         ),
         attributed_packages = (
-            None
-            if not collect_attributions
-            else depset(
+            None if not collect_attributions else depset(
                 direct = attributed_pairs_direct,
                 transitive = attributed_pairs_transitive,
             )
         ),
         production_attributed_packages = (
-            None
-            if not collect_attributions
-            else (
-                depset()
-                if testonly
-                else depset(
+            None if not collect_attributions else (
+                depset() if testonly else depset(
                     direct = production_attributed_pairs_direct,
                     transitive = production_attributed_pairs_transitive,
                 )
@@ -549,88 +539,86 @@ def _record_attributed_package(deps, config, root, repo, package, production):
         attributed["production"] = True
     attributed["roots"][root] = True
 
-def _dependency_reachability_impl():
-    def _impl(ctx):
-        deps = {}
-        emit_attributed_packages = bool(ctx.attr.attribution_patterns)
-        # Split transitions fan out each root once per config, so flattening
-        # depsets here scales with the declared matrix size.
-        for config in sorted(ctx.split_attr.roots.keys()):
-            for target in ctx.split_attr.roots[config]:
-                root = _label_string(target.label)
-                info = target[DependencyReachabilityInfo]
-                production = {edge: True for edge in info.production_edges.to_list()}
-                for edge in info.edges.to_list():
-                    _record_edge(
+def _dependency_reachability_impl(ctx):
+    deps = {}
+    emit_attributed_packages = bool(ctx.attr.attribution_patterns)
+
+    # Split transitions fan out each root once per config, so flattening
+    # depsets here scales with the declared matrix size.
+    for config in sorted(ctx.split_attr.roots.keys()):
+        for target in ctx.split_attr.roots[config]:
+            root = _label_string(target.label)
+            info = target[DependencyReachabilityInfo]
+            production = {edge: True for edge in info.production_edges.to_list()}
+            for edge in info.edges.to_list():
+                _record_edge(
+                    deps,
+                    config,
+                    root,
+                    edge,
+                    production = edge in production,
+                )
+            if emit_attributed_packages:
+                prod_pairs = {}
+                for p in info.production_attributed_packages.to_list():
+                    prod_pairs.setdefault(p.repo, {})[p.package] = True
+                for pair in info.attributed_packages.to_list():
+                    _record_attributed_package(
                         deps,
                         config,
                         root,
-                        edge,
-                        production = edge in production,
+                        pair.repo,
+                        pair.package,
+                        production = pair.package in prod_pairs.get(pair.repo, {}),
                     )
-                if emit_attributed_packages:
-                    prod_pairs = {}
-                    for p in info.production_attributed_packages.to_list():
-                        prod_pairs.setdefault(p.repo, {})[p.package] = True
-                    for pair in info.attributed_packages.to_list():
-                        _record_attributed_package(
-                            deps,
-                            config,
-                            root,
-                            pair.repo,
-                            pair.package,
-                            production = pair.package in prod_pairs.get(pair.repo, {}),
-                        )
-        dependencies = {}
-        for repo in sorted(deps.keys()):
-            entry = deps[repo]
-            reached_by = [
-                dict(
-                    root = root,
-                    production = entry["reached_by"][root]["production"],
-                )
-                for root in sorted(entry["reached_by"].keys())
-            ]
-            dependencies[repo] = dict(
-                name = entry["name"],
-                production = any([
-                    reached["production"]
-                    for reached in reached_by
-                ]),
-                configs = sorted(entry["configs"].keys()),
-                reached_by = reached_by,
-                targets = sorted(entry["targets"].keys()),
-                consumers = [
-                    dict(
-                        target = consumer,
-                        repo = entry["consumers"][consumer]["repo"],
-                        testonly = entry["consumers"][consumer]["testonly"],
-                        attrs = sorted(entry["consumers"][consumer]["attrs"].keys()),
-                        roots = sorted(entry["consumers"][consumer]["roots"].keys()),
-                    )
-                    for consumer in sorted(entry["consumers"].keys())
-                ],
+    dependencies = {}
+    for repo in sorted(deps.keys()):
+        entry = deps[repo]
+        reached_by = [
+            dict(
+                root = root,
+                production = entry["reached_by"][root]["production"],
             )
-            if emit_attributed_packages:
-                dependencies[repo]["attributed_packages"] = [
-                    dict(
-                        package = package,
-                        production = entry["attributed_packages"][package]["production"],
-                        roots = sorted(entry["attributed_packages"][package]["roots"].keys()),
-                    )
-                    for package in sorted(entry["attributed_packages"].keys())
-                ]
-        output = ctx.actions.declare_file("%s.json" % ctx.label.name)
-        ctx.actions.write(
-            output = output,
-            content = json.encode_indent(
-                dict(dependencies = dependencies),
-                indent = "  ",
-            ) + "\n",
+            for root in sorted(entry["reached_by"].keys())
+        ]
+        dependencies[repo] = dict(
+            name = entry["name"],
+            production = any([
+                reached["production"]
+                for reached in reached_by
+            ]),
+            configs = sorted(entry["configs"].keys()),
+            reached_by = reached_by,
+            targets = sorted(entry["targets"].keys()),
+            consumers = [
+                dict(
+                    target = consumer,
+                    repo = entry["consumers"][consumer]["repo"],
+                    testonly = entry["consumers"][consumer]["testonly"],
+                    attrs = sorted(entry["consumers"][consumer]["attrs"].keys()),
+                    roots = sorted(entry["consumers"][consumer]["roots"].keys()),
+                )
+                for consumer in sorted(entry["consumers"].keys())
+            ],
         )
-        return [DefaultInfo(files = depset([output]))]
-
-    return _impl
+        if emit_attributed_packages:
+            dependencies[repo]["attributed_packages"] = [
+                dict(
+                    package = package,
+                    production = entry["attributed_packages"][package]["production"],
+                    roots = sorted(entry["attributed_packages"][package]["roots"].keys()),
+                )
+                for package in sorted(entry["attributed_packages"].keys())
+            ]
+    output = ctx.actions.declare_file("%s.json" % ctx.label.name)
+    ctx.actions.write(
+        output = output,
+        content = json.encode_indent(
+            dict(dependencies = dependencies),
+            indent = "  ",
+        ) + "\n",
+    )
+    return [DefaultInfo(files = depset([output]))]
 
 def _dependency_reachability_transition(flags):
     def _impl(settings, attr):
@@ -641,7 +629,21 @@ def _dependency_reachability_transition(flags):
             values = configs[config]
             output = {}
             for flag in flags:
+                if flag not in settings:
+                    fail(
+                        (
+                            "Config '{}' declares transition flag '{}' but it is absent from transition settings. " +
+                            "Available transition settings keys: {}. " +
+                            "When passing cross-repository flags, resolve labels with str(Label(\"//pkg:flag\")) " +
+                            "so the key exactly matches Bazel's transition settings key."
+                        ).format(
+                            config,
+                            flag,
+                            sorted(settings.keys()),
+                        ),
+                    )
                 output[flag] = values.get(flag, settings[flag])
+
             # Carry exclusion settings through every branch of the split so they
             # apply uniformly across all analyzed configurations.
             output[_EXCLUDED_EDGES_SETTING] = attr.excluded_edges
@@ -671,7 +673,7 @@ def _dependency_reachability_rule(flags = []):
     """
     reachability_transition = _dependency_reachability_transition(flags)
     return rule(
-        implementation = _dependency_reachability_impl(),
+        implementation = _dependency_reachability_impl,
         attrs = {
             "roots": attr.label_list(
                 aspects = [reachability_aspect],
@@ -747,17 +749,6 @@ def _dependency_reachability_rule(flags = []):
         ),
     )
 
-def dependency_reachability_macro(impl):
-    def _macro(name, roots, configs = None, **kwargs):
-        impl(
-            name = name,
-            roots = roots,
-            configs = _encode_configs(configs),
-            **kwargs
-        )
-
-    return _macro
-
 def _encode_configs(configs):
     if configs == None:
         return {"default": []}
@@ -775,6 +766,17 @@ def _encode_configs(configs):
             for key in sorted(assignments.keys())
         ]
     return encoded
+
+def dependency_reachability_macro(impl):
+    def _macro(name, roots, configs = None, **kwargs):
+        impl(
+            name = name,
+            roots = roots,
+            configs = _encode_configs(configs),
+            **kwargs
+        )
+
+    return _macro
 
 def dependency_reachability_rule(flags = []):
     """Construct a dependency_reachability rule varying the given build settings.
