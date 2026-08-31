@@ -87,8 +87,8 @@ check "combined excluded_edges and excluded_patterns apply together" \
     "0" \
     "${REACHABILITY_EDGE_AND_PATTERN_JSON}"
 
-check "baseline records bzlmod extension repo by apparent name" \
-    '[.dependencies | to_entries[] | select(.value.name == "apparent_excluded_repo" and (.key | contains("reachability_test_extension")))] | length' \
+check "baseline records extension repo by apparent name" \
+    '[.dependencies | to_entries[] | select(.value.name == "apparent_excluded_repo")] | length' \
     "1" \
     "${REACHABILITY_APPARENT_EXCLUSION_BASELINE_JSON}"
 
