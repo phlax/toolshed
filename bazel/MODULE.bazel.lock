@@ -482,7 +482,7 @@
     },
     "//dependency/test:reachability_test_extension.bzl%reachability_test_extension": {
       "general": {
-        "bzlTransitiveDigest": "F/wO6qZ2mGzEyiVpKDILFzwq7zLQWItk6SbvZ6NskcA=",
+        "bzlTransitiveDigest": "NqxwhacnUCjbNmVUwIbYGp2Qbml8/4TK6imuNETJWnY=",
         "usagesDigest": "JpYNilrJt8/GsPfYlEGn1o5zRlvR7SKmfkifD8YCuzs=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},

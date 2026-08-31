@@ -10,7 +10,8 @@ _test_repo = repository_rule(
     },
 )
 
-def _reachability_test_extension_impl(module_ctx):
+def reachability_test_repos():
+    """Declares the fixture repos shared by bzlmod and WORKSPACE reachability tests."""
     _test_repo(
         name = "apparent_excluded_transitive_repo",
         build_file_content = """\
@@ -33,6 +34,9 @@ filegroup(
 )
 """,
     )
+
+def _reachability_test_extension_impl(_module_ctx):
+    reachability_test_repos()
 
 reachability_test_extension = module_extension(
     implementation = _reachability_test_extension_impl,
