@@ -16,12 +16,12 @@ bzl_library(
         "defs.bzl",
         "extensions.bzl",
         "toolchain.bzl",
-        "//pgp/audit:defs.bzl",
         "//pgp/private:sign.bzl",
         "//pgp/private:sq.bzl",
     ],
     visibility = ["//visibility:private"],
     deps = [
+        "//pgp/audit:audit_bzl",
         "@bazel_skylib//rules:common_settings",
     ],
 )

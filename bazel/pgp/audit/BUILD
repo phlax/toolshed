@@ -17,6 +17,7 @@ pgp_audit_binary(
 bzl_library(
     name = "audit_bzl",
     srcs = ["defs.bzl"],
+    visibility = ["//pgp:__pkg__"],
     deps = [
         "@bazel_skylib//lib:shell",
     ],

@@ -28,4 +28,7 @@ bazel aquery --output=jsonproto --include_artifacts=true \
     --@envoy_toolshed//pgp:passphrase_path=/tmp/nonexistent \
     "$pattern" > "$tmp/aquery.json"
 
-exec bazel run //pgp/audit:audit -- --aquery-json "$tmp/aquery.json"
+bazel build //pgp/audit:audit
+bazel_bin="$(bazel info bazel-bin)"
+RUNFILES_DIR="$bazel_bin/pgp/audit/audit.sh.runfiles" \
+    "$bazel_bin/pgp/audit/audit.sh" --aquery-json "$tmp/aquery.json"

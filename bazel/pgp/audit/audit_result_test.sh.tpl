@@ -11,10 +11,6 @@ resolve_runfile() {
         printf '%s\n' "$0.runfiles/${path}"
         return 0
     fi
-    if [[ -e "${path}" ]]; then
-        printf '%s\n' "${path}"
-        return 0
-    fi
     printf 'runfile not found: %s\n' "${path}" >&2
     return 1
 }

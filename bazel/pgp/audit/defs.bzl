@@ -26,8 +26,7 @@ def _runfiles_path(ctx, file):
     path = file.short_path
     if path.startswith("../"):
         return path[3:]
-    workspace = ctx.workspace_name or "_main"
-    return "%s/%s" % (workspace, path)
+    return "%s/%s" % (ctx.workspace_name, path)
 
 def _jq_args(ctx, jq_bin):
     args = ctx.actions.args()
