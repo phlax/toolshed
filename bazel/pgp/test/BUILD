@@ -1,7 +1,7 @@
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//pgp:defs.bzl", "pgp_sign_changes_file", "pgp_sign_checksums", "pgp_sign_cleartext", "pgp_sign_detached", "pgp_toolchain")
-load(":sign_test.bzl", "args_test", "env_test", "execution_requirements_test", "no_passphrase_test", "relative_passphrase_test")
+load(":sign_test.bzl", "KEY_FRAGMENT_DIGEST", "args_test", "args_with_fragment_test", "bad_key_fragment_test", "env_test", "execution_requirements_test", "inputs_test", "no_key_test", "no_passphrase_test", "passphrase_fragment_test", "relative_key_test", "relative_passphrase_test")
 
 # Stub signer/toolchain for the analysis tests. Real signing requires a
 # registered `sq` toolchain, see //pgp:extensions.bzl.
@@ -21,25 +21,18 @@ toolchain(
     toolchain_type = "//pgp:toolchain_type",
 )
 
-# Placeholder key/inputs, checked in statically. No key material is ever
-# committed - `example_key.pgp` is the literal text `NOT A KEY`, and the
-# integration test (`signer_test`) generates a real (encrypted) key at test
-# time.
-exports_files(["fixtures/example_key.pgp"])
-
 # Example signing targets. They are `manual` because building them requires
-# `--@envoy_toolshed//pgp:passphrase_path` and a real signer toolchain.
+# `--@envoy_toolshed//pgp:key_path`, `--@envoy_toolshed//pgp:passphrase_path`
+# and a real signer toolchain.
 pgp_sign_detached(
     name = "example_detached",
     src = "fixtures/example.txt",
-    key = "fixtures/example_key.pgp",
     tags = ["manual"],
 )
 
 pgp_sign_cleartext(
     name = "example_cleartext",
     src = "fixtures/example.txt",
-    key = "fixtures/example_key.pgp",
     out = "example.txt.cleartext.asc",
     tags = ["manual"],
 )
@@ -50,14 +43,12 @@ pgp_sign_checksums(
         "fixtures/example.changes",
         "fixtures/example.txt",
     ],
-    key = "fixtures/example_key.pgp",
     tags = ["manual"],
 )
 
 pgp_sign_changes_file(
     name = "example_deb_changes",
     changes = "fixtures/example.changes",
-    key = "fixtures/example_key.pgp",
     tags = ["manual"],
 )
 
@@ -72,6 +63,13 @@ env_test(
 
 args_test(
     name = "detached_args_test",
+    mode = "detached",
+    target_under_test = ":example_detached",
+)
+
+args_with_fragment_test(
+    name = "detached_args_with_fragment_test",
+    expect_key_sha256 = KEY_FRAGMENT_DIGEST,
     mode = "detached",
     target_under_test = ":example_detached",
 )
@@ -94,6 +92,27 @@ args_test(
     target_under_test = ":example_deb_changes",
 )
 
+inputs_test(
+    name = "inputs_test",
+    src = "fixtures/example.txt",
+    target_under_test = ":example_detached",
+)
+
+no_key_test(
+    name = "no_key_test",
+    target_under_test = ":example_detached",
+)
+
+relative_key_test(
+    name = "relative_key_test",
+    target_under_test = ":example_detached",
+)
+
+bad_key_fragment_test(
+    name = "bad_key_fragment_test",
+    target_under_test = ":example_detached",
+)
+
 no_passphrase_test(
     name = "no_passphrase_test",
     target_under_test = ":example_detached",
@@ -101,6 +120,11 @@ no_passphrase_test(
 
 relative_passphrase_test(
     name = "relative_passphrase_test",
+    target_under_test = ":example_detached",
+)
+
+passphrase_fragment_test(
+    name = "passphrase_fragment_test",
     target_under_test = ":example_detached",
 )
 

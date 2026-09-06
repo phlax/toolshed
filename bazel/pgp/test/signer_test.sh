@@ -104,6 +104,42 @@ check "inline signature verifies" \
       sq verify --message --signer-file "$KEY" \
       --output /dev/null "${TMP}/data.txt.inline"
 
+# --key-sha256 matching.
+calc_sha256 () {
+    if command -v sha256sum > /dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+KEY_SHA256="$(calc_sha256 "$KEY")"
+
+check "signature created with matching --key-sha256" \
+      signer --mode detached --key "$KEY" --key-sha256 "$KEY_SHA256" \
+      --passphrase-file "$PASSPHRASE_FILE" --require-encrypted-key \
+      --armor --out "${TMP}/data_sha.txt.asc" "$DATA"
+
+# --key-sha256 mismatching.
+BAD_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
+check_fails "mismatched --key-sha256 is rejected" \
+            signer --mode detached --key "$KEY" --key-sha256 "$BAD_SHA256" \
+            --passphrase-file "$PASSPHRASE_FILE" --require-encrypted-key \
+            --armor --out "${TMP}/rejected_sha.asc" "$DATA"
+check "mismatch error is explicit" \
+      grep -q "key digest mismatch" "${TMP}/output"
+check "no output written for mismatched sha256" \
+      test ! -e "${TMP}/rejected_sha.asc"
+
+# Relative --key path.
+check_fails "relative --key path is rejected" \
+            signer --mode detached --key "relative/path/key.pgp" \
+            --passphrase-file "$PASSPHRASE_FILE" --require-encrypted-key \
+            --armor --out "${TMP}/rejected_relative.asc" "$DATA"
+check "relative key path error points at --@envoy_toolshed//pgp:key_path" \
+      grep -q "key_path" "${TMP}/output"
+check "no output written for relative key path" \
+      test ! -e "${TMP}/rejected_relative.asc"
+
 # Unencrypted keys must be rejected.
 check_fails "unencrypted key is rejected" \
             signer --mode detached --key "$UNENCRYPTED_KEY" \

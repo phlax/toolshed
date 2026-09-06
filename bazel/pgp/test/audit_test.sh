@@ -12,7 +12,9 @@
 #   3. no `OpenPGPSign` action has `HOME`, `GNUPGHOME` or `SSH_AUTH_SOCK` in
 #      its environment,
 #   4. no `OpenPGPSign` action's argv contains a forbidden string (use
-#      `--forbid` to check that a passphrase never reaches a command line).
+#      `--forbid` to check that a passphrase never reaches a command line),
+#   5. every `OpenPGPSign` action has exactly one non-tool input artifact
+#      (the file being signed).
 #
 # Usage:
 #
@@ -42,7 +44,7 @@ FORBIDDEN_ENV=(
     GNUPGHOME
     HOME
     SSH_AUTH_SOCK)
-FORBIDDEN_INPUTS='(^|/)\.gnupg(/|$)|private-keys-v1\.d|passphrase'
+FORBIDDEN_INPUTS='(^|/)\.gnupg(/|$)|private-keys-v1\.d|passphrase|secret|\.(asc|pgp|gpg|key)$'
 MNEMONIC=OpenPGPSign
 
 AQUERY_JSON=
@@ -206,6 +208,65 @@ for forbidden in ${FORBIDDEN_STRINGS[@]+"${FORBIDDEN_STRINGS[@]}"}; do
              "line: ${found}"
     fi
 done
+
+# 5. Verify every OpenPGPSign action has exactly one non-tool input artifact (the file being signed).
+#
+# Heuristic for filtering out tool runfiles:
+# Any artifact path under the exec configuration (`bazel-out/*-exec-*/`),
+# or matching the tool path in argv[0], its `.runfiles`, or `_middlemen` is
+# treated as a tool file. The remaining set of non-tool inputs must contain
+# exactly one artifact matching the file being signed (argv's last element).
+unexpected_inputs="$(jqq --arg mnemonic "$MNEMONIC" '
+    def frag_path($frags):
+        . as $id
+        | $frags[$id | tostring] as $f
+        | if ($f.parentId // null) != null then
+              ($f.parentId | frag_path($frags)) + "/" + $f.label
+          else
+              $f.label
+          end;
+
+    def depset_artifact_ids($depsets):
+        . as $ids
+        | ($ids // [])
+        | map(
+              ($depsets[(. | tostring)] // {}) as $ds
+              | (($ds.directArtifactIds // [])
+                 + (($ds.transitiveDepSetIds // []) | depset_artifact_ids($depsets)))
+          )
+        | add // [];
+
+    (INDEX(.pathFragments[]?; .id | tostring)) as $frags
+    | (INDEX(.depSetOfFiles[]?; .id | tostring)) as $depsets
+    | (INDEX(.artifacts[]?; .id | tostring)) as $arts
+    | [.actions[]?
+       | select(.mnemonic == $mnemonic)
+       | . as $action
+       | ($action.arguments[0]) as $tool
+       | ($tool | split("/") | last) as $tool_base
+       | ($action.arguments[-1]) as $expected_src
+       | (($action.inputDepSetIds // [])
+          | depset_artifact_ids($depsets)
+          | unique) as $input_ids
+       | [$input_ids[]
+          | ($arts[(. | tostring)] // empty) as $art
+          | select($art != null and ($art.pathFragmentId != null))
+          | ($art.pathFragmentId | frag_path($frags)) as $path
+          | select(
+              ($path | test("bazel-out/[^/]+-exec-[^/]+/") | not)
+              and ($path | test("-exec-") | not)
+              and $path != $tool
+              and ($path | contains($tool + ".runfiles") | not)
+              and ($path | contains("_middlemen") | not)
+              and ($path | test("(^|/)" + $tool_base + "(\\.[a-zA-Z0-9]+)?$") | not)
+            )
+          | $path] as $non_tool_inputs
+       | select($non_tool_inputs != [$expected_src])
+       | ($action.targetId // $action.mnemonic | tostring) + ": expected [" + $expected_src + "], got [" + ($non_tool_inputs | join(", ")) + "]"]
+    | join("; ")')"
+if [[ -n "$unexpected_inputs" ]]; then
+    fail "${MNEMONIC} action(s) have unexpected inputs: ${unexpected_inputs}"
+fi
 
 if [[ "$FAILED" -ne 0 ]]; then
     echo "OpenPGP signing audit FAILED" >&2

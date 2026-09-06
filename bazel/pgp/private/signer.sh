@@ -4,7 +4,8 @@
 # (`sq`) invocations.
 #
 #   signer --mode {detached|cleartext|inline} \
-#          --key <encrypted-secret-key-file> \
+#          --key <abs-path-to-encrypted-secret-key> \
+#          [--key-sha256 <hex>] \
 #          --passphrase-file <abs-path> \
 #          --require-encrypted-key \
 #          --out <output-file> \
@@ -24,6 +25,7 @@ SQ="${SQ:-@SQ@}"
 
 MODE=
 KEY=
+KEY_SHA256=
 PASSPHRASE_FILE=
 OUT=
 ARMOR=0
@@ -32,7 +34,7 @@ INPUTS=()
 
 usage () {
     echo "usage: $0 --mode {detached|cleartext|inline} --key KEY" \
-         "--passphrase-file PATH --out OUT [--armor]" \
+         "[--key-sha256 HEX] --passphrase-file PATH --out OUT [--armor]" \
          "[--require-encrypted-key] INPUT" >&2
     exit 2
 }
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --key)
             KEY="$2"
+            shift 2
+            ;;
+        --key-sha256)
+            KEY_SHA256="$2"
             shift 2
             ;;
         --passphrase-file)
@@ -101,16 +107,33 @@ if [[ ${#INPUTS[@]} -gt 1 ]]; then
     exit 2
 fi
 
+if [[ "$KEY" != /* ]]; then
+    echo "key path must be absolute: $KEY (use --@envoy_toolshed//pgp:key_path)" >&2
+    exit 1
+fi
+
 if [[ ! -f "$KEY" ]]; then
     echo "key file not found: $KEY" >&2
     exit 1
 fi
 
-if [[ ! -f "$PASSPHRASE_FILE" ]]; then
-    echo "passphrase file not found: ${PASSPHRASE_FILE}" >&2
-    echo "the passphrase file must exist on the host running the build," \
-         "see --@envoy_toolshed//pgp:passphrase_path" >&2
-    exit 1
+calc_sha256 () {
+    if command -v sha256sum > /dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum > /dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        echo "neither sha256sum nor shasum found" >&2
+        exit 1
+    fi
+}
+
+if [[ -n "$KEY_SHA256" ]]; then
+    actual_sha256="$(calc_sha256 "$KEY")"
+    if [[ "$actual_sha256" != "$KEY_SHA256" ]]; then
+        echo "key digest mismatch for $KEY: expected $KEY_SHA256, got $actual_sha256" >&2
+        exit 1
+    fi
 fi
 
 # `sq` state directories are disabled unconditionally: no home, no cert store,
@@ -156,6 +179,13 @@ require_encrypted_key () {
 
 if [[ "$REQUIRE_ENCRYPTED_KEY" -eq 1 ]]; then
     require_encrypted_key
+fi
+
+if [[ ! -f "$PASSPHRASE_FILE" ]]; then
+    echo "passphrase file not found: ${PASSPHRASE_FILE}" >&2
+    echo "the passphrase file must exist on the host running the build," \
+         "see --@envoy_toolshed//pgp:passphrase_path" >&2
+    exit 1
 fi
 
 # `sq` uses the entire contents of the password file, including any trailing

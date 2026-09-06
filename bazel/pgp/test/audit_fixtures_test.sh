@@ -76,6 +76,24 @@ KEY_MATERIAL_INPUT="${TMP}/audit-key-material-input.json"
     | .actions[$idx].inputDepSetIds += [$ds]
     ' "$FIXTURE" > "$KEY_MATERIAL_INPUT"
 
+# Add a key as an artifact input (`signing-key.asc`) to an `OpenPGPSign` action.
+KEY_ARTIFACT_INPUT="${TMP}/audit-key-artifact-input.json"
+"$JQ" '
+    ([.pathFragments[].id] | max) as $f0
+    | ([.artifacts[].id] | max) as $a0
+    | ([.depSetOfFiles[].id] | max) as $d0
+    | ($f0 + 1) as $f1
+    | ($a0 + 1) as $art
+    | ($d0 + 1) as $ds
+    | .pathFragments += [
+        {"id": $f1, "label": "signing-key.asc"}
+      ]
+    | .artifacts += [{"id": $art, "pathFragmentId": $f1}]
+    | .depSetOfFiles += [{"id": $ds, "directArtifactIds": [$art]}]
+    | (.actions | map(.mnemonic == "OpenPGPSign") | index(true)) as $idx
+    | .actions[$idx].inputDepSetIds += [$ds]
+    ' "$FIXTURE" > "$KEY_ARTIFACT_INPUT"
+
 failed=0
 
 audit () {
@@ -92,7 +110,8 @@ for fixture in \
     "$MISSING_EXECUTION_REQUIREMENT" \
     "$ENVIRONMENT_LEAK" \
     "$PASSPHRASE_ARGV" \
-    "$KEY_MATERIAL_INPUT"; do
+    "$KEY_MATERIAL_INPUT" \
+    "$KEY_ARTIFACT_INPUT"; do
     echo "# audit fails for $(basename "$fixture")"
     if audit "$fixture"; then
         echo "FAIL: audit accepted $(basename "$fixture")" >&2

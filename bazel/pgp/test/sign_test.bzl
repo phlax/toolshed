@@ -3,10 +3,14 @@
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load("//pgp/private:sign.bzl", "EXECUTION_REQUIREMENTS", "MNEMONIC")
 
+KEY_PATH = "/tmp/envoy-toolshed-pgp-test/key.pgp"
+KEY_PATH_WITH_FRAGMENT = "/tmp/envoy-toolshed-pgp-test/key.pgp#sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+KEY_FRAGMENT_DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 PASSPHRASE_PATH = "/tmp/envoy-toolshed-pgp-test/passphrase"
 
-# Canonical label - `config_settings` keys are resolved in the repo mapping of
+# Canonical labels - `config_settings` keys are resolved in the repo mapping of
 # bazel_skylib, so an apparent label would not resolve.
+KEY_FLAG = str(Label("//pgp:key_path"))
 PASSPHRASE_FLAG = str(Label("//pgp:passphrase_path"))
 
 # Execution requirements every signing action must carry. Listed here
@@ -67,7 +71,10 @@ def _env_test_impl(ctx):
 
 env_test = analysistest.make(
     _env_test_impl,
-    config_settings = {PASSPHRASE_FLAG: PASSPHRASE_PATH},
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
 )
 
 def _args_test_impl(ctx):
@@ -89,6 +96,35 @@ def _args_test_impl(ctx):
         PASSPHRASE_PATH in argv,
         "%s action does not pass the configured passphrase path" % MNEMONIC,
     )
+    asserts.true(
+        env,
+        "--key" in argv,
+        "%s action does not pass a key path" % MNEMONIC,
+    )
+    asserts.equals(
+        env,
+        KEY_PATH,
+        argv[argv.index("--key") + 1],
+        "%s action does not pass the configured key path" % MNEMONIC,
+    )
+    if ctx.attr.expect_key_sha256:
+        asserts.true(
+            env,
+            "--key-sha256" in argv,
+            "%s action expected --key-sha256" % MNEMONIC,
+        )
+        asserts.equals(
+            env,
+            ctx.attr.expect_key_sha256,
+            argv[argv.index("--key-sha256") + 1],
+            "%s action passed wrong key sha256" % MNEMONIC,
+        )
+    else:
+        asserts.false(
+            env,
+            "--key-sha256" in argv,
+            "%s action should not pass --key-sha256 when no fragment is configured" % MNEMONIC,
+        )
     asserts.equals(
         env,
         ctx.attr.mode,
@@ -100,9 +136,97 @@ def _args_test_impl(ctx):
 args_test = analysistest.make(
     _args_test_impl,
     attrs = {
+        "expect_key_sha256": attr.string(),
         "mode": attr.string(mandatory = True),
     },
-    config_settings = {PASSPHRASE_FLAG: PASSPHRASE_PATH},
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
+)
+
+args_with_fragment_test = analysistest.make(
+    _args_test_impl,
+    attrs = {
+        "expect_key_sha256": attr.string(),
+        "mode": attr.string(mandatory = True),
+    },
+    config_settings = {
+        KEY_FLAG: KEY_PATH_WITH_FRAGMENT,
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
+)
+
+def _inputs_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    action = _sign_action(env)
+    inputs = [f.short_path for f in action.inputs.to_list()]
+    src_short_path = ctx.file.src.short_path
+    asserts.true(
+        env,
+        src_short_path in inputs,
+        "expected %s in action inputs: %s" % (src_short_path, inputs),
+    )
+    non_tool_inputs = [f for f in inputs if "stub_signer" not in f]
+    asserts.equals(
+        env,
+        [src_short_path],
+        non_tool_inputs,
+        "signing action inputs must contain exactly src and tool files (no key): got %s" % inputs,
+    )
+    return analysistest.end(env)
+
+inputs_test = analysistest.make(
+    _inputs_test_impl,
+    attrs = {
+        "src": attr.label(mandatory = True, allow_single_file = True),
+    },
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
+)
+
+def _no_key_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    asserts.expect_failure(env, "No key path configured")
+    return analysistest.end(env)
+
+no_key_test = analysistest.make(
+    _no_key_test_impl,
+    expect_failure = True,
+    config_settings = {
+        KEY_FLAG: "",
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
+)
+
+def _relative_key_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    asserts.expect_failure(env, "is not absolute")
+    return analysistest.end(env)
+
+relative_key_test = analysistest.make(
+    _relative_key_test_impl,
+    expect_failure = True,
+    config_settings = {
+        KEY_FLAG: "relative/key.pgp",
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
+)
+
+def _bad_key_fragment_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    asserts.expect_failure(env, "Invalid sha256 fragment")
+    return analysistest.end(env)
+
+bad_key_fragment_test = analysistest.make(
+    _bad_key_fragment_test_impl,
+    expect_failure = True,
+    config_settings = {
+        KEY_FLAG: "/tmp/key#md5=1234",
+        PASSPHRASE_FLAG: PASSPHRASE_PATH,
+    },
 )
 
 def _no_passphrase_test_impl(ctx):
@@ -113,7 +237,10 @@ def _no_passphrase_test_impl(ctx):
 no_passphrase_test = analysistest.make(
     _no_passphrase_test_impl,
     expect_failure = True,
-    config_settings = {PASSPHRASE_FLAG: ""},
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: "",
+    },
 )
 
 def _relative_passphrase_test_impl(ctx):
@@ -124,5 +251,22 @@ def _relative_passphrase_test_impl(ctx):
 relative_passphrase_test = analysistest.make(
     _relative_passphrase_test_impl,
     expect_failure = True,
-    config_settings = {PASSPHRASE_FLAG: "passphrase"},
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: "passphrase",
+    },
+)
+
+def _passphrase_fragment_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    asserts.expect_failure(env, "passphrase digest is an oracle")
+    return analysistest.end(env)
+
+passphrase_fragment_test = analysistest.make(
+    _passphrase_fragment_test_impl,
+    expect_failure = True,
+    config_settings = {
+        KEY_FLAG: KEY_PATH,
+        PASSPHRASE_FLAG: "/tmp/passphrase#sha256=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    },
 )
