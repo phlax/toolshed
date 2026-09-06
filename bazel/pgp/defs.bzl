@@ -10,12 +10,12 @@ load("@envoy_toolshed//pgp:defs.bzl", "pgp_sign_detached")
 pgp_sign_detached(
     name = "sign_tarball",
     src = ":tarball",
-    key = ":signing-key.asc",
 )
 ```
 
 ```console
 $ bazel build //:sign_tarball \\
+      --@envoy_toolshed//pgp:key_path=/abs/path/to/key.asc \\
       --@envoy_toolshed//pgp:passphrase_path=/abs/path/to/passphrase
 ```
 """
@@ -30,13 +30,12 @@ pgp_checksums = _pgp_checksums
 pgp_toolchain = _pgp_toolchain
 sq_signer = _sq_signer
 
-def pgp_sign_detached(name, src, key, out = None, armor = True, **kwargs):
+def pgp_sign_detached(name, src, out = None, armor = True, **kwargs):
     """Create a detached signature for `src`.
 
     Args:
         name: Name of the target.
         src: File to sign.
-        key: Passphrase-encrypted OpenPGP secret key.
         out: Output file, defaults to `<src>.asc`.
         armor: Emit ASCII armored output.
         **kwargs: Additional arguments to the underlying rule.
@@ -44,14 +43,13 @@ def pgp_sign_detached(name, src, key, out = None, armor = True, **kwargs):
     pgp_sign(
         name = name,
         src = src,
-        key = key,
         mode = "detached",
         armor = armor,
         out = out or "%s.asc" % _basename(src),
         **kwargs
     )
 
-def pgp_sign_cleartext(name, src, key, out = None, **kwargs):
+def pgp_sign_cleartext(name, src, out = None, **kwargs):
     """Create a cleartext signed version of `src`.
 
     This is what `debsign` does to `.changes`/`.dsc` files, and what an apt
@@ -60,14 +58,12 @@ def pgp_sign_cleartext(name, src, key, out = None, **kwargs):
     Args:
         name: Name of the target.
         src: File to sign.
-        key: Passphrase-encrypted OpenPGP secret key.
         out: Output file, defaults to `<src>.asc`.
         **kwargs: Additional arguments to the underlying rule.
     """
     pgp_sign(
         name = name,
         src = src,
-        key = key,
         mode = "cleartext",
         out = out or "%s.asc" % _basename(src),
         **kwargs
@@ -76,7 +72,6 @@ def pgp_sign_cleartext(name, src, key, out = None, **kwargs):
 def pgp_sign_checksums(
         name,
         srcs,
-        key,
         algorithm = "sha256",
         out = None,
         checksums_out = None,
@@ -89,7 +84,6 @@ def pgp_sign_checksums(
     Args:
         name: Name of the target.
         srcs: Files to checksum.
-        key: Passphrase-encrypted OpenPGP secret key.
         algorithm: Checksum algorithm (`sha256` or `sha512`).
         out: Output file, defaults to `checksums.txt.asc`.
         checksums_out: Unsigned checksums file, defaults to `checksums.txt`.
@@ -107,7 +101,6 @@ def pgp_sign_checksums(
     pgp_sign(
         name = name,
         src = "%s_checksums" % name,
-        key = key,
         mode = "cleartext",
         out = out or "%s.asc" % checksums_out,
         **kwargs
@@ -119,7 +112,7 @@ def pgp_sign_checksums(
 # before clearsigning it. Neither of those happen here - do not use this to
 # produce a `.changes` file that itself references unsigned `.dsc`/
 # `.buildinfo` files that need re-signing.
-def pgp_sign_changes_file(name, changes, key, out = None, **kwargs):
+def pgp_sign_changes_file(name, changes, out = None, **kwargs):
     """Cleartext sign a single Debian `.changes` (or `.dsc`) file.
 
     This clearsigns `changes` itself - see the TODO above for what real
@@ -130,14 +123,12 @@ def pgp_sign_changes_file(name, changes, key, out = None, **kwargs):
     Args:
         name: Name of the target.
         changes: The `.changes`/`.dsc` file to clearsign.
-        key: Passphrase-encrypted OpenPGP secret key.
         out: Output file, defaults to `<name>/<basename of changes>`.
         **kwargs: Additional arguments to the underlying rule.
     """
     pgp_sign(
         name = name,
         src = changes,
-        key = key,
         mode = "cleartext",
         out = out or "%s/%s" % (name, _basename(changes)),
         **kwargs

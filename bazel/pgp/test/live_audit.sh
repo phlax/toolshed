@@ -17,5 +17,6 @@ set -euo pipefail
 cd "${BUILD_WORKSPACE_DIRECTORY:?must be run with \`bazel run\`}"
 
 exec pgp/test/audit_test.sh \
+    --@envoy_toolshed//pgp:key_path=/tmp/nonexistent-key#sha256=0000000000000000000000000000000000000000000000000000000000000000 \
     --@envoy_toolshed//pgp:passphrase_path=/tmp/nonexistent \
     "deps(//pgp/test:example_detached) + deps(//pgp/test:example_cleartext) + deps(//pgp/test:example_checksums) + deps(//pgp/test:example_deb_changes)"

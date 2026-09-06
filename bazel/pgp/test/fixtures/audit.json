@@ -4,16 +4,16 @@
     "pathFragmentId": 1
   }, {
     "id": 2,
-    "pathFragmentId": 5
+    "pathFragmentId": 7
   }, {
     "id": 3,
-    "pathFragmentId": 6
+    "pathFragmentId": 10
   }, {
     "id": 4,
     "pathFragmentId": 12
   }, {
     "id": 5,
-    "pathFragmentId": 13
+    "pathFragmentId": 17
   }, {
     "id": 6,
     "pathFragmentId": 18
@@ -22,10 +22,10 @@
     "pathFragmentId": 19
   }, {
     "id": 8,
-    "pathFragmentId": 20
+    "pathFragmentId": 21
   }, {
     "id": 9,
-    "pathFragmentId": 22
+    "pathFragmentId": 24
   }, {
     "id": 10,
     "pathFragmentId": 25
@@ -40,10 +40,10 @@
     "pathFragmentId": 28
   }, {
     "id": 14,
-    "pathFragmentId": 29
+    "pathFragmentId": 30
   }, {
     "id": 15,
-    "pathFragmentId": 31
+    "pathFragmentId": 32
   }, {
     "id": 16,
     "pathFragmentId": 33
@@ -55,23 +55,20 @@
     "pathFragmentId": 35
   }, {
     "id": 19,
-    "pathFragmentId": 36
-  }, {
-    "id": 20,
-    "pathFragmentId": 38
+    "pathFragmentId": 37
   }],
   "actions": [{
     "targetId": 1,
-    "actionKey": "493a136a776b8cb4a06e4a94bfa102bb3d98c5452a4baf3e331811f5bc1dc503",
+    "actionKey": "2468ab54784a3380723c3780c81dd71995006585e8d4711e58b18ca494c11613",
     "mnemonic": "OpenPGPSign",
     "configurationId": 1,
-    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "detached", "--key", "pgp/test/fixtures/example_key.pgp", "--passphrase-file", "/tmp/envoy-toolshed-pgp-test/passphrase", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example.txt.asc", "--armor", "pgp/test/fixtures/example.txt"],
+    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "detached", "--key", "/tmp/nonexistent-key", "--key-sha256", "0000000000000000000000000000000000000000000000000000000000000000", "--passphrase-file", "/tmp/nonexistent", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example.txt.asc", "--armor", "pgp/test/fixtures/example.txt"],
     "environmentVariables": [{
       "key": "PATH",
       "value": "/usr/bin:/bin"
     }],
     "inputDepSetIds": [1],
-    "outputIds": [5],
+    "outputIds": [4],
     "executionInfo": [{
       "key": "no-cache",
       "value": "1"
@@ -88,63 +85,63 @@
       "key": "no-remote-exec",
       "value": "1"
     }],
-    "primaryOutputId": 5,
+    "primaryOutputId": 4,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 2,
     "actionKey": "7a39b61d5744a8903119e17b3ddc7e56e330f240d2bead98c3ba081a81b5c9ac",
     "mnemonic": "ExecutableSymlink",
     "configurationId": 2,
-    "inputDepSetIds": [4],
-    "outputIds": [3],
-    "primaryOutputId": 3,
+    "inputDepSetIds": [3],
+    "outputIds": [1],
+    "primaryOutputId": 1,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 2,
     "actionKey": "eaf13d83a5a688fa5b315b94d7c186b51fe8ddc267c803905bf1de21a82abbc4",
     "mnemonic": "RepoMappingManifest",
     "configurationId": 2,
-    "outputIds": [6],
-    "primaryOutputId": 6,
+    "outputIds": [5],
+    "primaryOutputId": 5,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 2,
     "actionKey": "7d46f811cc2a7b79fb8853e495b8a1218ac20c0f2cf80486de9a8281b87d0759",
     "mnemonic": "SourceSymlinkManifest",
     "configurationId": 2,
-    "outputIds": [7],
-    "primaryOutputId": 7,
+    "outputIds": [6],
+    "primaryOutputId": 6,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 2,
     "actionKey": "9c20914ea2c513df3992398d5792327fdad2ae7934a575ae8998294bde3f5b5c",
     "mnemonic": "SymlinkTree",
     "configurationId": 2,
-    "inputDepSetIds": [5],
-    "outputIds": [8],
-    "primaryOutputId": 8,
+    "inputDepSetIds": [4],
+    "outputIds": [7],
+    "primaryOutputId": 7,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 2,
     "actionKey": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c",
     "mnemonic": "Middleman",
     "configurationId": 2,
-    "inputDepSetIds": [6],
-    "outputIds": [9],
-    "primaryOutputId": 9,
+    "inputDepSetIds": [5],
+    "outputIds": [8],
+    "primaryOutputId": 8,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 3,
-    "actionKey": "d33dcd1aabf47835b60572121da07c1586af50cd9d24d13ffd2c62e869f8ae11",
+    "actionKey": "795631eb42ec0f2d1fca807e9cdacf333b7c7328fbe6e3794edd71df80763bb2",
     "mnemonic": "OpenPGPSign",
     "configurationId": 1,
-    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "pgp/test/fixtures/example_key.pgp", "--passphrase-file", "/tmp/envoy-toolshed-pgp-test/passphrase", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example.txt.cleartext.asc", "--armor", "pgp/test/fixtures/example.txt"],
+    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "/tmp/nonexistent-key", "--key-sha256", "0000000000000000000000000000000000000000000000000000000000000000", "--passphrase-file", "/tmp/nonexistent", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example.txt.cleartext.asc", "--armor", "pgp/test/fixtures/example.txt"],
     "environmentVariables": [{
       "key": "PATH",
       "value": "/usr/bin:/bin"
     }],
-    "inputDepSetIds": [9],
-    "outputIds": [10],
+    "inputDepSetIds": [8],
+    "outputIds": [9],
     "executionInfo": [{
       "key": "no-cache",
       "value": "1"
@@ -161,20 +158,20 @@
       "key": "no-remote-exec",
       "value": "1"
     }],
-    "primaryOutputId": 10,
+    "primaryOutputId": 9,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 4,
-    "actionKey": "7bdaccecf5d43559285c64c6f720a2c7d0aaecd2dc3de73a478dd916009543b5",
+    "actionKey": "8b8557eadd8da99d1d89aaa0db840d3b32709ac2e4dd61d9f6f27cfb1d736d32",
     "mnemonic": "OpenPGPSign",
     "configurationId": 1,
-    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "pgp/test/fixtures/example_key.pgp", "--passphrase-file", "/tmp/envoy-toolshed-pgp-test/passphrase", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example_checksums.checksums.txt.asc", "--armor", "bazel-out/k8-fastbuild/bin/pgp/test/example_checksums.checksums.txt"],
+    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "/tmp/nonexistent-key", "--key-sha256", "0000000000000000000000000000000000000000000000000000000000000000", "--passphrase-file", "/tmp/nonexistent", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example_checksums.checksums.txt.asc", "--armor", "bazel-out/k8-fastbuild/bin/pgp/test/example_checksums.checksums.txt"],
     "environmentVariables": [{
       "key": "PATH",
       "value": "/usr/bin:/bin"
     }],
-    "inputDepSetIds": [12],
-    "outputIds": [12],
+    "inputDepSetIds": [10],
+    "outputIds": [11],
     "executionInfo": [{
       "key": "no-cache",
       "value": "1"
@@ -191,7 +188,7 @@
       "key": "no-remote-exec",
       "value": "1"
     }],
-    "primaryOutputId": 12,
+    "primaryOutputId": 11,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 5,
@@ -203,65 +200,65 @@
       "key": "PATH",
       "value": "/usr/bin:/bin"
     }],
-    "inputDepSetIds": [15],
-    "outputIds": [11],
-    "primaryOutputId": 11,
+    "inputDepSetIds": [12],
+    "outputIds": [10],
+    "primaryOutputId": 10,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 6,
     "actionKey": "7a39b61d5744a8903119e17b3ddc7e56e330f240d2bead98c3ba081a81b5c9ac",
     "mnemonic": "ExecutableSymlink",
     "configurationId": 2,
-    "inputDepSetIds": [19],
-    "outputIds": [15],
-    "primaryOutputId": 15,
+    "inputDepSetIds": [16],
+    "outputIds": [14],
+    "primaryOutputId": 14,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 6,
     "actionKey": "eaf13d83a5a688fa5b315b94d7c186b51fe8ddc267c803905bf1de21a82abbc4",
     "mnemonic": "RepoMappingManifest",
     "configurationId": 2,
-    "outputIds": [17],
-    "primaryOutputId": 17,
+    "outputIds": [16],
+    "primaryOutputId": 16,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 6,
     "actionKey": "fb28a1a086c02d9bd606f77abe0fad0d248758c2050cf4b5409a3f302a1608d6",
     "mnemonic": "SourceSymlinkManifest",
     "configurationId": 2,
-    "outputIds": [18],
-    "primaryOutputId": 18,
+    "outputIds": [17],
+    "primaryOutputId": 17,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 6,
     "actionKey": "47bcad3fab0dc6d93e8a4cf2069b37456f8bedd7b8304f1fb315ae423c557ee1",
     "mnemonic": "SymlinkTree",
     "configurationId": 2,
-    "inputDepSetIds": [20],
-    "outputIds": [19],
-    "primaryOutputId": 19,
+    "inputDepSetIds": [17],
+    "outputIds": [18],
+    "primaryOutputId": 18,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 6,
     "actionKey": "709e80c88487a2411e1ee4dfb9f22a861492d20c4765150c0c794abd70f8147c",
     "mnemonic": "Middleman",
     "configurationId": 2,
-    "inputDepSetIds": [21],
-    "outputIds": [16],
-    "primaryOutputId": 16,
+    "inputDepSetIds": [18],
+    "outputIds": [15],
+    "primaryOutputId": 15,
     "executionPlatform": "@@platforms//host:host"
   }, {
     "targetId": 7,
-    "actionKey": "116e914d6a70ea5d6c001cbf660e2bb0db5683d194a6ce4581899c73f78fb0a1",
+    "actionKey": "460abfc5256a43bbe04fff6f7ea4846c3deeede48c175d07fb3117ac9e70e70b",
     "mnemonic": "OpenPGPSign",
     "configurationId": 1,
-    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "pgp/test/fixtures/example_key.pgp", "--passphrase-file", "/tmp/envoy-toolshed-pgp-test/passphrase", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example_deb_changes/example.changes", "--armor", "pgp/test/fixtures/example.changes"],
+    "arguments": ["bazel-out/k8-opt-exec-ST-d57f47055a04/bin/pgp/test/stub_signer", "--mode", "cleartext", "--key", "/tmp/nonexistent-key", "--key-sha256", "0000000000000000000000000000000000000000000000000000000000000000", "--passphrase-file", "/tmp/nonexistent", "--require-encrypted-key", "--out", "bazel-out/k8-fastbuild/bin/pgp/test/example_deb_changes/example.changes", "--armor", "pgp/test/fixtures/example.changes"],
     "environmentVariables": [{
       "key": "PATH",
       "value": "/usr/bin:/bin"
     }],
-    "inputDepSetIds": [23],
-    "outputIds": [20],
+    "inputDepSetIds": [20],
+    "outputIds": [19],
     "executionInfo": [{
       "key": "no-cache",
       "value": "1"
@@ -278,7 +275,7 @@
       "key": "no-remote-exec",
       "value": "1"
     }],
-    "primaryOutputId": 20,
+    "primaryOutputId": 19,
     "executionPlatform": "@@platforms//host:host"
   }],
   "targets": [{
@@ -314,93 +311,85 @@
     "id": 2,
     "directArtifactIds": [1, 2]
   }, {
-    "id": 3,
-    "directArtifactIds": [3, 4]
-  }, {
     "id": 1,
-    "transitiveDepSetIds": [2, 3]
+    "transitiveDepSetIds": [2],
+    "directArtifactIds": [3]
+  }, {
+    "id": 3,
+    "directArtifactIds": [2]
   }, {
     "id": 4,
-    "directArtifactIds": [4]
-  }, {
-    "id": 5,
-    "directArtifactIds": [7]
-  }, {
-    "id": 8,
-    "directArtifactIds": [4, 3]
+    "directArtifactIds": [6]
   }, {
     "id": 7,
-    "transitiveDepSetIds": [8],
-    "directArtifactIds": [3]
+    "directArtifactIds": [2, 1]
   }, {
     "id": 6,
     "transitiveDepSetIds": [7],
-    "directArtifactIds": [8, 6]
+    "directArtifactIds": [1]
   }, {
-    "id": 10,
-    "directArtifactIds": [1, 2]
-  }, {
-    "id": 11,
-    "directArtifactIds": [3, 4]
+    "id": 5,
+    "transitiveDepSetIds": [6],
+    "directArtifactIds": [7, 5]
   }, {
     "id": 9,
-    "transitiveDepSetIds": [10, 11]
+    "directArtifactIds": [1, 2]
+  }, {
+    "id": 8,
+    "transitiveDepSetIds": [9],
+    "directArtifactIds": [3]
+  }, {
+    "id": 11,
+    "directArtifactIds": [1, 2]
+  }, {
+    "id": 10,
+    "transitiveDepSetIds": [11],
+    "directArtifactIds": [10]
   }, {
     "id": 13,
-    "directArtifactIds": [11, 2]
+    "directArtifactIds": [12, 3]
+  }, {
+    "id": 15,
+    "directArtifactIds": [13, 14]
   }, {
     "id": 14,
-    "directArtifactIds": [3, 4]
+    "transitiveDepSetIds": [15],
+    "directArtifactIds": [15, 14]
   }, {
     "id": 12,
     "transitiveDepSetIds": [13, 14]
   }, {
     "id": 16,
-    "directArtifactIds": [13, 1]
-  }, {
-    "id": 18,
-    "directArtifactIds": [14, 15]
+    "directArtifactIds": [13]
   }, {
     "id": 17,
-    "transitiveDepSetIds": [18],
-    "directArtifactIds": [16, 15]
-  }, {
-    "id": 15,
-    "transitiveDepSetIds": [16, 17]
+    "directArtifactIds": [17]
   }, {
     "id": 19,
+    "transitiveDepSetIds": [15],
     "directArtifactIds": [14]
   }, {
-    "id": 20,
-    "directArtifactIds": [18]
-  }, {
-    "id": 22,
-    "transitiveDepSetIds": [18],
-    "directArtifactIds": [15]
+    "id": 18,
+    "transitiveDepSetIds": [19],
+    "directArtifactIds": [18, 16]
   }, {
     "id": 21,
-    "transitiveDepSetIds": [22],
-    "directArtifactIds": [19, 17]
+    "directArtifactIds": [1, 2]
   }, {
-    "id": 24,
-    "directArtifactIds": [13, 2]
-  }, {
-    "id": 25,
-    "directArtifactIds": [3, 4]
-  }, {
-    "id": 23,
-    "transitiveDepSetIds": [24, 25]
+    "id": 20,
+    "transitiveDepSetIds": [21],
+    "directArtifactIds": [12]
   }],
   "configuration": [{
     "id": 1,
     "mnemonic": "k8-fastbuild",
     "platformName": "k8",
-    "checksum": "be7c1fa7daf70079c66f6f2e8566c33836626d8ff3227f610ea50ac3cf8744de"
+    "checksum": "8ccb9e558e20c7159868e719a2666da8cd26251838da34ccc0e31e6bd46133ed"
   }, {
     "id": 2,
     "mnemonic": "k8-opt-exec-ST-d57f47055a04",
     "platformName": "k8",
-    "checksum": "5ed126425c9ca2682f4b8e2cdc6342b282c33a30260778837964c8cd0095684b",
+    "checksum": "34af391bb0ee1e2ba258cc21b67b093d0e298f56dd6cde7ba6d109a72017ecd1",
     "isTool": true
   }],
   "ruleClasses": [{
@@ -414,158 +403,154 @@
     "name": "pgp_checksums"
   }],
   "pathFragments": [{
+    "id": 6,
+    "label": "bazel-out"
+  }, {
+    "id": 5,
+    "label": "k8-opt-exec-ST-d57f47055a04",
+    "parentId": 6
+  }, {
     "id": 4,
-    "label": "pgp"
+    "label": "bin",
+    "parentId": 5
   }, {
     "id": 3,
-    "label": "test",
+    "label": "pgp",
     "parentId": 4
   }, {
     "id": 2,
-    "label": "fixtures",
+    "label": "test",
     "parentId": 3
   }, {
     "id": 1,
-    "label": "example.txt",
+    "label": "stub_signer",
     "parentId": 2
-  }, {
-    "id": 5,
-    "label": "example_key.pgp",
-    "parentId": 2
-  }, {
-    "id": 11,
-    "label": "bazel-out"
-  }, {
-    "id": 10,
-    "label": "k8-opt-exec-ST-d57f47055a04",
-    "parentId": 11
   }, {
     "id": 9,
-    "label": "bin",
-    "parentId": 10
+    "label": "pgp"
   }, {
     "id": 8,
-    "label": "pgp",
+    "label": "test",
     "parentId": 9
   }, {
     "id": 7,
-    "label": "test",
+    "label": "stub_signer.sh",
     "parentId": 8
   }, {
-    "id": 6,
-    "label": "stub_signer",
-    "parentId": 7
+    "id": 11,
+    "label": "fixtures",
+    "parentId": 8
   }, {
-    "id": 12,
-    "label": "stub_signer.sh",
-    "parentId": 3
-  }, {
-    "id": 17,
-    "label": "k8-fastbuild",
+    "id": 10,
+    "label": "example.txt",
     "parentId": 11
   }, {
     "id": 16,
-    "label": "bin",
-    "parentId": 17
+    "label": "k8-fastbuild",
+    "parentId": 6
   }, {
     "id": 15,
-    "label": "pgp",
+    "label": "bin",
     "parentId": 16
   }, {
     "id": 14,
-    "label": "test",
+    "label": "pgp",
     "parentId": 15
   }, {
     "id": 13,
+    "label": "test",
+    "parentId": 14
+  }, {
+    "id": 12,
     "label": "example.txt.asc",
-    "parentId": 14
+    "parentId": 13
   }, {
-    "id": 18,
+    "id": 17,
     "label": "stub_signer.repo_mapping",
-    "parentId": 7
-  }, {
-    "id": 19,
-    "label": "stub_signer.runfiles_manifest",
-    "parentId": 7
-  }, {
-    "id": 21,
-    "label": "stub_signer.runfiles",
-    "parentId": 7
-  }, {
-    "id": 20,
-    "label": "MANIFEST",
-    "parentId": 21
-  }, {
-    "id": 24,
-    "label": "internal",
-    "parentId": 10
-  }, {
-    "id": 23,
-    "label": "_middlemen",
-    "parentId": 24
-  }, {
-    "id": 22,
-    "label": "pgp_Stest_Sstub_Usigner-runfiles",
-    "parentId": 23
-  }, {
-    "id": 25,
-    "label": "example.txt.cleartext.asc",
-    "parentId": 14
-  }, {
-    "id": 26,
-    "label": "example_checksums.checksums.txt",
-    "parentId": 14
-  }, {
-    "id": 27,
-    "label": "example_checksums.checksums.txt.asc",
-    "parentId": 14
-  }, {
-    "id": 28,
-    "label": "example.changes",
     "parentId": 2
   }, {
-    "id": 30,
-    "label": "private",
-    "parentId": 4
+    "id": 18,
+    "label": "stub_signer.runfiles_manifest",
+    "parentId": 2
   }, {
-    "id": 29,
-    "label": "checksums.sh",
-    "parentId": 30
+    "id": 20,
+    "label": "stub_signer.runfiles",
+    "parentId": 2
   }, {
-    "id": 32,
-    "label": "private",
-    "parentId": 8
+    "id": 19,
+    "label": "MANIFEST",
+    "parentId": 20
   }, {
-    "id": 31,
-    "label": "checksums",
-    "parentId": 32
+    "id": 23,
+    "label": "internal",
+    "parentId": 5
   }, {
-    "id": 33,
-    "label": "pgp_Sprivate_Schecksums-runfiles",
+    "id": 22,
+    "label": "_middlemen",
     "parentId": 23
   }, {
-    "id": 34,
+    "id": 21,
+    "label": "pgp_Stest_Sstub_Usigner-runfiles",
+    "parentId": 22
+  }, {
+    "id": 24,
+    "label": "example.txt.cleartext.asc",
+    "parentId": 13
+  }, {
+    "id": 25,
+    "label": "example_checksums.checksums.txt",
+    "parentId": 13
+  }, {
+    "id": 26,
+    "label": "example_checksums.checksums.txt.asc",
+    "parentId": 13
+  }, {
+    "id": 27,
+    "label": "example.changes",
+    "parentId": 11
+  }, {
+    "id": 29,
+    "label": "private",
+    "parentId": 9
+  }, {
+    "id": 28,
+    "label": "checksums.sh",
+    "parentId": 29
+  }, {
+    "id": 31,
+    "label": "private",
+    "parentId": 3
+  }, {
+    "id": 30,
+    "label": "checksums",
+    "parentId": 31
+  }, {
+    "id": 32,
+    "label": "pgp_Sprivate_Schecksums-runfiles",
+    "parentId": 22
+  }, {
+    "id": 33,
     "label": "checksums.repo_mapping",
-    "parentId": 32
+    "parentId": 31
   }, {
-    "id": 35,
+    "id": 34,
     "label": "checksums.runfiles_manifest",
-    "parentId": 32
-  }, {
-    "id": 37,
-    "label": "checksums.runfiles",
-    "parentId": 32
+    "parentId": 31
   }, {
     "id": 36,
-    "label": "MANIFEST",
-    "parentId": 37
+    "label": "checksums.runfiles",
+    "parentId": 31
   }, {
-    "id": 39,
-    "label": "example_deb_changes",
-    "parentId": 14
+    "id": 35,
+    "label": "MANIFEST",
+    "parentId": 36
   }, {
     "id": 38,
+    "label": "example_deb_changes",
+    "parentId": 13
+  }, {
+    "id": 37,
     "label": "example.changes",
-    "parentId": 39
+    "parentId": 38
   }]
 }

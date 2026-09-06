@@ -15,7 +15,8 @@ pinned to the local machine.
 
 | Guarantee | How |
 | --- | --- |
-| Only ciphertext key material ever enters the build graph | The signer is always invoked with `--require-encrypted-key` and fails hard if *any* secret key packet in the key file is unprotected |
+| **No key material ever enters the build graph** | The key is a host path, not an artifact; the signer additionally refuses unencrypted keys (`--require-encrypted-key`) so even the host file is ciphertext |
+| Key/passphrase content changes are not silently ignored | `key_path` accepts `#sha256=` so content is part of the action key and is verified by the signer; passphrase content is never hashed (oracle risk) and signing actions are `no-cache` so they always re-run |
 | The passphrase is never an action input, and is never hashed, cached or uploaded by Bazel | It is provided as an absolute host path via `--@envoy_toolshed//pgp:passphrase_path`; Bazel only ever sees the path |
 | The passphrase never appears on a command line (`ps`, `--subcommands`, execution log) | Only `--passphrase-file <path>` is passed |
 | The passphrase is never written to disk a second time | The signer reads it via process substitution (`--password-file <(...)`) rather than copying it to a temporary file |
@@ -24,17 +25,22 @@ pinned to the local machine.
 | Signing actions are greppable in `aquery` | `mnemonic = "OpenPGPSign"` |
 | No ambient environment reaches the signer | `use_default_shell_env = False` and an explicit, minimal `env = {"PATH": "/usr/bin:/bin"}`; the signer never consults `HOME`, `GNUPGHOME`, `SSH_AUTH_SOCK`, a gpg-agent socket, or any keyring/cert store on disk (`sq` is invoked with `--home none --cert-store none --key-store none --batch`) |
 | The key is never copied into an output | The action writes only its declared output |
-| A build without a configured passphrase fails loudly | The rule `fail()`s at analysis time |
+| A build without a configured passphrase or key fails loudly | The rule `fail()`s at analysis time |
 
 ### What you still own
 
 | Concern | Why it is yours |
 | --- | --- |
+| The encrypted key file on the host | Put it somewhere dedicated - eg `${runner.temp}/gpg/signing-key.asc`, `chmod 600`, deleted when the job ends - and **never** under the Bazel output tree, `--disk_cache`, or any artifact upload path |
+| Computing key digest | Compute the `#sha256=` fragment yourself (eg `sha256sum`) — the rules cannot |
 | The passphrase file contents | Trailing newlines are stripped (matching `gpg --passphrase-file`); everything else is used verbatim |
 | The plaintext passphrase file on the host | It must exist in plaintext during the build. Put it somewhere dedicated - eg `${runner.temp}/gpg/passphrase`, `chmod 600`, deleted when the job ends - and **never** under the Bazel output tree, `--disk_cache`, or any artifact upload path |
 | `--sandbox_debug` | It leaves sandbox directories (including the action's inputs) on disk |
-| Visibility of the key target | Put the encrypted key behind a `package_group` so unrelated packages cannot depend on it |
 | Where the encrypted key comes from | The rules verify it is encrypted, not that it is *your* key |
+
+### Why not a label / why not `path_flag`
+
+Hermeticity is about action inputs; the key and passphrase are deliberately host capabilities (like `SSH_AUTH_SOCK`), invisible to remote executors because `no-remote-exec` guarantees they never see the action; a label or path-flag would pull content into the graph, which is exactly what we are avoiding.
 
 ## Usage
 
@@ -44,36 +50,37 @@ load("@envoy_toolshed//pgp:defs.bzl", "pgp_sign_checksums", "pgp_sign_detached")
 pgp_sign_detached(
     name = "signed_tarball",
     src = ":tarball",
-    key = ":signing-key.asc",
 )
 
 pgp_sign_checksums(
     name = "signed_checksums",
     srcs = [":tarball", ":package"],
-    key = ":signing-key.asc",
 )
 ```
 
 ```console
 $ bazel build //:signed_tarball \
+      --@envoy_toolshed//pgp:key_path=/run/user/1000/gpg/signing-key.asc#sha256=... \
       --@envoy_toolshed//pgp:passphrase_path=/run/user/1000/gpg/passphrase
 ```
 
-Without the flag the build fails at analysis time:
+Without the flags the build fails at analysis time:
 
 ```
-No passphrase path configured for //:signed_tarball.
+No key path configured for //:signed_tarball.
 ```
+
+**CI wiring recommendation:** A setup step writes the encrypted key and passphrase to `${runner.temp}/gpg/`, `chmod 600`, computes the key digest, and passes both flags to bazel; no `~/.gnupg`, no agent, no `HOME` mount required.
 
 ### Rules
 
 | Rule | Purpose |
 | --- | --- |
-| `pgp_sign(name, src, key, mode, out, armor)` | Core rule. Signs a single `src`. `mode` is one of `detached`, `cleartext`, `inline` |
-| `pgp_sign_detached(name, src, key, out)` | Detached, armored signature (`<src>.asc`) |
-| `pgp_sign_cleartext(name, src, key, out)` | Cleartext signature - what `debsign` produces for `.changes`/`.dsc`, and what an apt `InRelease` is |
-| `pgp_sign_checksums(name, srcs, key, algorithm, out)` | `shasum`-format checksums file for `srcs`, cleartext signed. Checksum generation is a separate, cacheable action - only signing handles secrets |
-| `pgp_sign_changes_file(name, changes, key, out)` | Cleartext sign a Debian `.changes`/`.dsc` file itself. **Not** a full `debsign`: it does not sign referenced `.dsc`/`.buildinfo` files or rewrite their checksums - see the `TODO` on the rule |
+| `pgp_sign(name, src, mode, out, armor)` | Core rule. Signs a single `src`. `mode` is one of `detached`, `cleartext`, `inline` |
+| `pgp_sign_detached(name, src, out)` | Detached, armored signature (`<src>.asc`) |
+| `pgp_sign_cleartext(name, src, out)` | Cleartext signature - what `debsign` produces for `.changes`/`.dsc`, and what an apt `InRelease` is |
+| `pgp_sign_checksums(name, srcs, algorithm, out)` | `shasum`-format checksums file for `srcs`, cleartext signed. Checksum generation is a separate, cacheable action - only signing handles secrets |
+| `pgp_sign_changes_file(name, changes, out)` | Cleartext sign a Debian `.changes`/`.dsc` file itself. **Not** a full `debsign`: it does not sign referenced `.dsc`/`.buildinfo` files or rewrite their checksums - see the `TODO` on the rule |
 | `pgp_toolchain(name, signer)` | Register a signer implementation for `//pgp:toolchain_type` |
 
 RPM header signing is **not** implemented here.
@@ -91,7 +98,8 @@ CLI contract:
 
 ```
 signer --mode {detached|cleartext|inline} \
-       --key <encrypted-secret-key-file> \
+       --key <abs-path-to-encrypted-secret-key> \
+       [--key-sha256 <hex>] \
        --passphrase-file <abs-path> \
        --require-encrypted-key \
        --out <output-file> \
@@ -152,15 +160,17 @@ asserts that:
    requirements,
 2. no input reachable from an `OpenPGPSign` action (resolved transitively via
    `inputDepSetIds`) has a path matching
-   `(^|/)\.gnupg(/|$)|private-keys-v1\.d|passphrase`,
+   `(^|/)\.gnupg(/|$)|private-keys-v1\.d|passphrase|secret|\.(asc|pgp|gpg|key)$`,
 3. no `OpenPGPSign` action has `HOME`, `GNUPGHOME` or `SSH_AUTH_SOCK` in its
    environment,
 4. no `OpenPGPSign` action passes a forbidden string (eg your passphrase) on
-   the command line.
+   the command line,
+5. every `OpenPGPSign` action has exactly one non-tool input artifact (the file being signed).
 
 ```console
 $ bazel run @envoy_toolshed//pgp/test:audit -- \
       --forbid "$(cat /run/user/1000/gpg/passphrase)" \
+      --@envoy_toolshed//pgp:key_path=/run/user/1000/gpg/signing-key.asc#sha256=... \
       --@envoy_toolshed//pgp:passphrase_path=/run/user/1000/gpg/passphrase \
       "deps(//distribution:signed)"
 ```

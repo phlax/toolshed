@@ -5,7 +5,8 @@ documented in `//pgp:README.md`:
 
 ```
 signer --mode {detached|cleartext|inline} \\
-       --key <encrypted-secret-key-file> \\
+       --key <abs-path-to-encrypted-secret-key> \\
+       [--key-sha256 <hex>] \\
        --passphrase-file <abs-path> \\
        --require-encrypted-key \\
        --out <output-file> \\

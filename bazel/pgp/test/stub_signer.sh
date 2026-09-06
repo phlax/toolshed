@@ -9,6 +9,7 @@ set -euo pipefail
 
 MODE=
 KEY=
+KEY_SHA256=
 PASSPHRASE_FILE=
 OUT=
 
@@ -20,6 +21,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --key)
             KEY="$2"
+            shift 2
+            ;;
+        --key-sha256)
+            KEY_SHA256="$2"
             shift 2
             ;;
         --passphrase-file)

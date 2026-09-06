@@ -35,6 +35,19 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
+# Absolute host path of the passphrase-encrypted secret key.
+#
+# The key is a host path, not an artifact in the build graph: Bazel only ever
+# sees the path, never the key file contents. The file is read by the signer at
+# execution time.
+#
+# It must not live under the Bazel output tree or any artifact upload path.
+string_flag(
+    name = "key_path",
+    build_setting_default = "",
+    visibility = ["//visibility:public"],
+)
+
 # Absolute host path of the file containing the passphrase for the signing
 # key.
 #
