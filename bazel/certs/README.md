@@ -133,3 +133,7 @@ $ bazel test //certs/...
 
 The tests generate all supported output kinds, check their structure without
 calling the host OpenSSL binary, and exercise malformed specifications.
+
+Note that `.spec` files are commonly gitignored (the PyInstaller rule matches
+the same extension), so the root `.gitignore` carves out an exception for
+`bazel/certs/**/*.spec` to keep this package's spec fixtures tracked.
