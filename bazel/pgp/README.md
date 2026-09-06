@@ -16,7 +16,8 @@ pinned to the local machine.
 | Guarantee | How |
 | --- | --- |
 | **No key material ever enters the build graph** | The key is a host path, not an artifact; the signer additionally refuses unencrypted keys (`--require-encrypted-key`) so even the host file is ciphertext |
-| Key/passphrase content changes are not silently ignored | `key_path` accepts `#sha256=` so content is part of the action key and is verified by the signer; passphrase content is never hashed (oracle risk) and signing actions are `no-cache` so they always re-run |
+| Key content is part of the action key | `key_path` accepts `#sha256=`; the digest is in the action key and verified by the signer before use |
+| Passphrase changes always take effect | The passphrase is never hashed (a digest would be an offline oracle for weak passphrases); instead signing actions are `no-cache` and therefore always re-run |
 | The passphrase is never an action input, and is never hashed, cached or uploaded by Bazel | It is provided as an absolute host path via `--@envoy_toolshed//pgp:passphrase_path`; Bazel only ever sees the path |
 | The passphrase never appears on a command line (`ps`, `--subcommands`, execution log) | Only `--passphrase-file <path>` is passed |
 | The passphrase is never written to disk a second time | The signer reads it via process substitution (`--password-file <(...)`) rather than copying it to a temporary file |
@@ -156,6 +157,8 @@ toolchain(
 The audit is implemented as jq filters run by Starlark rules. The jq binary is
 resolved from the hermetic `aspect_bazel_lib` jq toolchain; the audit never uses
 host `jq` from `$PATH`.
+The runnable `//pgp/audit:audit` likewise uses the toolchain jq via runfiles and
+ignores any host `jq`.
 
 For captured `bazel aquery --output=jsonproto` output, use `pgp_audit` to emit
 a JSON report and `pgp_audit_test` to fail when the report has failures:

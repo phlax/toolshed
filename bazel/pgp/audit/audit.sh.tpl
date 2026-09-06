@@ -11,10 +11,6 @@ resolve_runfile() {
         printf '%s\n' "$0.runfiles/${path}"
         return 0
     fi
-    if [[ -e "${path}" ]]; then
-        printf '%s\n' "${path}"
-        return 0
-    fi
     printf 'runfile not found: %s\n' "${path}" >&2
     return 1
 }
@@ -67,10 +63,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
 if [[ -z "$aquery_json" ]]; then
     [[ ${#targets[@]} -gt 0 ]] || usage
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
     aquery_json="$tmp/aquery.json"
     bazel aquery --output=jsonproto --include_artifacts=true \
         ${bazel_opts[@]+"${bazel_opts[@]}"} \
@@ -78,7 +75,7 @@ if [[ -z "$aquery_json" ]]; then
 fi
 
 forbidden_strings_json="$("$jq_bin" -n '$ARGS.positional' --args "${forbidden_strings[@]}")"
-report="$(mktemp)"
+report="$tmp/report.json"
 "$jq_bin" \
     -L "$lib_dir" \
     -f "$filter" \
