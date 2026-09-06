@@ -9,7 +9,7 @@
 #          --require-encrypted-key \
 #          --out <output-file> \
 #          [--armor] \
-#          <input>...
+#          <input>
 #
 # The wrapper deliberately never consults `HOME`, `GNUPGHOME`, a gpg-agent
 # socket, or any on-disk keyring/cert store - `sq` is invoked with its own
@@ -28,13 +28,12 @@ PASSPHRASE_FILE=
 OUT=
 ARMOR=0
 REQUIRE_ENCRYPTED_KEY=0
-PASSPHRASE_COPY=
 INPUTS=()
 
 usage () {
     echo "usage: $0 --mode {detached|cleartext|inline} --key KEY" \
          "--passphrase-file PATH --out OUT [--armor]" \
-         "[--require-encrypted-key] INPUT..." >&2
+         "[--require-encrypted-key] INPUT" >&2
     exit 2
 }
 
@@ -155,32 +154,18 @@ require_encrypted_key () {
     fi
 }
 
-# `sq` uses the entire contents of the password file, including any trailing
-# newline, whereas `gpg --passphrase-file` strips it. Normalize on the `gpg`
-# behaviour by stripping trailing newlines into a private copy.
-#
-# The copy lives in the action's (sandboxed, per-action) temporary directory,
-# is created with mode 600, and is removed on exit.
-normalize_passphrase_file () {
-    local tmpdir
-    tmpdir="$(mktemp -d)"
-    # shellcheck disable=SC2064
-    trap "rm -rf \"$tmpdir\"" EXIT
-    PASSPHRASE_COPY="${tmpdir}/passphrase"
-    (
-        umask 077
-        printf %s "$(cat "$PASSPHRASE_FILE")" > "$PASSPHRASE_COPY"
-    )
-}
-
 if [[ "$REQUIRE_ENCRYPTED_KEY" -eq 1 ]]; then
     require_encrypted_key
 fi
 
-normalize_passphrase_file
-
+# `sq` uses the entire contents of the password file, including any trailing
+# newline, whereas `gpg --passphrase-file` strips it. Normalize on the `gpg`
+# behaviour without ever writing a second plaintext copy of the passphrase to
+# disk: `sq` reads `--password-file` from an anonymous pipe created by
+# process substitution (`/dev/fd/N` under bash), so the stripped passphrase
+# exists only in memory/in-pipe, never as a file.
 args=(
-    --password-file "$PASSPHRASE_COPY"
+    --password-file <(printf %s "$(cat "$PASSPHRASE_FILE")")
     sign
     --signer-file "$KEY")
 

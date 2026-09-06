@@ -13,7 +13,6 @@ PASSPHRASE_FLAG = str(Label("//pgp:passphrase_path"))
 # independently of the rule, so that dropping one from the rule fails this
 # test. `//pgp/test:audit_test` additionally checks captured `aquery` output.
 REQUIRED_EXECUTION_REQUIREMENTS = [
-    "local",
     "no-cache",
     "no-remote",
     "no-remote-cache",
@@ -58,7 +57,12 @@ def _env_test_impl(ctx):
             name not in action.env,
             "%s action leaks `%s` into its environment" % (MNEMONIC, name),
         )
-    asserts.equals(env, {}, action.env, "%s action environment is not empty" % MNEMONIC)
+    asserts.equals(
+        env,
+        {"PATH": "/usr/bin:/bin"},
+        action.env,
+        "%s action environment is not the expected minimal PATH" % MNEMONIC,
+    )
     return analysistest.end(env)
 
 env_test = analysistest.make(

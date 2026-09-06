@@ -10,7 +10,8 @@ Security model (see `//pgp:README.md`):
   only the *path* is ever hashed, logged or cached.
 - every signing action carries the full set of execution requirements below,
   hardcoded here rather than left to the caller.
-- no environment is inherited (`use_default_shell_env = False`, `env = {}`).
+- no ambient environment is inherited (`use_default_shell_env = False`); only
+  an explicit, minimal `PATH` is set.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
@@ -24,15 +25,21 @@ MODES = [
 ]
 
 # Hardcoded, not user-overridable: a signing action must never be shipped to,
-# or cached in, anything other than the machine it runs on.
+# or cached in, anything other than the machine it runs on. The action stays
+# sandboxed and local - `local` (no-sandbox) is deliberately not one of these.
 EXECUTION_REQUIREMENTS = {
-    "local": "1",
     "no-cache": "1",
     "no-remote": "1",
     "no-remote-cache": "1",
     "no-remote-cache-upload": "1",
     "no-remote-exec": "1",
 }
+
+# Minimal, explicit `PATH` for signing/checksums actions. `env = {}` alone
+# only works because bash/glibc fall back to compiled-in default paths -
+# setting `PATH` explicitly makes that dependency visible and pinned rather
+# than implicit.
+_ACTION_ENV = {"PATH": "/usr/bin:/bin"}
 
 MNEMONIC = "OpenPGPSign"
 
@@ -64,7 +71,7 @@ def _passphrase_path(ctx):
         fail(_RELATIVE_PASSPHRASE_PATH.format(label = ctx.label, path = path))
     return path
 
-def _sign(ctx, mode, srcs, key, out, armor):
+def _sign(ctx, mode, src, key, out, armor):
     passphrase_path = _passphrase_path(ctx)
     signer = ctx.toolchains[TOOLCHAIN_TYPE].pgp_signer
     args = ctx.actions.args()
@@ -78,31 +85,26 @@ def _sign(ctx, mode, srcs, key, out, armor):
     args.add("--out", out)
     if armor:
         args.add("--armor")
-    args.add_all(srcs)
+    args.add(src)
     ctx.actions.run(
         executable = signer.signer,
         arguments = [args],
-        inputs = srcs + [key],
+        inputs = [src, key],
         outputs = [out],
         tools = depset([signer.signer], transitive = [signer.runfiles.files]),
         mnemonic = MNEMONIC,
         progress_message = "Signing %s" % out.short_path,
         execution_requirements = EXECUTION_REQUIREMENTS,
         use_default_shell_env = False,
-        env = {},
+        env = _ACTION_ENV,
     )
 
 def _pgp_sign_impl(ctx):
-    if len(ctx.files.srcs) != 1:
-        fail("%s: exactly one file can be signed, got %s" % (
-            ctx.label,
-            len(ctx.files.srcs),
-        ))
     out = ctx.outputs.out
     _sign(
         ctx,
         mode = ctx.attr.mode,
-        srcs = ctx.files.srcs,
+        src = ctx.file.src,
         key = ctx.file.key,
         out = out,
         armor = ctx.attr.armor,
@@ -111,7 +113,7 @@ def _pgp_sign_impl(ctx):
 
 pgp_sign = rule(
     implementation = _pgp_sign_impl,
-    doc = """Sign `srcs` with `key`.
+    doc = """Sign `src` with `key`.
 
 The key must be a passphrase-encrypted OpenPGP secret key. The passphrase is
 provided out of band, see `--@envoy_toolshed//pgp:passphrase_path`.
@@ -135,10 +137,10 @@ provided out of band, see `--@envoy_toolshed//pgp:passphrase_path`.
             doc = "Output file.",
             mandatory = True,
         ),
-        "srcs": attr.label_list(
-            doc = "Files to sign.",
+        "src": attr.label(
+            doc = "The single file to sign.",
             mandatory = True,
-            allow_files = True,
+            allow_single_file = True,
         ),
         "_passphrase_path": attr.label(
             default = "//pgp:passphrase_path",
@@ -161,7 +163,7 @@ def _pgp_checksums_impl(ctx):
         mnemonic = "OpenPGPChecksums",
         progress_message = "Generating checksums %s" % out.short_path,
         use_default_shell_env = False,
-        env = {},
+        env = _ACTION_ENV,
     )
     return [DefaultInfo(files = depset([out]))]
 

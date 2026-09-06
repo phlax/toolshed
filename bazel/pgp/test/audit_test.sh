@@ -6,8 +6,9 @@
 #
 #   1. every action with mnemonic `OpenPGPSign` carries all of the required
 #      execution requirements,
-#   2. no action in the queried universe has an input that looks like private
-#      key material or a passphrase,
+#   2. no input reachable from an `OpenPGPSign` action's `inputDepSetIds`
+#      (i.e. anything that action could actually read) has a path that looks
+#      like private key material or a passphrase,
 #   3. no `OpenPGPSign` action has `HOME`, `GNUPGHOME` or `SSH_AUTH_SOCK` in
 #      its environment,
 #   4. no `OpenPGPSign` action's argv contains a forbidden string (use
@@ -32,7 +33,6 @@ BAZEL="${BAZEL:-bazel}"
 JQ="${JQ_BIN:-jq}"
 
 REQUIRED_EXECUTION_REQUIREMENTS=(
-    local
     no-cache
     no-remote
     no-remote-cache
@@ -130,14 +130,53 @@ for requirement in "${REQUIRED_EXECUTION_REQUIREMENTS[@]}"; do
     fi
 done
 
-# 2. Suspicious inputs anywhere in the queried universe.
-suspicious="$(jqq --arg re "$FORBIDDEN_INPUTS" '
-    [.artifacts[]?
-     | .execPath // empty
-     | select(test($re; "i"))]
+# 2. Suspicious inputs reachable from `OpenPGPSign` actions.
+#
+# `bazel aquery --output=jsonproto` artifacts only carry an `id` and a
+# `pathFragmentId` - there is no `execPath` field to read directly. The full
+# path has to be reconstructed by walking `pathFragments` via `parentId`.
+#
+# Scope is restricted to artifacts reachable from `OpenPGPSign` actions'
+# `inputDepSetIds` (resolved transitively through `depSetOfFiles`), rather
+# than every artifact in the queried universe, since that is what the
+# signing action can actually read.
+suspicious="$(jqq --arg mnemonic "$MNEMONIC" --arg re "$FORBIDDEN_INPUTS" '
+    def frag_path($frags):
+        . as $id
+        | $frags[$id | tostring] as $f
+        | if ($f.parentId // null) != null then
+              ($f.parentId | frag_path($frags)) + "/" + $f.label
+          else
+              $f.label
+          end;
+
+    def depset_artifact_ids($depsets):
+        . as $ids
+        | ($ids // [])
+        | map(
+              ($depsets[(. | tostring)] // {}) as $ds
+              | (($ds.directArtifactIds // [])
+                 + (($ds.transitiveDepSetIds // []) | depset_artifact_ids($depsets)))
+          )
+        | add // [];
+
+    (INDEX(.pathFragments[]?; .id | tostring)) as $frags
+    | (INDEX(.depSetOfFiles[]?; .id | tostring)) as $depsets
+    | (INDEX(.artifacts[]?; .id | tostring)) as $arts
+    | ([.actions[]? | select(.mnemonic == $mnemonic) | (.inputDepSetIds // [])]
+       | add // []
+       | depset_artifact_ids($depsets)
+       | unique) as $signing_input_ids
+    | [$signing_input_ids[]
+       | ($arts[(. | tostring)] // empty) as $art
+       | select($art != null and ($art.pathFragmentId != null))
+       | ($art.pathFragmentId | frag_path($frags)) as $path
+       | select($path | test($re; "i"))
+       | $path]
     | unique | join(" ")')"
 if [[ -n "$suspicious" ]]; then
-    fail "action inputs look like key material or passphrases: ${suspicious}"
+    fail "${MNEMONIC} action input(s) look like key material or" \
+         "passphrases: ${suspicious}"
 fi
 
 # 3. Forbidden environment variables.

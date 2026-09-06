@@ -1,3 +1,4 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 
 exports_files([
@@ -5,6 +6,24 @@ exports_files([
     "toolchain.bzl",
     "extensions.bzl",
 ])
+
+# Ensures //pgp:extensions.bzl (not otherwise loaded - no `sq` platform is
+# enabled by default) and the rest of the public/private starlark surface
+# stay loadable and are covered by `bazel build //pgp/...`.
+bzl_library(
+    name = "pgp_bzl",
+    srcs = [
+        "defs.bzl",
+        "extensions.bzl",
+        "toolchain.bzl",
+        "//pgp/private:sign.bzl",
+        "//pgp/private:sq.bzl",
+    ],
+    visibility = ["//visibility:private"],
+    deps = [
+        "@bazel_skylib//rules:common_settings",
+    ],
+)
 
 # Toolchain type for OpenPGP signer implementations.
 #
