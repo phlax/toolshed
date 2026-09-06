@@ -10,7 +10,7 @@ signer --mode {detached|cleartext|inline} \\
        --require-encrypted-key \\
        --out <output-file> \\
        [--armor] \\
-       <input>...
+       <input>
 ```
 
 Any implementation of that contract can be dropped in without changing the

@@ -43,7 +43,7 @@ def pgp_sign_detached(name, src, key, out = None, armor = True, **kwargs):
     """
     pgp_sign(
         name = name,
-        srcs = [src],
+        src = src,
         key = key,
         mode = "detached",
         armor = armor,
@@ -66,7 +66,7 @@ def pgp_sign_cleartext(name, src, key, out = None, **kwargs):
     """
     pgp_sign(
         name = name,
-        srcs = [src],
+        src = src,
         key = key,
         mode = "cleartext",
         out = out or "%s.asc" % _basename(src),
@@ -106,30 +106,37 @@ def pgp_sign_checksums(
     )
     pgp_sign(
         name = name,
-        srcs = ["%s_checksums" % name],
+        src = "%s_checksums" % name,
         key = key,
         mode = "cleartext",
         out = out or "%s.asc" % checksums_out,
         **kwargs
     )
 
-def deb_sign_changes(name, changes, key, out = None, **kwargs):
-    """Cleartext sign a Debian `.changes` (or `.dsc`) file.
+# TODO(pgp): this only clearsigns `changes` itself. Real `debsign` also signs
+# the `.dsc`/`.buildinfo` files referenced by a `.changes` file and rewrites
+# their sizes/hashes in the `Files:`/`Checksums-*` sections of the `.changes`
+# before clearsigning it. Neither of those happen here - do not use this to
+# produce a `.changes` file that itself references unsigned `.dsc`/
+# `.buildinfo` files that need re-signing.
+def pgp_sign_changes_file(name, changes, key, out = None, **kwargs):
+    """Cleartext sign a single Debian `.changes` (or `.dsc`) file.
 
-    This is the `debsign` operation - the signed file replaces the original,
-    so the output keeps the original basename (in a directory named after the
-    target).
+    This clearsigns `changes` itself - see the TODO above for what real
+    `debsign` additionally does that this does not. The signed file replaces
+    the original, so the output keeps the original basename (in a directory
+    named after the target).
 
     Args:
         name: Name of the target.
-        changes: The `.changes`/`.dsc` file to sign.
+        changes: The `.changes`/`.dsc` file to clearsign.
         key: Passphrase-encrypted OpenPGP secret key.
         out: Output file, defaults to `<name>/<basename of changes>`.
         **kwargs: Additional arguments to the underlying rule.
     """
     pgp_sign(
         name = name,
-        srcs = [changes],
+        src = changes,
         key = key,
         mode = "cleartext",
         out = out or "%s/%s" % (name, _basename(changes)),

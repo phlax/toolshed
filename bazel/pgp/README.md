@@ -18,9 +18,11 @@ pinned to the local machine.
 | Only ciphertext key material ever enters the build graph | The signer is always invoked with `--require-encrypted-key` and fails hard if *any* secret key packet in the key file is unprotected |
 | The passphrase is never an action input, and is never hashed, cached or uploaded by Bazel | It is provided as an absolute host path via `--@envoy_toolshed//pgp:passphrase_path`; Bazel only ever sees the path |
 | The passphrase never appears on a command line (`ps`, `--subcommands`, execution log) | Only `--passphrase-file <path>` is passed |
-| Signing actions never leave the machine | `no-remote`, `no-remote-exec`, `no-remote-cache`, `no-remote-cache-upload`, `no-cache` and `local` are hardcoded in the rule and are not user-overridable |
+| The passphrase is never written to disk a second time | The signer reads it via process substitution (`--password-file <(...)`) rather than copying it to a temporary file |
+| Signing actions never leave the machine | `no-remote`, `no-remote-exec`, `no-remote-cache`, `no-remote-cache-upload` and `no-cache` are hardcoded in the rule and are not user-overridable |
+| Signing actions stay sandboxed | Unlike a `local`-tagged action, sandboxing is never disabled, so the signer cannot see anything on disk it was not explicitly given as an input |
 | Signing actions are greppable in `aquery` | `mnemonic = "OpenPGPSign"` |
-| No ambient environment reaches the signer | `use_default_shell_env = False` and `env = {}`; the signer never consults `HOME`, `GNUPGHOME`, `SSH_AUTH_SOCK`, a gpg-agent socket, or any keyring/cert store on disk (`sq` is invoked with `--home none --cert-store none --key-store none --batch`) |
+| No ambient environment reaches the signer | `use_default_shell_env = False` and an explicit, minimal `env = {"PATH": "/usr/bin:/bin"}`; the signer never consults `HOME`, `GNUPGHOME`, `SSH_AUTH_SOCK`, a gpg-agent socket, or any keyring/cert store on disk (`sq` is invoked with `--home none --cert-store none --key-store none --batch`) |
 | The key is never copied into an output | The action writes only its declared output |
 | A build without a configured passphrase fails loudly | The rule `fail()`s at analysis time |
 
@@ -33,7 +35,6 @@ pinned to the local machine.
 | `--sandbox_debug` | It leaves sandbox directories (including the action's inputs) on disk |
 | Visibility of the key target | Put the encrypted key behind a `package_group` so unrelated packages cannot depend on it |
 | Where the encrypted key comes from | The rules verify it is encrypted, not that it is *your* key |
-| `local` execution | The required `local` tag runs the action outside the sandbox. Isolation of the action is therefore provided by the empty environment and by the signer itself, not by the sandbox |
 
 ## Usage
 
@@ -68,11 +69,11 @@ No passphrase path configured for //:signed_tarball.
 
 | Rule | Purpose |
 | --- | --- |
-| `pgp_sign(name, srcs, key, mode, out, armor)` | Core rule. `mode` is one of `detached`, `cleartext`, `inline` |
+| `pgp_sign(name, src, key, mode, out, armor)` | Core rule. Signs a single `src`. `mode` is one of `detached`, `cleartext`, `inline` |
 | `pgp_sign_detached(name, src, key, out)` | Detached, armored signature (`<src>.asc`) |
 | `pgp_sign_cleartext(name, src, key, out)` | Cleartext signature - what `debsign` produces for `.changes`/`.dsc`, and what an apt `InRelease` is |
 | `pgp_sign_checksums(name, srcs, key, algorithm, out)` | `shasum`-format checksums file for `srcs`, cleartext signed. Checksum generation is a separate, cacheable action - only signing handles secrets |
-| `deb_sign_changes(name, changes, key, out)` | Cleartext sign a Debian `.changes`/`.dsc` file the way `debsign` would |
+| `pgp_sign_changes_file(name, changes, key, out)` | Cleartext sign a Debian `.changes`/`.dsc` file itself. **Not** a full `debsign`: it does not sign referenced `.dsc`/`.buildinfo` files or rewrite their checksums - see the `TODO` on the rule |
 | `pgp_toolchain(name, signer)` | Register a signer implementation for `//pgp:toolchain_type` |
 
 RPM header signing is **not** implemented here.
@@ -121,6 +122,11 @@ register_toolchains("@sq_linux_x86_64//:toolchain")
 
 `urls` can be used to point at your own audited mirror of the binary.
 
+The intended toolshed approach for this is to build and publish a pinned,
+static `sq` in the `bins-v*` release, the same way `sysroot`/`llvm_minimal`
+are, so `pgp_ext.setup()` can work with no consumer-supplied sha256 - that is
+a follow-up, not part of this rule set.
+
 Swapping in a different signer (for example a purpose-built Rust signer) is a
 matter of registering another toolchain - the rules do not change:
 
@@ -144,7 +150,8 @@ asserts that:
 
 1. every `OpenPGPSign` action carries all of the required execution
    requirements,
-2. no action in the queried universe has an input matching
+2. no input reachable from an `OpenPGPSign` action (resolved transitively via
+   `inputDepSetIds`) has a path matching
    `(^|/)\.gnupg(/|$)|private-keys-v1\.d|passphrase`,
 3. no `OpenPGPSign` action has `HOME`, `GNUPGHOME` or `SSH_AUTH_SOCK` in its
    environment,
@@ -171,11 +178,18 @@ $ bazel aquery --output=jsonproto "deps(//distribution:signed)" > aquery.json
 $ .../audit_test.sh --aquery-json aquery.json
 ```
 
-`//pgp/test:audit_test` runs the audit against captured `aquery` output for
-the example targets in `//pgp/test`, together with deliberately broken
-fixtures (a removed execution requirement, a leaked environment variable, key
-material as an action input, a passphrase on the command line), each of which
-the audit must reject.
+`//pgp/test:audit_test` runs the audit against captured `aquery` output
+(`fixtures/audit.json`, the real output for the example targets in
+`//pgp/test`) together with deliberately broken variants derived from it at
+test time with `jq` (a removed execution requirement, a leaked environment
+variable, key material as an action input, a passphrase on the command
+line), each of which the audit must reject.
+
+`//pgp/test:live_audit` (`bazel run //pgp/test:live_audit`) is the live
+counterpart: it re-invokes `bazel aquery` against the real dependency graph
+of the same example targets, rather than captured JSON, so a regression that
+only shows up in the real graph is caught too. It cannot run as a sandboxed
+`bazel test` since it shells out to `bazel`.
 
 ## Alternative: signing after the build
 
