@@ -153,8 +153,36 @@ toolchain(
 
 ## Auditing your own targets
 
-`//pgp/test:audit` runs `bazel aquery` over target patterns you give it and
-asserts that:
+The audit is implemented as jq filters run by Starlark rules. The jq binary is
+resolved from the hermetic `aspect_bazel_lib` jq toolchain; the audit never uses
+host `jq` from `$PATH`.
+
+For captured `bazel aquery --output=jsonproto` output, use `pgp_audit` to emit
+a JSON report and `pgp_audit_test` to fail when the report has failures:
+
+```starlark
+load("@envoy_toolshed//pgp/audit:defs.bzl", "pgp_audit", "pgp_audit_test")
+
+pgp_audit(
+    name = "signing_audit_report",
+    aquery = ":captured.json",
+    forbidden_strings = ["known-forbidden-string"],
+)
+
+pgp_audit_test(
+    name = "signing_audit_test",
+    aquery = ":captured.json",
+    forbidden_strings = ["known-forbidden-string"],
+)
+```
+
+The report has the shape:
+
+```json
+{"actions": 1, "failures": [{"check": 1, "target": "//pkg:target", "detail": "..."}]}
+```
+
+It asserts that:
 
 1. every `OpenPGPSign` action carries all of the required execution
    requirements,
@@ -167,33 +195,38 @@ asserts that:
    the command line,
 5. every `OpenPGPSign` action has exactly one non-tool input artifact (the file being signed).
 
+For live use, either capture JSON yourself:
+
 ```console
-$ bazel run @envoy_toolshed//pgp/test:audit -- \
+$ bazel aquery --output=jsonproto "deps(//distribution:signed)" > aquery.json
+$ bazel run @envoy_toolshed//pgp/audit:audit -- \
+      --forbid "$(cat /run/user/1000/gpg/passphrase)" \
+      --aquery-json "$PWD/aquery.json"
+```
+
+or let the runnable audit target invoke `bazel aquery` first:
+
+```console
+$ bazel run @envoy_toolshed//pgp/audit:audit -- \
       --forbid "$(cat /run/user/1000/gpg/passphrase)" \
       --@envoy_toolshed//pgp:key_path=/run/user/1000/gpg/signing-key.asc#sha256=... \
       --@envoy_toolshed//pgp:passphrase_path=/run/user/1000/gpg/passphrase \
       "deps(//distribution:signed)"
 ```
 
-Any other option is passed through to `bazel aquery`, so the targets can be
-audited in the configuration they are actually built in.
+Any option other than `--forbid`/`--aquery-json` is passed through to
+`bazel aquery`, so the targets can be audited in the configuration they are
+actually built in.
 
 Use `deps(...)` to audit the whole universe reachable from a target rather
 than only the actions the target itself owns.
 
-The script also accepts previously captured output:
-
-```console
-$ bazel aquery --output=jsonproto "deps(//distribution:signed)" > aquery.json
-$ .../audit_test.sh --aquery-json aquery.json
-```
-
 `//pgp/test:audit_test` runs the audit against captured `aquery` output
 (`fixtures/audit.json`, the real output for the example targets in
 `//pgp/test`) together with deliberately broken variants derived from it at
-test time with `jq` (a removed execution requirement, a leaked environment
-variable, key material as an action input, a passphrase on the command
-line), each of which the audit must reject.
+build time with the hermetic jq toolchain (a removed execution requirement, a
+leaked environment variable, key material as an action input, a passphrase on
+the command line), each of which the audit must reject.
 
 `//pgp/test:live_audit` (`bazel run //pgp/test:live_audit`) is the live
 counterpart: it re-invokes `bazel aquery` against the real dependency graph

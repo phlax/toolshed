@@ -16,6 +16,7 @@ bzl_library(
         "defs.bzl",
         "extensions.bzl",
         "toolchain.bzl",
+        "//pgp/audit:defs.bzl",
         "//pgp/private:sign.bzl",
         "//pgp/private:sq.bzl",
     ],

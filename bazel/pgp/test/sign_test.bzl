@@ -162,12 +162,19 @@ def _inputs_test_impl(ctx):
     action = _sign_action(env)
     inputs = [f.short_path for f in action.inputs.to_list()]
     src_short_path = ctx.file.src.short_path
+    signer = ctx.attr.signer[DefaultInfo].files_to_run.executable
+    tool_inputs = {
+        f.short_path: True
+        for f in ctx.attr.signer[DefaultInfo].default_runfiles.files.to_list()
+    }
+    if signer:
+        tool_inputs[signer.short_path] = True
     asserts.true(
         env,
         src_short_path in inputs,
         "expected %s in action inputs: %s" % (src_short_path, inputs),
     )
-    non_tool_inputs = [f for f in inputs if "stub_signer" not in f]
+    non_tool_inputs = [f for f in inputs if f not in tool_inputs]
     asserts.equals(
         env,
         [src_short_path],
@@ -179,6 +186,7 @@ def _inputs_test_impl(ctx):
 inputs_test = analysistest.make(
     _inputs_test_impl,
     attrs = {
+        "signer": attr.label(default = ":stub_signer"),
         "src": attr.label(mandatory = True, allow_single_file = True),
     },
     config_settings = {

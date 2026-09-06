@@ -1,5 +1,7 @@
+load("@aspect_bazel_lib//lib:jq.bzl", "jq")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//pgp/audit:defs.bzl", "pgp_audit_test")
 load("//pgp:defs.bzl", "pgp_sign_changes_file", "pgp_sign_checksums", "pgp_sign_cleartext", "pgp_sign_detached", "pgp_toolchain")
 load(":sign_test.bzl", "KEY_FRAGMENT_DIGEST", "args_test", "args_with_fragment_test", "bad_key_fragment_test", "env_test", "execution_requirements_test", "inputs_test", "no_key_test", "no_passphrase_test", "passphrase_fragment_test", "relative_key_test", "relative_passphrase_test")
 
@@ -128,39 +130,82 @@ passphrase_fragment_test(
     target_under_test = ":example_detached",
 )
 
-# Audits captured `bazel aquery` output. This is a unit test of the audit
-# script itself: `fixtures/audit.json` is the real aquery output for the
-# example signing targets in this package (must pass); the broken variants
-# (a removed execution requirement, a leaked environment variable, key
-# material as an action input, a passphrase on the command line) are derived
-# from it with `jq` at test time rather than committed, so this package does
-# not carry several ~1000-line JSON fixtures.
-#
-# Run the same script against your own targets with:
-#
-#   bazel run //pgp/test:audit -- //your/targets/...
-#
-# See `//pgp/test:live_audit` for the live counterpart that actually
-# re-invokes `bazel aquery` against this package's real dependency graph.
-sh_test(
+PASSPHRASE = "correct-horse-battery-staple"
+
+pgp_audit_test(
     name = "audit_test",
-    size = "small",
-    srcs = ["audit_fixtures_test.sh"],
-    data = [
-        "audit_test.sh",
-        "fixtures/audit.json",
-        "@jq_toolchains//:resolved_toolchain",
-    ],
-    env = {
-        "JQ_BIN": "$(JQ_BIN)",
-    },
-    toolchains = ["@jq_toolchains//:resolved_toolchain"],
+    aquery = "fixtures/audit.json",
 )
 
-sh_binary(
-    name = "audit",
-    srcs = ["audit_test.sh"],
-    visibility = ["//visibility:public"],
+jq(
+    name = "audit_missing_exec_req",
+    srcs = ["fixtures/audit.json"],
+    filter_file = "fixtures/breakers/missing-exec-req.jq",
+    out = "audit_missing_exec_req.json",
+)
+
+jq(
+    name = "audit_env_leak",
+    srcs = ["fixtures/audit.json"],
+    filter_file = "fixtures/breakers/env-leak.jq",
+    out = "audit_env_leak.json",
+)
+
+jq(
+    name = "audit_passphrase_argv",
+    srcs = ["fixtures/audit.json"],
+    filter_file = "fixtures/breakers/passphrase-argv.jq",
+    args = [
+        "--arg",
+        "passphrase",
+        PASSPHRASE,
+    ],
+    out = "audit_passphrase_argv.json",
+)
+
+jq(
+    name = "audit_key_material_input",
+    srcs = ["fixtures/audit.json"],
+    filter_file = "fixtures/breakers/key-material-input.jq",
+    out = "audit_key_material_input.json",
+)
+
+jq(
+    name = "audit_key_artifact_input",
+    srcs = ["fixtures/audit.json"],
+    filter_file = "fixtures/breakers/key-artifact-input.jq",
+    out = "audit_key_artifact_input.json",
+)
+
+pgp_audit_test(
+    name = "audit_missing_exec_req_test",
+    aquery = ":audit_missing_exec_req",
+    expect_failure = True,
+)
+
+pgp_audit_test(
+    name = "audit_env_leak_test",
+    aquery = ":audit_env_leak",
+    expect_failure = True,
+)
+
+pgp_audit_test(
+    name = "audit_passphrase_argv_test",
+    aquery = ":audit_passphrase_argv",
+    expect_failure = True,
+    forbidden_strings = [PASSPHRASE],
+)
+
+pgp_audit_test(
+    name = "audit_key_material_input_test",
+    aquery = ":audit_key_material_input",
+    expect_failure = True,
+)
+
+pgp_audit_test(
+    name = "audit_key_artifact_input_test",
+    aquery = ":audit_key_artifact_input",
+    expect_failure = True,
 )
 
 # Runs the audit against a real `bazel aquery` of this package's example
