@@ -326,7 +326,8 @@ jobs:
                   else "sed -i '/\"wee8_sha256\"/,/^    },/{\($range){\($sub)}}' \($versions_file)"
                   end
               else "" end] as $wee8_updates
-          | $bins_update + $san_updates + $libcxx_updates + $arch_updates + $macos_updates + $llvm_minimal_updates + $sq_updates + $wee8_updates
+          | $bins_update + $san_updates + $libcxx_updates + $arch_updates
+            + $macos_updates + $llvm_minimal_updates + $sq_updates + $wee8_updates
           | [flatten[]
              | select(. != "")]
           | join("\n")
