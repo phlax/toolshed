@@ -119,8 +119,12 @@ The default signer uses `@sq//:sq` from the Envoy Bazel registry:
 bazel_dep(name = "sq", version = "1.4.0.envoy")
 ```
 
-The `sq` module is built from source, and `envoy_toolshed` registers
-`//pgp:sq_toolchain`, so consumers get signing support without extra setup.
+Toolshed builds and publishes `sq-<version>-<Platform>.tar.zst` in the
+`bins-v*` GitHub release. The registry `sq` module consumes that archive as
+its prebuilt toolchain and falls back to a source build when no matching
+archive is available. Registry-side wiring (adding the `bins` URL and SHA to
+`modules/sq/<version>/...` in `envoyproxy/bazel-registry`) happens after the
+first release containing `sq` and is out of scope here.
 
 Swapping in a different signer (for example a purpose-built Rust signer) is a
 matter of registering another toolchain - the rules do not change:
