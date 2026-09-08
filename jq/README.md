@@ -24,7 +24,7 @@ which consumer happens to call it. The directory name is the scope:
 
 | Directory | Scope |
 |---|---|
-| `github/` | GitHub API / Actions / GFM-shaped input or output (`github.jq`, `gfm.jq`) |
+| `github/` | GitHub API / Actions / GFM-shaped input or output (`actions.jq`, `gfm.jq`) |
 | `bazel/` | Bazel `aquery`/BEP/`BUILD`-shaped data (`aquery.jq`) |
 | `clang/` | clang tooling output (`tidy.jq`, clang-tidy stdout parsing) |
 | `envoy/` | reserved for Envoy release/archive policy filters (not added yet) |
@@ -76,7 +76,7 @@ toolshed_jq(
     name = "notice",
     srcs = ["event.json"],
     filter = """
-        import "github/github" as github;
+        import "github/actions" as github;
         github::log_bubble({title: "hi", message: "hello"})
     """,
 )
