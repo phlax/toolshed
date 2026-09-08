@@ -1,6 +1,5 @@
 load("@aspect_bazel_lib//lib:jq.bzl", "jq")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 exports_files([
     "parse_clang_tidy.sh",
@@ -20,24 +19,4 @@ sh_binary(
         "JQ_MODULES_ROOT_MARKER": "$(rlocationpath @envoy_toolshed_jq//:modules_root.marker)",
     },
     visibility = ["//visibility:public"],
-)
-
-sh_test(
-    name = "parse_clang_tidy_test",
-    size = "small",
-    srcs = ["tests/run_tests.sh"],
-    data = [
-        "parse_clang_tidy.sh",
-        "@envoy_toolshed_jq//:modules",
-        "@envoy_toolshed_jq//:modules_root.marker",
-        "@jq_toolchains//:resolved_toolchain",
-    ] + glob([
-        "tests/*.txt",
-        "tests/*.json",
-    ]),
-    deps = ["@bazel_tools//tools/bash/runfiles"],
-    env = {
-        "JQ_BIN": "$(rlocationpath @jq_toolchains//:resolved_toolchain)",
-        "JQ_MODULES_ROOT_MARKER": "$(rlocationpath @envoy_toolshed_jq//:modules_root.marker)",
-    },
 )

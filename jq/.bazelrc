@@ -1,4 +1,11 @@
 #############################################################################
+# CI never drives Bazel from `jq/` directly - `jq/`'s targets are tested via
+# `bazel/` (`@envoy_toolshed_jq//...`, see `.github/workflows/bazel.yml`), so
+# RBE (`rbe`/`bes`) config lives there, not here. This file is for local,
+# standalone use of `jq/` only.
+#############################################################################
+
+#############################################################################
 # global
 #############################################################################
 

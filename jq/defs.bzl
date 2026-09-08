@@ -18,6 +18,9 @@ toolshed_jq(
 `.test.yml` cases as an `sh_test`, running `run-tests.sh` through the
 hermetic aspect jq/yq toolchains (the same script also runs bare, outside
 Bazel, as `./jq/run-tests.sh`).
+
+`test_modules` derives the list of `<scope>/<module>` directories that have
+`.test.yml` cases, so `jq/BUILD` doesn't have to hand-maintain it.
 """
 
 load("@aspect_bazel_lib//lib:jq.bzl", _jq = "jq")
@@ -94,3 +97,22 @@ def jq_module_test(name, module, size = "small", **kwargs):
         },
         **kwargs
     )
+
+def test_modules(test_files):
+    """Derive `<scope>/<module>` test-directory names from `.test.yml` paths.
+
+    Args:
+        test_files: A list of `tests/**/*.test.yml`-relative paths, eg from
+            `glob(["tests/**/*.test.yml"])`.
+
+    Returns:
+        A sorted list of unique `<scope>/<module>` directories relative to
+        `tests/`, eg `["args", "bazel/aquery", "github/gfm", ...]`, suitable
+        for passing to `jq_module_test`'s `module` arg.
+    """
+    modules = {}
+    for test_file in test_files:
+        # eg "tests/bazel/aquery/frag_path.test.yml" -> "bazel/aquery"
+        rest = test_file[len("tests/"):]
+        modules["/".join(rest.split("/")[:-1])] = None
+    return sorted(modules.keys())

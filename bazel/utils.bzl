@@ -82,16 +82,18 @@ def jqcat(
 
     Additional args are passed to `jq`.
 
-    To import `envoy_toolshed_jq` modules (eg with `-L`), set `JQ_MODULES_DIR`
-    in `env` to the directory containing them, and add the modules to `data`
-    so they are present at runtime, eg:
+    To import `envoy_toolshed_jq` modules (eg with `-L`), add the module's
+    marker file and modules to `data`, and set `JQ_MODULES_ROOT_MARKER` in
+    `env` to its `$(rlocationpath ...)`, so the search directory can be
+    derived at runtime without depending on the (registry- vs
+    `local_path_override`-dependent) canonical repo name, eg:
 
     ```starlark
 
     jqcat(
         name = "myjqcat",
-        data = ["@envoy_toolshed_jq//:modules"],
-        env = {"JQ_MODULES_DIR": "external/envoy_toolshed_jq+"},
+        data = ["@envoy_toolshed_jq//:modules", "@envoy_toolshed_jq//:modules_root.marker"],
+        env = {"JQ_MODULES_ROOT_MARKER": "$(rlocationpath @envoy_toolshed_jq//:modules_root.marker)"},
     )
 
     ```
@@ -122,6 +124,7 @@ def jqcat(
         env = dict({
             "JQ_BIN": "$(JQ_BIN)",
         }, **env),
+        deps = ["@bazel_tools//tools/bash/runfiles"],
         toolchains = [jq_toolchain],
     )
 

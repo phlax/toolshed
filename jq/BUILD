@@ -1,4 +1,4 @@
-load(":defs.bzl", "jq_module_test")
+load(":defs.bzl", "jq_module_test", "test_modules")
 
 exports_files(glob(["**/*.jq"]) + [
     "run-tests.sh",
@@ -16,13 +16,5 @@ filegroup(
         name = "test_%s" % module.replace("/", "_"),
         module = module,
     )
-    for module in [
-        "args",
-        "bazel/aquery",
-        "clang/tidy",
-        "github/gfm",
-        "str",
-        "utils",
-        "validate",
-    ]
+    for module in test_modules(glob(["tests/**/*.test.yml"]))
 ]

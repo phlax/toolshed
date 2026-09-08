@@ -5,10 +5,13 @@ GitHub Actions/scripts, by `bazel/` in this repo, and by any downstream repo
 that wants them.
 
 This directory is its own Bazel module, `envoy_toolshed_jq` (see
-`MODULE.bazel`), independent of the `envoy_toolshed` module rooted at
-`bazel/`. It is consumed from `bazel/` via `local_path_override` in
-`bazel/MODULE.bazel`. It is *not* published as part of the `envoy_toolshed`
-release tarball; that's a follow-up.
+`MODULE.bazel`), consumed from `bazel/` via `local_path_override` in
+`bazel/MODULE.bazel`. It has no version of its own: it is versioned and
+released together with the `envoy_toolshed` module, so `MODULE.bazel`'s
+`version` here always matches `bazel/VERSION.txt` and the `envoy_toolshed_jq`
+`bazel_dep` pin in `bazel/MODULE.bazel`. It is published alongside
+`envoy_toolshed` as `toolshed-jq-v<version>.tar.gz` on the same
+`bazel-v<version>` GitHub release.
 
 Modules keep working outside Bazel too: `./jq/run-tests.sh` runs the full
 test suite against whatever `jq`/`yq` are on `PATH`, and this is what
@@ -79,10 +82,12 @@ toolshed_jq(
 )
 ```
 
-Consumers outside this repo pull it in as any other `bazel_dep`:
+Consumers outside this repo pull it in as any other `bazel_dep`, pinned to
+whatever `envoy_toolshed`'s current release version is (see
+`bazel/VERSION.txt`):
 
 ```starlark
-bazel_dep(name = "envoy_toolshed_jq", version = "0.1.0-dev")
+bazel_dep(name = "envoy_toolshed_jq", version = "<envoy_toolshed version>")
 ```
 
 (`bazel/MODULE.bazel` instead uses `local_path_override(module_name =
