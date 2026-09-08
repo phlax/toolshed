@@ -31,7 +31,9 @@ which consumer happens to call it. The directory name is the scope:
 | root | generic helpers with no domain-specific knowledge (`args.jq`, `bash.jq`, `str.jq`, `utils.jq`, `validate.jq`) |
 
 `import`/`include` paths mirror this layout, and the import alias is always
-the last path segment (the module's basename), eg:
+the last path segment (the module's basename). A module must not share its
+basename with its scope directory, because jq rejects import paths such as
+`foo/foo`. For example:
 
 ```jq
 import "github/gfm" as gfm;
