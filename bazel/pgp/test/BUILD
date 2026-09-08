@@ -4,6 +4,7 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//pgp/audit:defs.bzl", "pgp_audit_test")
 load(
     "//pgp:defs.bzl",
+    "changes_from_tarball",
     "pgp_public_key",
     "pgp_sign_changes_file",
     "pgp_sign_changes_split",
@@ -28,7 +29,10 @@ load(
     "relative_passphrase_test"
 )
 
-exports_files(["assert_sq_manifest.sh"])
+exports_files([
+    "assert_sq_manifest.sh",
+    "fixtures/changes-with-distribution.changes",
+])
 
 # Stub signer/toolchain for the analysis tests. Real signing uses the default
 # registered `//pgp:sq_toolchain`.
@@ -100,6 +104,23 @@ pgp_public_key(
     name = "not_a_public_key",
     src = "fixtures/not-a-key.txt",
     tags = ["manual"],
+)
+
+changes_from_tarball(
+    name = "example_changes_from_tarball",
+    out = "example.changes",
+    package = "example",
+    prefix = "deb",
+    tarball = "//pgp/test/fixturegen:changes_tarball",
+)
+
+changes_from_tarball(
+    name = "missing_changes_from_tarball",
+    out = "missing.changes",
+    package = "missing",
+    prefix = "deb",
+    tags = ["manual"],
+    tarball = "//pgp/test/fixturegen:changes_tarball",
 )
 
 execution_requirements_test(
@@ -197,6 +218,32 @@ sh_test(
         "INPUT": "$(rootpath fixtures/changes-with-distribution.changes)",
         "a": "$(rootpath :example_changes_split-a-split)",
         "b": "$(rootpath :example_changes_split-b-split)",
+    },
+)
+
+sh_test(
+    name = "changes_from_tarball_test",
+    srcs = ["changes_from_tarball_test.sh"],
+    data = [
+        ":example_changes_from_tarball",
+        "fixtures/changes-with-distribution.changes",
+    ],
+    env = {
+        "EXTRACTED": "$(rootpath :example_changes_from_tarball)",
+        "INPUT": "$(rootpath fixtures/changes-with-distribution.changes)",
+    },
+)
+
+sh_test(
+    name = "changes_from_tarball_missing_test",
+    srcs = ["changes_from_tarball_missing_test.sh"],
+    data = [
+        "//pgp/private:changes_extractor",
+        "//pgp/test/fixturegen:changes_tarball",
+    ],
+    env = {
+        "EXTRACTOR": "$(rootpath //pgp/private:changes_extractor)",
+        "TARBALL": "$(rootpath //pgp/test/fixturegen:changes_tarball)",
     },
 )
 

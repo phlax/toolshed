@@ -34,3 +34,46 @@ pgp_changes_split = rule(
         "src": attr.label(mandatory = True, allow_single_file = True),
     },
 )
+
+def _changes_from_tarball_impl(ctx):
+    tarball = ctx.file.tarball
+    out = ctx.outputs.out
+    ctx.actions.run(
+        executable = ctx.executable._extractor,
+        inputs = [tarball],
+        outputs = [out],
+        arguments = [tarball.path, ctx.attr.package, ctx.attr.prefix, out.path],
+        tools = [ctx.executable._extractor],
+        mnemonic = "OpenPGPChangesExtract",
+        progress_message = "Extracting %s_*.changes from %s" % (ctx.attr.package, tarball.short_path),
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+changes_from_tarball = rule(
+    implementation = _changes_from_tarball_impl,
+    doc = "Extract one Debian `<package>_*.changes` file from a package tarball.",
+    attrs = {
+        "tarball": attr.label(
+            doc = "Package tarball (`.tar`/`.tar.gz`/`.tar.zst`/etc) containing the `.changes` file.",
+            mandatory = True,
+            allow_single_file = True,
+        ),
+        "package": attr.string(
+            doc = "Debian source package name, eg `envoy` or `envoy-1.40`.",
+            mandatory = True,
+        ),
+        "prefix": attr.string(
+            doc = "Optional directory prefix inside the tarball, eg `deb`.",
+            default = "",
+        ),
+        "out": attr.output(
+            doc = "The extracted `.changes` file.",
+            mandatory = True,
+        ),
+        "_extractor": attr.label(
+            default = "//pgp/private:changes_extractor",
+            executable = True,
+            cfg = "exec",
+        ),
+    },
+)

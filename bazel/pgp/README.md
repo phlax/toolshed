@@ -83,10 +83,24 @@ No key path configured for //:signed_tarball.
 | `pgp_sign_checksums(name, srcs, algorithm, out)` | `shasum`-format checksums file for `srcs`, cleartext signed. Checksum generation is a separate, cacheable action - only signing handles secrets |
 | `pgp_sign_changes_file(name, changes, out)` | Cleartext sign a Debian `.changes`/`.dsc` file itself. **Not** a full `debsign`: it does not sign referenced `.dsc`/`.buildinfo` files or rewrite their checksums - see the `TODO` on the rule |
 | `pgp_sign_changes_split(name, changes, distros)` | Rewrite the `Distribution:` header for each distro, then cleartext sign each copy. The split actions are cacheable; signing targets are `manual` by default |
+| `changes_from_tarball(name, tarball, package, out, prefix)` | Extract one `<package>_*.changes` from a package tarball; cacheable. Feed into `pgp_sign_changes_split` |
 | `pgp_public_key(name, src)` | Validate and re-emit one ASCII-armored public key, rejecting private material and multiple PGP blocks |
 | `pgp_toolchain(name, signer)` | Register a signer implementation for `//pgp:toolchain_type` |
 
 RPM header signing is **not** implemented here.
+
+Extract a `.changes` file from a package tarball and split/sign it per distro:
+
+```starlark
+changes_from_tarball(
+    name = "extracted",
+    tarball = ":packages_tar",
+    package = "envoy",
+    prefix = "deb",
+    out = "envoy.changes",
+)
+pgp_sign_changes_split(name = "signed", changes = ":extracted", distros = ["jammy", "noble"])
+```
 
 To choose among committed public keys, use a constrained `string_flag` and
 `select`, then validate the selected key:
