@@ -10,7 +10,7 @@ load("@envoy_toolshed_jq//:defs.bzl", "toolshed_jq")
 toolshed_jq(
     name = "notice",
     srcs = ["event.json"],
-    filter = "import \"github/github\" as github; github::log_bubble({...})",
+    filter = "import \"github/actions\" as github; github::log_bubble({...})",
 )
 ```
 

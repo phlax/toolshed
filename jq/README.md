@@ -24,14 +24,16 @@ which consumer happens to call it. The directory name is the scope:
 
 | Directory | Scope |
 |---|---|
-| `github/` | GitHub API / Actions / GFM-shaped input or output (`github.jq`, `gfm.jq`) |
+| `github/` | GitHub API / Actions / GFM-shaped input or output (`actions.jq`, `gfm.jq`) |
 | `bazel/` | Bazel `aquery`/BEP/`BUILD`-shaped data (`aquery.jq`) |
 | `clang/` | clang tooling output (`tidy.jq`, clang-tidy stdout parsing) |
 | `envoy/` | reserved for Envoy release/archive policy filters (not added yet) |
 | root | generic helpers with no domain-specific knowledge (`args.jq`, `bash.jq`, `str.jq`, `utils.jq`, `validate.jq`) |
 
 `import`/`include` paths mirror this layout, and the import alias is always
-the last path segment (the module's basename), eg:
+the last path segment (the module's basename). A module must not share its
+basename with its scope directory, because jq rejects import paths such as
+`foo/foo`. For example:
 
 ```jq
 import "github/gfm" as gfm;
@@ -76,7 +78,7 @@ toolshed_jq(
     name = "notice",
     srcs = ["event.json"],
     filter = """
-        import "github/github" as github;
+        import "github/actions" as github;
         github::log_bubble({title: "hi", message: "hello"})
     """,
 )
