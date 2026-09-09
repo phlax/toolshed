@@ -251,8 +251,8 @@ runs:
           SHELL_FORMAT+="\$${envsubst_var} "
       done
       COMMAND=()
-      read -ra ARGS <<< "$ARGS_INPUT"
-      read -ra COMMAND_PARTS <<< "$COMMAND_INPUT"
+      read -d '' -ra ARGS <<< "$ARGS_INPUT" || true
+      read -d '' -ra COMMAND_PARTS <<< "$COMMAND_INPUT" || true
       ACTUAL_COMMAND=(
           "${COMMAND_PARTS[@]}"
           "${ARGS[@]}")

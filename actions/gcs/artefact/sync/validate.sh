@@ -13,6 +13,7 @@ set -euo pipefail
 BUCKET="${1:-}"
 SHA="${2:-}"
 REDIRECT="${3:-}"
+PATH_UPLOAD="${4:-}"
 
 if [[ -z "$BUCKET" ]]; then
     echo "::error::GCS bucket is empty" >&2
@@ -34,4 +35,14 @@ if [[ -n "$REDIRECT" ]]; then
         echo "::error::GCS redirect is not valid: ${REDIRECT}" >&2
         exit 1
     fi
+fi
+
+if [[ -z "$PATH_UPLOAD" ]]; then
+    echo "::error::GCS path-upload is empty" >&2
+    exit 1
+fi
+
+if [[ ! "$PATH_UPLOAD" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*(/[a-zA-Z0-9][a-zA-Z0-9_.-]*)*$ ]]; then
+    echo "::error::GCS path-upload is not valid: ${PATH_UPLOAD}" >&2
+    exit 1
 fi

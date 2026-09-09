@@ -173,7 +173,7 @@ runs:
       input: ${{ inputs.working-directory }}/${{ inputs.config-file }}
       print-result: ${{ fromJSON(env.CI_DEBUG || 'false') && true || false }}
       filter: |
-        (env.BUILD_IMAGE_REPOS | split("\n") | map(select(length > 0))) as $repos
+        (env.BUILD_IMAGE_REPOS | split("\n") | map(str::trim) | map(select(length > 0))) as $repos
         | .["build-image"].repo as $repo
         | (. ["build-image"].tag | validate::sha_or_semver(40)) as $tag
         | (.["build-image"].sha | validate::sha(64)) as $sha

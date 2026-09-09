@@ -35,11 +35,12 @@ runs:
   # them before any `gcloud` invocation.
   - name: Validate GCS inputs
     run: |
-      "${ACTION_PATH}/validate.sh" "$BUCKET" "$SHA" "$REDIRECT"
+      "${ACTION_PATH}/validate.sh" "$BUCKET" "$SHA" "$REDIRECT" "$PATH_UPLOAD"
     shell: bash
     env:
       ACTION_PATH: ${{ github.action_path }}
       BUCKET: ${{ inputs.bucket }}
+      PATH_UPLOAD: ${{ inputs.path-upload }}
       SHA: ${{ inputs.sha }}
       REDIRECT: ${{ inputs.redirect }}
 
