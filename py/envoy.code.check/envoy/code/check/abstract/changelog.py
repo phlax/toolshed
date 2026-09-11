@@ -22,12 +22,22 @@ from envoy.code.check import abstract, interface
 
 
 MAX_VERSION_FOR_CHANGES_SECTION = "1.16"
-VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-/]+$")
-VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-/]+"
+VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-~]+$")
+VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-~]+"
+VALID_CHANGELOG_TITLE_RE = re.compile(r"^[a-z0-9_\-/]+$")
+VALID_CHANGELOG_TITLE_PATTERN = r"[a-z0-9_\-/]+"
 
 
 @abstracts.implementer(interface.IChangelogChangesChecker)
 class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
+    """Changelog checker.
+
+    Changelog area keys in ``changelogs/changelogs.yaml`` are filename-
+    safe IDs that may use ``~`` for hierarchy. Titles are the display
+    form and may use ``/``. Changelog entry filenames use the key
+    verbatim in ``<area>__<slug>.rst``.
+    """
+
     error_message = (
         "{version}/{section}/{entry[area]}: "
         "{error}\n{entry[change]}")
@@ -127,12 +137,16 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
                 f"{path}: Filename stem must contain exactly one "
                 f"`{ENTRY_SEPARATOR}` separator "
                 f"(expected `<area>{ENTRY_SEPARATOR}<slug>`)")
-        area, slug = path.stem.split(ENTRY_SEPARATOR, 1)
-        if not area:
+        stem_area, slug = path.stem.split(ENTRY_SEPARATOR, 1)
+        if not stem_area:
             return f"{path}: Area part of filename is empty"
-        if self.areas and area not in self.areas:
+        if not VALID_CHANGELOG_AREA_RE.match(stem_area):
             return (
-                f"{path}: Invalid area '{area}'. "
+                f"{path}: Invalid area '{stem_area}' "
+                f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+        if self.areas and stem_area not in self.areas:
+            return (
+                f"{path}: Invalid area '{stem_area}'. "
                 f"Valid areas come from {self.config_path}")
         if not slug:
             return f"{path}: Slug part of filename is empty"
@@ -144,18 +158,18 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
         title_areas: dict[str, list[str]] = {}
         errors = []
         for area, area_data in self.areas.items():
-            title = area_data["title"]
+            title = area_data.get("title", "")
             title_areas.setdefault(title, []).append(area)
             if not VALID_CHANGELOG_AREA_RE.match(area):
                 errors.append(
                     f"{self.config_path}: "
                     f"Invalid area key '{area}' "
                     f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
-            if not VALID_CHANGELOG_AREA_RE.match(title):
+            if not VALID_CHANGELOG_TITLE_RE.match(title):
                 errors.append(
                     f"{self.config_path}: "
                     f"Invalid title '{title}' for area '{area}' "
-                    f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+                    f"(must match {VALID_CHANGELOG_TITLE_PATTERN})")
         for title, areas in sorted(title_areas.items()):
             if len(areas) < 2:
                 continue
