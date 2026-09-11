@@ -9,6 +9,11 @@ build --color=yes
 
 common --enable_bzlmod
 common --noenable_workspace
+# //pgp is only consumed by WORKSPACE downstreams (Envoy release branches).
+# It requires `@sq`, which is only provisioned via `setup_sq()` in WORKSPACE,
+# so it is hidden from the default bzlmod build. Use `--config=workspace` to
+# build/test it in-repo.
+common --deleted_packages=pgp,pgp/audit,pgp/private,pgp/test,pgp/test/fixturegen
 common --legacy_external_runfiles
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --@rules_python//python/config_settings:bootstrap_impl=script
@@ -18,6 +23,15 @@ common --registry=https://raw.githubusercontent.com/envoyproxy/bazel-registry/76
 common --experimental_repository_cache_hardlinks
 
 common --repo_env=ANDROID_HOME=
+
+
+#############################################################################
+# workspace
+#############################################################################
+
+common:workspace --noenable_bzlmod
+common:workspace --enable_workspace
+common:workspace --deleted_packages=
 
 
 #############################################################################
