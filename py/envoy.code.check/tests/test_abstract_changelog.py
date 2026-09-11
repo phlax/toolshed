@@ -920,7 +920,7 @@ def test_changeschecker_check_entry_filename(
         {"bug_fixes": MagicMock()},
         {"myarea": {"title": "myarea"},
          "area": {"title": "area"},
-         "dns/cares": {"title": "dns/cares"}})
+         "dns~cares": {"title": "dns/cares"}})
     path = MagicMock()
     path.parent.name = section
     path.stem = stem
@@ -948,7 +948,7 @@ def test_changeschecker_check_entry_filename_invalid_area():
     result = changelog.check_entry_filename(path)
 
     assert result is not None
-    assert "Invalid area 'dns/cares' (from filename 'dns~cares')" in result
+    assert "Invalid area 'dns~cares'" in result
     assert "changelogs.yaml" in result
 
 
@@ -962,19 +962,19 @@ def test_changeschecker_check_entry_filename_without_areas():
     assert changelog.check_entry_filename(path) is None
 
 
-def test_changeschecker_check_entry_filename_decoded_area_mismatch():
+def test_changeschecker_check_entry_filename_invalid_key_style_area():
     changelog = DummyChangelogChangesChecker(
         {"bug_fixes": MagicMock()},
-        {"dns/cares": {"title": "dns/cares"}})
+        {"dns~cares": {"title": "dns/cares"}})
     path = MagicMock()
     path.parent.name = "bug_fixes"
-    path.stem = "dns_cares__myslug"
+    path.stem = "dns/cares__myslug"
     path.suffix = ".rst"
 
     result = changelog.check_entry_filename(path)
 
     assert result is not None
-    assert "Invalid area 'dns_cares'" in result
+    assert "Invalid area 'dns/cares'" in result
 
 
 def test_changeschecker_check_areas_file_empty():
@@ -999,7 +999,8 @@ def test_changeschecker_check_areas_file_invalid_titles():
     changelog = DummyChangelogChangesChecker(
         "SECTIONS",
         {"a": {"title": "BAD"},
-         "b": {"title": "bad.dot"}})
+         "b": {"title": "bad.dot"},
+         "dns~cares": {"title": "dns~cares"}})
     assert (
         changelog.check_areas_file()
         == (
@@ -1007,6 +1008,8 @@ def test_changeschecker_check_areas_file_invalid_titles():
             "for area 'a' (must match [a-z0-9_\\-/]+)",
             "changelogs/changelogs.yaml: Invalid title 'bad.dot' "
             "for area 'b' (must match [a-z0-9_\\-/]+)",
+            "changelogs/changelogs.yaml: Invalid title 'dns~cares' "
+            "for area 'dns~cares' (must match [a-z0-9_\\-/]+)",
         ))
 
 
@@ -1014,49 +1017,28 @@ def test_changeschecker_check_areas_file_invalid_keys():
     changelog = DummyChangelogChangesChecker(
         "SECTIONS",
         {"Bad": {"title": "bad"},
-         "dns~cares": {"title": "dns/cares"}})
+         "dns/cares": {"title": "dns/cares"}})
     assert (
         changelog.check_areas_file()
         == (
             "changelogs/changelogs.yaml: Invalid area key 'Bad' "
-            "(must match [a-z0-9_\\-/]+)",
-            "changelogs/changelogs.yaml: Invalid area key 'dns~cares' "
-            "(must match [a-z0-9_\\-/]+)",
+            "(must match [a-z0-9_\\-~]+)",
+            "changelogs/changelogs.yaml: Invalid area key 'dns/cares' "
+            "(must match [a-z0-9_\\-~]+)",
         ))
 
 
-def test_changeschecker_check_areas_file_tilde_in_title():
+def test_changeschecker_check_areas_file_valid_tilde_key_slash_title():
     changelog = DummyChangelogChangesChecker(
         "SECTIONS",
-        {"dns/cares": {"title": "dns~cares"}})
-    assert (
-        changelog.check_areas_file()
-        == (
-            "changelogs/changelogs.yaml: Title must not contain '~' "
-            "(it is only a filename escape for '/')",
-            "changelogs/changelogs.yaml: Invalid title 'dns~cares' "
-            "for area 'dns/cares' (must match [a-z0-9_\\-/]+)",
-        ))
-
-
-def test_changeschecker_check_areas_file_slash_key_requires_title():
-    changelog = DummyChangelogChangesChecker(
-        "SECTIONS",
-        {"dns/cares": {"title": ""}})
-    assert (
-        changelog.check_areas_file()
-        == (
-            "changelogs/changelogs.yaml: Area 'dns/cares' contains '/' "
-            "and must set an explicit title",
-            "changelogs/changelogs.yaml: Invalid title '' "
-            "for area 'dns/cares' (must match [a-z0-9_\\-/]+)",
-        ))
+        {"dns~cares": {"title": "dns/cares"}})
+    assert changelog.check_areas_file() == ()
 
 
 def test_changeschecker_check_areas_file_valid():
     changelog = DummyChangelogChangesChecker(
         "SECTIONS",
-        {"my_area-1/sub": {"title": "my_area-1/sub"},
+        {"my_area-1~sub": {"title": "my_area-1/sub"},
          "other": {"title": "other"}})
     assert changelog.check_areas_file() == ()
 
@@ -1212,7 +1194,7 @@ async def test_changelogstatus_errors_invalid_area_from_entry_files(tmp_path):
         "areas:\n"
         "  known:\n"
         "    title: known\n"
-        "  dns/cares:\n"
+        "  dns~cares:\n"
         "    title: dns/cares\n")
     current_dir = tmp_path / "changelogs" / "current"
     (current_dir / "bug_fixes").mkdir(parents=True)
@@ -1246,4 +1228,4 @@ async def test_changelogstatus_errors_invalid_area_from_entry_files(tmp_path):
     result = await status.errors
 
     assert any("Invalid area 'unknown'" in error for error in result)
-    assert not any("dns/cares" in error for error in result)
+    assert not any("Invalid area 'dns~cares'" in error for error in result)

@@ -20,34 +20,22 @@ from envoy.base.utils.abstract.project.changelog import (
 )
 from envoy.code.check import abstract, interface
 
-try:
-    from envoy.base.utils.abstract.project.changelog import (
-        AREA_FILENAME_SEPARATOR,
-        AREA_SEPARATOR,
-        area_from_filename,
-    )
-except ImportError:
-    AREA_SEPARATOR = "/"
-    AREA_FILENAME_SEPARATOR = "~"
-
-    def area_from_filename(stem_area: str) -> str:
-        return stem_area.replace(AREA_FILENAME_SEPARATOR, AREA_SEPARATOR)
-
 
 MAX_VERSION_FOR_CHANGES_SECTION = "1.16"
-VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-/]+$")
-VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-/]+"
-VALID_CHANGELOG_ENTRY_AREA_RE = re.compile(r"^[a-z0-9_\-~]+$")
-VALID_CHANGELOG_ENTRY_AREA_PATTERN = r"[a-z0-9_\-~]+"
+VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-~]+$")
+VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-~]+"
+VALID_CHANGELOG_TITLE_RE = re.compile(r"^[a-z0-9_\-/]+$")
+VALID_CHANGELOG_TITLE_PATTERN = r"[a-z0-9_\-/]+"
 
 
 @abstracts.implementer(interface.IChangelogChangesChecker)
 class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
     """Changelog checker.
 
-    Changelog area IDs are canonicalized with ``/`` for hierarchy in
-    ``changelogs/changelogs.yaml`` while changelog entry filenames
-    encode ``/`` as ``~`` in ``<area>__<slug>.rst``.
+    Changelog area keys in ``changelogs/changelogs.yaml`` are filename-
+    safe IDs that may use ``~`` for hierarchy. Titles are the display
+    form and may use ``/``. Changelog entry filenames use the key
+    verbatim in ``<area>__<slug>.rst``.
     """
 
     error_message = (
@@ -152,18 +140,13 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
         stem_area, slug = path.stem.split(ENTRY_SEPARATOR, 1)
         if not stem_area:
             return f"{path}: Area part of filename is empty"
-        if not VALID_CHANGELOG_ENTRY_AREA_RE.match(stem_area):
+        if not VALID_CHANGELOG_AREA_RE.match(stem_area):
             return (
                 f"{path}: Invalid area '{stem_area}' "
-                f"(must match {VALID_CHANGELOG_ENTRY_AREA_PATTERN})")
-        area = area_from_filename(stem_area)
-        if self.areas and area not in self.areas:
-            area_display = (
-                f"'{area}' (from filename '{stem_area}')"
-                if area != stem_area
-                else f"'{area}'")
+                f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+        if self.areas and stem_area not in self.areas:
             return (
-                f"{path}: Invalid area {area_display}. "
+                f"{path}: Invalid area '{stem_area}'. "
                 f"Valid areas come from {self.config_path}")
         if not slug:
             return f"{path}: Slug part of filename is empty"
@@ -182,21 +165,11 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
                     f"{self.config_path}: "
                     f"Invalid area key '{area}' "
                     f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
-            if AREA_FILENAME_SEPARATOR in title:
-                errors.append(
-                    f"{self.config_path}: "
-                    "Title must not contain '~' "
-                    "(it is only a filename escape for '/')")
-            if AREA_SEPARATOR in area and not title.strip():
-                errors.append(
-                    f"{self.config_path}: "
-                    f"Area '{area}' contains '/' and must set an explicit "
-                    "title")
-            if not VALID_CHANGELOG_AREA_RE.match(title):
+            if not VALID_CHANGELOG_TITLE_RE.match(title):
                 errors.append(
                     f"{self.config_path}: "
                     f"Invalid title '{title}' for area '{area}' "
-                    f"(must match {VALID_CHANGELOG_AREA_PATTERN})")
+                    f"(must match {VALID_CHANGELOG_TITLE_PATTERN})")
         for title, areas in sorted(title_areas.items()):
             if len(areas) < 2:
                 continue

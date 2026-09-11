@@ -1431,7 +1431,7 @@ def test_abstract_changelog_data_from_entry_map_happy_path():
                 dict(area="jwt", change="Fixed jwt.\n"),
                 dict(area="oauth2", change="Fixed oauth2.\n")],
             new_features=[
-                dict(area="dns/cares", change="Preserve qid.\n"),
+                dict(area="dns~cares", change="Preserve qid.\n"),
                 dict(area="grpc", change="New feature.\n")]))
 
 
