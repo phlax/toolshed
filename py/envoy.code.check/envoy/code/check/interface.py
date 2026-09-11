@@ -141,7 +141,8 @@ class IChangelogChangesChecker(metaclass=abstracts.Interface):
     @abstracts.interfacemethod
     def check_entry_filename(
             self,
-            path: pathlib.Path) -> str | None:
+            path: pathlib.Path,
+            entry_dir: pathlib.Path | None = None) -> str | None:
         raise NotImplementedError
 
     @abstracts.interfacemethod
@@ -157,7 +158,8 @@ class IChangelogChangesChecker(metaclass=abstracts.Interface):
     @abstracts.interfacemethod
     def check_entry_files(
             self,
-            paths: list[pathlib.Path]) -> tuple[str, ...]:
+            paths: list[pathlib.Path],
+            entry_dir: pathlib.Path | None = None) -> tuple[str, ...]:
         raise NotImplementedError
 
 

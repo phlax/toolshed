@@ -15,7 +15,7 @@ from aio.core.functional import async_property
 from envoy.base import utils
 from envoy.base.utils.abstract.project.changelog import (
     CHANGELOG_CONFIG_PATH,
-    CHANGELOG_ENTRY_GLOB,
+    CHANGELOG_CURRENT_PLACEHOLDER,
     ENTRY_SEPARATOR,
 )
 from envoy.code.check import abstract, interface
@@ -122,8 +122,16 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
 
     def check_entry_filename(
             self,
-            path: pathlib.Path) -> str | None:
-        section = path.parent.name
+            path: pathlib.Path,
+            entry_dir: pathlib.Path | None = None) -> str | None:
+        rel = path.relative_to(entry_dir) if entry_dir else path
+        if len(rel.parts) != 2:
+            return (
+                f"{path}: Changelog entries must be placed in a section "
+                f"directory (expected `<section>/"
+                f"<area>{ENTRY_SEPARATOR}<slug>.rst`). "
+                f"Valid sections: {sorted(self.sections)}")
+        section = rel.parts[0]
         if section not in self.sections:
             return (
                 f"{path}: Invalid section `{section}`. "
@@ -182,6 +190,8 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
     def check_entry_content(
             self,
             path: pathlib.Path) -> str | None:
+        if path.suffix != ".rst":
+            return None
         content = path.read_text()
         if not content.strip():
             return (
@@ -190,10 +200,11 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
 
     def check_entry_files(
             self,
-            paths: list[pathlib.Path]) -> tuple[str, ...]:
+            paths: list[pathlib.Path],
+            entry_dir: pathlib.Path | None = None) -> tuple[str, ...]:
         errors = []
         for path in paths:
-            if err := self.check_entry_filename(path):
+            if err := self.check_entry_filename(path, entry_dir):
                 errors.append(err)
             if err := self.check_entry_content(path):
                 errors.append(err)
@@ -346,12 +357,19 @@ class AChangelogStatus(metaclass=abstracts.Abstraction):
             return (
                 f"{self.version}: Missing changelog entries directory "
                 f"({entry_dir})", )
-        paths = sorted(entry_dir.glob(CHANGELOG_ENTRY_GLOB))
+        paths = sorted(
+            path
+            for path
+            in entry_dir.rglob("*")
+            if path.is_file()
+            and path.relative_to(entry_dir).parts != (
+                CHANGELOG_CURRENT_PLACEHOLDER, ))
         if not paths:
             return ()
         return await self.project.execute(
             self.checker.check_entry_files,
-            paths)
+            paths,
+            entry_dir)
 
     async def check_areas_file(self) -> tuple[str, ...]:
         areas = self.project.changelogs.areas

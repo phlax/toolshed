@@ -1,4 +1,5 @@
 
+import pathlib
 import types
 from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
@@ -886,47 +887,51 @@ def test_changeschecker_check_section_name(
 
 
 @pytest.mark.parametrize(
-    "section,stem,suffix,expected",
+    "relative_path,expected",
     [(  # valid
-        "bug_fixes", "myarea__myslug", ".rst",
+        "bug_fixes/myarea__myslug.rst",
         None),
      (  # valid encoded nested area
-        "bug_fixes", "dns~cares__myslug", ".rst",
+        "bug_fixes/dns~cares__myslug.rst",
         None),
      (  # invalid section
-        "weird_section", "area__slug", ".rst",
+        "weird_section/area__slug.rst",
         ("weird_section", "Invalid section")),
+     (  # missing section dir
+        "area__slug.rst",
+        ("must be placed in a section directory", "bug_fixes")),
+     (  # nested too deeply
+        "bug_fixes/sub/area__slug.rst",
+        ("must be placed in a section directory", )),
      (  # wrong extension
-        "bug_fixes", "area__slug", ".txt",
+        "bug_fixes/area__slug.txt",
         (".txt", ".rst")),
      (  # no separator
-        "bug_fixes", "areaslug", ".rst",
+        "bug_fixes/areaslug.rst",
         ("__", )),
      (  # multiple separators
-        "bug_fixes", "area__slug__extra", ".rst",
+        "bug_fixes/area__slug__extra.rst",
         ("__", )),
      (  # empty area
-        "bug_fixes", "__slug", ".rst",
+        "bug_fixes/__slug.rst",
         ("Area", "empty")),
      (  # empty slug
-        "bug_fixes", "area__", ".rst",
+        "bug_fixes/area__.rst",
         ("Slug", "empty")),
      (  # invalid filename area chars
-        "bug_fixes", "bad.area__slug", ".rst",
+        "bug_fixes/bad.area__slug.rst",
         (r"[a-z0-9_\-~]+", ))])
 def test_changeschecker_check_entry_filename(
-        section, stem, suffix, expected):
+        relative_path, expected):
     changelog = DummyChangelogChangesChecker(
         {"bug_fixes": MagicMock()},
         {"myarea": {"title": "myarea"},
          "area": {"title": "area"},
          "dns~cares": {"title": "dns/cares"}})
-    path = MagicMock()
-    path.parent.name = section
-    path.stem = stem
-    path.suffix = suffix
+    entry_dir = pathlib.Path("/repo/changelogs/current")
+    path = entry_dir / relative_path
 
-    result = changelog.check_entry_filename(path)
+    result = changelog.check_entry_filename(path, entry_dir)
 
     if expected is None:
         assert result is None
@@ -940,12 +945,10 @@ def test_changeschecker_check_entry_filename_invalid_area():
     changelog = DummyChangelogChangesChecker(
         {"bug_fixes": MagicMock()},
         {"some_other_area": {"title": "some_other_area"}})
-    path = MagicMock()
-    path.parent.name = "bug_fixes"
-    path.stem = "dns~cares__myslug"
-    path.suffix = ".rst"
+    entry_dir = pathlib.Path("/repo/changelogs/current")
+    path = entry_dir / "bug_fixes" / "dns~cares__myslug.rst"
 
-    result = changelog.check_entry_filename(path)
+    result = changelog.check_entry_filename(path, entry_dir)
 
     assert result is not None
     assert "Invalid area 'dns~cares'" in result
@@ -954,27 +957,23 @@ def test_changeschecker_check_entry_filename_invalid_area():
 
 def test_changeschecker_check_entry_filename_without_areas():
     changelog = DummyChangelogChangesChecker({"bug_fixes": MagicMock()}, {})
-    path = MagicMock()
-    path.parent.name = "bug_fixes"
-    path.stem = "myarea__myslug"
-    path.suffix = ".rst"
+    entry_dir = pathlib.Path("/repo/changelogs/current")
+    path = entry_dir / "bug_fixes" / "myarea__myslug.rst"
 
-    assert changelog.check_entry_filename(path) is None
+    assert changelog.check_entry_filename(path, entry_dir) is None
 
 
 def test_changeschecker_check_entry_filename_invalid_key_style_area():
     changelog = DummyChangelogChangesChecker(
         {"bug_fixes": MagicMock()},
         {"dns~cares": {"title": "dns/cares"}})
-    path = MagicMock()
-    path.parent.name = "bug_fixes"
-    path.stem = "dns/cares__myslug"
-    path.suffix = ".rst"
+    entry_dir = pathlib.Path("/repo/changelogs/current")
+    path = entry_dir / "bug_fixes" / "dns/cares__myslug.rst"
 
-    result = changelog.check_entry_filename(path)
+    result = changelog.check_entry_filename(path, entry_dir)
 
     assert result is not None
-    assert "Invalid area 'dns/cares'" in result
+    assert "must be placed in a section directory" in result
 
 
 def test_changeschecker_check_areas_file_empty():
@@ -1051,6 +1050,7 @@ def test_changeschecker_check_areas_file_valid():
 def test_changeschecker_check_entry_content(content, expected):
     changelog = DummyChangelogChangesChecker("SECTIONS")
     path = MagicMock()
+    path.suffix = ".rst"
     path.read_text.return_value = content
 
     result = changelog.check_entry_content(path)
@@ -1063,6 +1063,15 @@ def test_changeschecker_check_entry_content(content, expected):
         assert substring in result
 
 
+def test_changeschecker_check_entry_content_non_rst():
+    changelog = DummyChangelogChangesChecker("SECTIONS")
+    path = MagicMock()
+    path.suffix = ".txt"
+
+    assert changelog.check_entry_content(path) is None
+    assert not path.read_text.called
+
+
 def test_changeschecker_check_entry_files(patches):
     changelog = DummyChangelogChangesChecker("SECTIONS")
     patched = patches(
@@ -1070,6 +1079,7 @@ def test_changeschecker_check_entry_files(patches):
         "AChangelogChangesChecker.check_entry_filename",
         prefix="envoy.code.check.abstract.changelog")
     paths = [MagicMock(), MagicMock(), MagicMock()]
+    entry_dir = pathlib.Path("/repo/changelogs/current")
     # path 0: filename error + content error
     # path 1: no errors
     # path 2: content error only
@@ -1079,12 +1089,12 @@ def test_changeschecker_check_entry_files(patches):
     with patched as (m_content, m_filename):
         m_filename.side_effect = filename_returns
         m_content.side_effect = content_returns
-        result = changelog.check_entry_files(paths)
+        result = changelog.check_entry_files(paths, entry_dir)
 
     assert result == ("FILENAME_ERR", "CONTENT_ERR", "CONTENT_ERR2")
     assert (
         m_filename.call_args_list
-        == [[(p, ), {}] for p in paths])
+        == [[(p, entry_dir), {}] for p in paths])
     assert (
         m_content.call_args_list
         == [[(p, ), {}] for p in paths])
@@ -1126,11 +1136,10 @@ def test_changelogstatus_entry_dir(patches, is_current):
 @pytest.mark.parametrize("entry_dir_exists", [None, False, True])
 @pytest.mark.parametrize("has_paths", [True, False])
 async def test_changelogstatus_check_entry_files(
-        patches, entry_dir_exists, has_paths):
+        tmp_path, patches, entry_dir_exists, has_paths):
     checker = MagicMock()
     status = check.AChangelogStatus(checker, MagicMock())
     patched = patches(
-        "sorted",
         ("AChangelogStatus.entry_dir",
          dict(new_callable=PropertyMock)),
         ("AChangelogStatus.project",
@@ -1138,16 +1147,30 @@ async def test_changelogstatus_check_entry_files(
         ("AChangelogStatus.version",
          dict(new_callable=PropertyMock)),
         prefix="envoy.code.check.abstract.changelog")
-    sorted_paths = [MagicMock(), MagicMock()] if has_paths else []
+    entry_dir = tmp_path / "changelogs" / "current"
+    expected_paths = []
+    if entry_dir_exists:
+        (entry_dir / "bug_fixes").mkdir(parents=True)
+        (entry_dir / "PLACEHOLDER").write_text("")
+        if has_paths:
+            (entry_dir / "area__slug.rst").write_text("content")
+            (entry_dir / "bug_fixes" / "area__slug.rst").write_text("content")
+            (entry_dir / "bug_fixes" / "area__slug.txt").write_text("content")
+            (entry_dir / "bug_fixes" / "sub").mkdir()
+            (entry_dir / "bug_fixes" / "sub" / "area__slug.rst").write_text(
+                "content")
+            expected_paths = sorted([
+                entry_dir / "area__slug.rst",
+                entry_dir / "bug_fixes" / "area__slug.rst",
+                entry_dir / "bug_fixes" / "area__slug.txt",
+                entry_dir / "bug_fixes" / "sub" / "area__slug.rst",
+            ])
 
-    with patched as (m_sorted, m_entry_dir, m_project, m_version):
+    with patched as (m_entry_dir, m_project, m_version):
         if entry_dir_exists is None:
             m_entry_dir.return_value = None
         else:
-            m_entry_dir.return_value = MagicMock()
-            m_entry_dir.return_value.exists.return_value = bool(
-                entry_dir_exists)
-        m_sorted.return_value = sorted_paths
+            m_entry_dir.return_value = entry_dir
         m_project.return_value.execute = AsyncMock()
         result = await status.check_entry_files()
 
@@ -1155,24 +1178,15 @@ async def test_changelogstatus_check_entry_files(
         assert result == ()
         assert not m_project.return_value.execute.called
         assert not m_version.called
-        assert not m_sorted.called
         return
     if not entry_dir_exists:
         assert result == (
             f"{m_version.return_value}: Missing changelog entries "
             f"directory ({m_entry_dir.return_value})", )
         assert not m_project.return_value.execute.called
-        assert not m_sorted.called
         return
 
-    assert (
-        m_entry_dir.return_value.glob.call_args
-        == [("*/*.rst", ), {}])
-    assert (
-        m_sorted.call_args
-        == [(m_entry_dir.return_value.glob.return_value, ), {}])
-
-    if not has_paths:
+    if not expected_paths:
         assert result == ()
         assert not m_project.return_value.execute.called
         return
@@ -1181,7 +1195,8 @@ async def test_changelogstatus_check_entry_files(
     assert (
         m_project.return_value.execute.call_args
         == [(status.checker.check_entry_files,
-             sorted_paths), {}])
+             expected_paths,
+             entry_dir), {}])
 
 
 async def test_changelogstatus_errors_invalid_area_from_entry_files(tmp_path):
