@@ -69,3 +69,41 @@ def updater(
         toolchains = toolchains,
         **kwargs
     )
+
+def _repo_path(label):
+    parsed = Label(label)
+    if parsed.workspace_name:
+        fail("registry_updater only supports main-workspace files: {}".format(label))
+    if parsed.package:
+        return "{}/{}".format(parsed.package, parsed.name)
+    return parsed.name
+
+def registry_updater(
+        name,
+        bazelrc_files,
+        module_files,
+        registry_repo = "https://github.com/envoyproxy/bazel-registry",
+        registry_branch = "main",
+        registry_url_prefix = "https://raw.githubusercontent.com/envoyproxy/bazel-registry/",
+        **kwargs):
+    sh_binary(
+        name = name,
+        srcs = [Label("//dependency:registry.sh")],
+        data = bazelrc_files + module_files + [
+            Label("//dependency:registry.sh"),
+            "@envoy_toolshed_jq//:modules",
+            "@envoy_toolshed_jq//:modules_root.marker",
+            "@jq_toolchains//:resolved_toolchain",
+        ],
+        deps = ["@bazel_tools//tools/bash/runfiles"],
+        env = {
+            "JQ_BIN": "$(rlocationpath @jq_toolchains//:resolved_toolchain)",
+            "JQ_MODULES_ROOT_MARKER": "$(rlocationpath @envoy_toolshed_jq//:modules_root.marker)",
+            "REGISTRY_BAZELRC_FILES": json.encode([_repo_path(label) for label in bazelrc_files]),
+            "REGISTRY_BRANCH": registry_branch,
+            "REGISTRY_MODULE_FILES": json.encode([_repo_path(label) for label in module_files]),
+            "REGISTRY_REPO": registry_repo,
+            "REGISTRY_URL_PREFIX": registry_url_prefix,
+        },
+        **kwargs
+    )

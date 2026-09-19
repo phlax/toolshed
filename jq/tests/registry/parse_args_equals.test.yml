@@ -1,0 +1,15 @@
+name: registry::parse_args supports equals forms
+
+imports:
+- registry
+
+input:
+- --hash=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+- --set=foo=1.1.0
+
+expression: registry::parse_args
+
+expected:
+  hash: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  overrides:
+    foo: 1.1.0

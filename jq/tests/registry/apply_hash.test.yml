@@ -1,0 +1,19 @@
+name: registry::apply_hash rewrites configured bazelrc hashes
+
+imports:
+- registry
+
+input:
+  files:
+    .bazelrc: |
+      common --registry=https://mirror.example/envoyproxy/bazel-registry/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  paths:
+  - .bazelrc
+  url_prefix: https://mirror.example/envoyproxy/bazel-registry/
+  hash: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+expression: registry::apply_hash
+
+expected:
+  .bazelrc: |
+    common --registry=https://mirror.example/envoyproxy/bazel-registry/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb

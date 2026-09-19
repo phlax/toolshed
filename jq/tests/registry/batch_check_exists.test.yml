@@ -1,0 +1,16 @@
+name: registry::batch_check_exists maps present and missing objects
+
+imports:
+- registry
+
+input:
+  hash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  output: |
+    modules/foo/metadata.json blob
+    aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:modules/foo/1.0.0/MODULE.bazel missing
+
+expression: registry::batch_check_exists
+
+expected:
+  modules/foo/metadata.json: true
+  modules/foo/1.0.0/MODULE.bazel: false
