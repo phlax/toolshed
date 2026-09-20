@@ -4,27 +4,7 @@ load(":libcxx_libs.bzl", "setup_libcxx_libs")
 load(":llvm_minimal.bzl", "llvm_toolchain_alias", "setup_llvm_minimal", "setup_llvm_minimal_build")
 load(":llvm_prebuilt.bzl", "setup_llvm_prebuilt")
 load(":sanitizer_libs.bzl", "setup_sanitizer_libs")
-
-def _single_setup_tag(module_ctx, ext_name, repos, attrs):
-    tags = [
-        tag
-        for mod in module_ctx.modules
-        for tag in mod.tags.setup
-    ]
-    if not tags:
-        return None
-    chosen = tags[0]
-    for tag in tags[1:]:
-        for attr_name in attrs:
-            if getattr(tag, attr_name) == getattr(chosen, attr_name):
-                continue
-            fail(
-                ("Conflicting setup() calls found for %s. " +
-                 "Repository names are fixed to %s, so all modules " +
-                 "must request identical configuration " +
-                 "(differing attribute: %s).") % (ext_name, repos, attr_name),
-            )
-    return chosen
+load("//private:extension_utils.bzl", "single_setup_tag")
 
 def _sanitizer_libs_impl(module_ctx):
     """Implementation of the sanitizer_libs module extension.
@@ -35,11 +15,11 @@ def _sanitizer_libs_impl(module_ctx):
 
     # Collect all setup tags from all modules; multiple identical tags are
     # collapsed into one — only conflicting configurations are rejected.
-    setup_tag = _single_setup_tag(
-        module_ctx,
-        "sanitizer_extension",
-        "@msan_libs, @tsan_libs",
-        ["msan_version", "msan_sha256", "tsan_version", "tsan_sha256"],
+    setup_tag = single_setup_tag(
+        module_ctx = module_ctx,
+        ext_name = "sanitizer_extension",
+        repos = "@msan_libs, @tsan_libs",
+        attrs = ["msan_version", "msan_sha256", "tsan_version", "tsan_sha256"],
     )
 
     # Call setup_sanitizer_libs once with the configuration
@@ -87,11 +67,11 @@ def _libcxx_libs_ext_impl(module_ctx):
 
     # Collect all setup tags from all modules; multiple identical tags are
     # collapsed into one — only conflicting configurations are rejected.
-    setup_tag = _single_setup_tag(
-        module_ctx,
-        "libcxx_libs_extension",
-        "@libcxx_libs_aarch64, @libcxx_libs_x86_64",
-        ["aarch64_version", "aarch64_sha256", "x86_64_version", "x86_64_sha256"],
+    setup_tag = single_setup_tag(
+        module_ctx = module_ctx,
+        ext_name = "libcxx_libs_extension",
+        repos = "@libcxx_libs_aarch64, @libcxx_libs_x86_64",
+        attrs = ["aarch64_version", "aarch64_sha256", "x86_64_version", "x86_64_sha256"],
     )
 
     # Call setup_libcxx_libs once with the configuration
@@ -146,11 +126,11 @@ def _llvm_minimal_ext_impl(module_ctx):
     """Set up llvm_minimal_* repos for consumers."""
     # Collect all setup tags from all modules; multiple identical tags are
     # collapsed into one — only conflicting configurations are rejected.
-    setup_tag = _single_setup_tag(
-        module_ctx,
-        "llvm_minimal_extension",
-        "@llvm_minimal_linux_x64, @llvm_minimal_linux_arm64, @llvm_minimal_macos_arm64",
-        ["linux_x64_sha256", "linux_arm64_sha256", "macos_arm64_sha256"],
+    setup_tag = single_setup_tag(
+        module_ctx = module_ctx,
+        ext_name = "llvm_minimal_extension",
+        repos = "@llvm_minimal_linux_x64, @llvm_minimal_linux_arm64, @llvm_minimal_macos_arm64",
+        attrs = ["linux_x64_sha256", "linux_arm64_sha256", "macos_arm64_sha256"],
     )
 
     if setup_tag:
