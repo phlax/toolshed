@@ -38,8 +38,8 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
             "git_toolchain(",
             "    name = \"%s_impl\"," % target["name"],
             # workspace_name is canonical here, so the hub must render @@ labels.
-            "    git = \"@@%s//:git\"," % repo_name,
-            "    data = [\"@@%s//:runtime\"]," % repo_name,
+            "    git = \"@" + "@%s//:git\"," % repo_name,
+            "    data = [\"@" + "@%s//:runtime\"]," % repo_name,
             ")",
             "",
             "toolchain(",

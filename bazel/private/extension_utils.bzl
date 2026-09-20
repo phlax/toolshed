@@ -1,6 +1,17 @@
 """Shared helpers for module extensions."""
 
 def single_setup_tag(module_ctx, ext_name, repos, attrs):
+    """Return a single shared setup() tag, rejecting conflicting configs.
+
+    Args:
+      module_ctx: Module extension context supplying setup() tags.
+      ext_name: Human-readable extension name for conflict messages.
+      repos: Repository names included in conflict messages.
+      attrs: Setup-tag attrs that must match across modules.
+
+    Returns:
+      The shared setup() tag, or None when no module declared one.
+    """
     tags = [
         tag
         for mod in module_ctx.modules

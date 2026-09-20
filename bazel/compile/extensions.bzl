@@ -1,10 +1,10 @@
 """Module extension for libcxx and sanitizer libraries configuration in bzlmod."""
 
+load("//private:extension_utils.bzl", "single_setup_tag")
 load(":libcxx_libs.bzl", "setup_libcxx_libs")
 load(":llvm_minimal.bzl", "llvm_toolchain_alias", "setup_llvm_minimal", "setup_llvm_minimal_build")
 load(":llvm_prebuilt.bzl", "setup_llvm_prebuilt")
 load(":sanitizer_libs.bzl", "setup_sanitizer_libs")
-load("//private:extension_utils.bzl", "single_setup_tag")
 
 def _sanitizer_libs_impl(module_ctx):
     """Implementation of the sanitizer_libs module extension.
@@ -110,7 +110,7 @@ libcxx_libs_extension = module_extension(
     },
 )
 
-def _libcxx_ext_impl(module_ctx):
+def _libcxx_ext_impl(_module_ctx):
     setup_llvm_prebuilt()
 
 libcxx_extension = module_extension(
@@ -124,6 +124,7 @@ libcxx_extension = module_extension(
 
 def _llvm_minimal_ext_impl(module_ctx):
     """Set up llvm_minimal_* repos for consumers."""
+
     # Collect all setup tags from all modules; multiple identical tags are
     # collapsed into one — only conflicting configurations are rejected.
     setup_tag = single_setup_tag(
@@ -169,7 +170,7 @@ llvm_minimal_extension = module_extension(
 # Use this as a dev_dependency in MODULE.bazel.
 # =============================================================================
 
-def _llvm_minimal_build_ext_impl(module_ctx):
+def _llvm_minimal_build_ext_impl(_module_ctx):
     """Set up llvm_tarball_* repos for building minimal LLVM artifacts."""
     setup_llvm_minimal_build()
 
@@ -177,7 +178,7 @@ llvm_minimal_build_extension = module_extension(
     implementation = _llvm_minimal_build_ext_impl,
 )
 
-def _llvm_toolchain_alias_ext_impl(module_ctx):
+def _llvm_toolchain_alias_ext_impl(_module_ctx):
     """Set up the host-arch llvm_toolchain_llvm alias repo.
 
     This extension creates the llvm_minimal_* repos itself so they are siblings

@@ -136,7 +136,7 @@ sh_test(
 
 resolved_repo_test(
     name = "resolved_git_prebuilt_repo_test",
-    expected_repo_name = "git_prebuilt_linux_x86_64",
+    expected_repo_name = "+git_prebuilt_extension+git_prebuilt_linux_x86_64",
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",

@@ -2,6 +2,13 @@
 
 load("//git/private:transitions.bzl", "openssl_transition")
 
+GitSourceInfo = provider(
+    doc = "Metadata about the source-built git wrapper.",
+    fields = {
+        "repo_name": "Canonical repo name for the wrapped upstream git executable.",
+    },
+)
+
 def _template_dest(src):
     parts = src.short_path.split("/templates/", 1)
     if len(parts) != 2:
@@ -57,6 +64,7 @@ def _git_source_wrapper_impl(ctx):
 
     ctx.actions.symlink(output = git_out, target_file = git, is_executable = True)
     ctx.actions.symlink(output = git_remote_http_out, target_file = git_remote_http, is_executable = True)
+
     # Point declared symlinks directly at real input Files so remote execution
     # never has to materialize a symlink-to-symlink chain for git-remote-https.
     ctx.actions.symlink(output = git_remote_https_out, target_file = git_remote_http, is_executable = True)
@@ -105,6 +113,8 @@ exec "$GIT_EXEC_PATH/git" "$@"
         executable = git_wrapper,
         files = depset(outputs),
         runfiles = ctx.runfiles(files = outputs),
+    ), GitSourceInfo(
+        repo_name = git_target.label.workspace_name,
     )]
 
 git_source_wrapper = rule(

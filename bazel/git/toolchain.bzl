@@ -1,9 +1,12 @@
 """Toolchain for hermetic git execution."""
 
+load("//git/private:git_source.bzl", "GitSourceInfo")
+
 GitInfo = provider(
     doc = "Information about a git implementation.",
     fields = {
         "git": "File: executable that behaves like `git` with no extra env required.",
+        "repo_name": "Canonical repo name for the underlying git implementation.",
         "runfiles": "runfiles needed by `git`.",
     },
 )
@@ -21,6 +24,7 @@ def _git_toolchain_impl(ctx):
     executable = default.files_to_run.executable
     if not executable:
         fail("`git` (%s) does not provide an executable" % ctx.attr.git.label)
+    repo_name = ctx.attr.git[GitSourceInfo].repo_name if GitSourceInfo in ctx.attr.git else executable.owner.repo_name
 
     runfiles = ctx.runfiles(files = [executable])
     runfiles = _merge_default_runfiles(ctx, runfiles, ctx.attr.git)
@@ -31,6 +35,7 @@ def _git_toolchain_impl(ctx):
         platform_common.ToolchainInfo(
             git = GitInfo(
                 git = executable,
+                repo_name = repo_name,
                 runfiles = runfiles,
             ),
         ),

@@ -11,14 +11,16 @@ def _repo_marker_name(name, repo_name):
 
 def _git_toolchain_probe_impl(ctx):
     git_info = ctx.toolchains[GIT_TOOLCHAIN_TYPE].git
-    repo_name = git_info.git.owner.repo_name
+    repo_name = git_info.repo_name
     marker = ctx.actions.declare_file(_repo_marker_name(ctx.label.name, repo_name))
+    executable = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.write(marker, repo_name + "\n")
+    ctx.actions.symlink(output = executable, target_file = git_info.git, is_executable = True)
     return [
         DefaultInfo(
-            executable = git_info.git,
-            files = depset([git_info.git, marker]),
-            runfiles = git_info.runfiles.merge(ctx.runfiles(files = [marker])),
+            executable = executable,
+            files = depset([executable, marker]),
+            runfiles = git_info.runfiles.merge(ctx.runfiles(files = [executable, marker])),
         ),
         OutputGroupInfo(repo_name = depset([marker])),
     ]
@@ -40,11 +42,13 @@ _source_toolchain_transition = transition(
 
 def _source_probe_impl(ctx):
     default = ctx.attr.probe[0][DefaultInfo]
+    executable = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.symlink(output = executable, target_file = default.files_to_run.executable, is_executable = True)
     return [
         DefaultInfo(
-            executable = default.files_to_run.executable,
-            files = default.files,
-            runfiles = default.default_runfiles,
+            executable = executable,
+            files = depset([executable], transitive = [default.files]),
+            runfiles = default.default_runfiles.merge(ctx.runfiles(files = [executable])),
         ),
         OutputGroupInfo(repo_name = ctx.attr.probe[0][OutputGroupInfo].repo_name),
     ]
@@ -107,14 +111,14 @@ def _render_hub_build_test_impl(ctx):
             "linux-aarch64": None,
             "linux-x86_64": "git_prebuilt_linux_x86_64",
         },
-        "@@envoy_toolshed+//git:defs.bzl",
-        "@@envoy_toolshed+//git:toolchain_type",
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
     )
     asserts.true(env, "name = \"linux_x86_64\"" in content)
     asserts.false(env, "name = \"linux_aarch64\"" in content)
-    asserts.true(env, "load(\"@@envoy_toolshed+//git:defs.bzl\", \"git_toolchain\")" in content)
-    asserts.true(env, "toolchain_type = \"@@envoy_toolshed+//git:toolchain_type\"" in content)
-    asserts.true(env, "@@git_prebuilt_linux_x86_64//:git" in content)
+    asserts.true(env, "load(\"@" + "@envoy_toolshed+//git:defs.bzl\", \"git_toolchain\")" in content)
+    asserts.true(env, "toolchain_type = \"@" + "@envoy_toolshed+//git:toolchain_type\"" in content)
+    asserts.true(env, "@" + "@git_prebuilt_linux_x86_64//:git" in content)
     return unittest.end(env)
 
 render_hub_build_test = unittest.make(_render_hub_build_test_impl)
