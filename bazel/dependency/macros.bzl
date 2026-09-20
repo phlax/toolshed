@@ -1,4 +1,8 @@
+"""Macros for dependency update utilities."""
+
+load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//dependency:registry.bzl", "registry_bazelrc", "repo_registry")
 
 def updater(
         name,
@@ -20,6 +24,29 @@ def updater(
         toolchains = None,
         pydict = False,
         **kwargs):
+    """Create a shell-based dependency updater binary.
+
+    Args:
+      name: Target name.
+      dependencies: Label for the dependency metadata input.
+      version_file: Label for the version file to update.
+      jq_toolchain: jq toolchain target label.
+      update_script: Updater script label.
+      post_script: Optional post-processing script label.
+      data: Additional runtime data labels.
+      deps: Additional runtime deps.
+      dep_search: Optional dependency search override.
+      sha_search: Optional sha search override.
+      version_search: Optional version search override.
+      repo_selector: Optional repo selector override.
+      sha_selector: Optional sha selector override.
+      url_selector: Optional URL selector override.
+      version_path_replace: Optional version path replacement override.
+      version_selector: Optional version selector override.
+      toolchains: Additional toolchains.
+      pydict: Whether to use Python dict matching defaults.
+      **kwargs: Additional `sh_binary` keyword arguments.
+    """
     toolchains = [jq_toolchain] + (toolchains or [])
     deps = deps or []
     data = (data or []) + [
@@ -56,7 +83,7 @@ def updater(
         env["VERSION_SELECTOR"] = version_selector
 
     if post_script:
-        data += [post_script]
+        data.append(post_script)
         env["VERSION_UPDATE_POST_SCRIPT"] = "$(location %s)" % post_script
 
     sh_binary(
@@ -69,3 +96,60 @@ def updater(
         toolchains = toolchains,
         **kwargs
     )
+
+def registry_updater(
+        name,
+        bazelrc,
+        repo = "https://github.com/envoyproxy/bazel-registry.git",
+        url = "https://raw.githubusercontent.com/envoyproxy/bazel-registry",
+        ref = "main",
+        visibility = None,
+        **kwargs):
+    """Rewrite the `--registry=<url>/<sha>` pin in `bazelrc` to the current `ref` of `repo`.
+
+    Creates `<name>` (a `write_source_files` runnable) plus private helpers
+    `<name>_resolved` and `<name>_bazelrc`.
+
+    Args:
+      name: Target name for the generated updater.
+      bazelrc: Label of the `.bazelrc` file to rewrite.
+      repo: Git repository URL for the Bazel registry.
+      url: Raw content URL prefix used in the pinned `--registry=` line.
+      ref: Git branch to resolve in `repo`.
+      visibility: Optional visibility for the runnable target.
+      **kwargs: Additional `write_source_files` keyword arguments.
+    """
+    helper_tags = ["manual"] + kwargs.pop("tags", [])
+    repo_registry(
+        name = name + "_resolved",
+        ref = ref,
+        repo = repo,
+        tags = helper_tags,
+        url = url,
+    )
+    registry_bazelrc(
+        name = name + "_bazelrc",
+        bazelrc = bazelrc,
+        registry = ":" + name + "_resolved",
+        tags = helper_tags,
+        url = url,
+    )
+    if visibility == None:
+        write_source_files(
+            name = name,
+            check_that_out_file_exists = False,
+            diff_test = False,
+            files = {bazelrc: ":" + name + "_bazelrc"},
+            tags = helper_tags,
+            **kwargs
+        )
+    else:
+        write_source_files(
+            name = name,
+            check_that_out_file_exists = False,
+            diff_test = False,
+            files = {bazelrc: ":" + name + "_bazelrc"},
+            tags = helper_tags,
+            visibility = visibility,
+            **kwargs
+        )
