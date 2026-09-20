@@ -9,6 +9,8 @@ set -euo pipefail
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+list_file="$tmp/tar.list"
+tar -tvf "$TARBALL" >"$list_file"
 tar -xf "$TARBALL" -C "$tmp"
 
 pkg_dir=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -name 'git-*' -print -quit)
@@ -35,17 +37,34 @@ do
     test -e "$path"
 done
 
+grep -Eq -- '^-rw-r--r-- .* git-[^/]+/BUILD\.bazel$' "$list_file"
+grep -Eq -- '^-rwxr-xr-x .* git-[^/]+/bin/git$' "$list_file"
+grep -Eq -- '^-rwxr-xr-x .* git-[^/]+/libexec/git-core/git$' "$list_file"
+grep -Eq -- '^-rwxr-xr-x .* git-[^/]+/libexec/git-core/git-remote-http$' "$list_file"
+grep -Eq -- '^l[rwx-]{9} .* git-[^/]+/libexec/git-core/git-remote-https -> git-remote-http$' "$list_file"
+grep -Eq -- '^-rw-r--r-- .* git-[^/]+/share/git-core/ca-certificates\.crt$' "$list_file"
+grep -Eq -- '^-rw-r--r-- .* git-[^/]+/share/git-core/templates/description$' "$list_file"
+grep -Eq -- '^-rw-r--r-- .* git-[^/]+/share/git-core/templates/info/exclude$' "$list_file"
+grep -Eq -- '^-rwxr-xr-x .* git-[^/]+/share/git-core/templates/hooks/.+\.sample$' "$list_file"
+
 test "$(head -n 1 "$git_wrapper")" = "#!/bin/sh"
 test -x "$git_wrapper"
 test -x "$git_bin"
 test -x "$git_remote_http"
-if [ -L "$git_remote_https" ]; then
-    test "$(readlink -f "$git_remote_https")" = "$git_remote_http"
-else
-    cmp -s "$git_remote_http" "$git_remote_https"
-fi
+test "$(stat -c '%a' "$pkg_dir/BUILD.bazel")" = "644"
+test "$(stat -c '%a' "$git_wrapper")" = "755"
+test "$(stat -c '%a' "$git_bin")" = "755"
+test "$(stat -c '%a' "$git_remote_http")" = "755"
+test -L "$git_remote_https"
+test "$(readlink "$git_remote_https")" = "git-remote-http"
+test "$(stat -c '%a' "$git_cacert")" = "644"
+test "$(stat -c '%a' "$git_templates/description")" = "644"
+test "$(stat -c '%a' "$git_templates/info/exclude")" = "644"
+find "$git_templates/hooks" -type f -name '*.sample' | grep -q .
+find "$git_templates/hooks" -type f -name '*.sample' -exec stat -c '%a' {} + | awk '$1 != 755 { exit 1 }'
 test -d "$git_templates"
 find "$git_templates" -type f -print -quit | grep -q .
+! find "$pkg_dir/share" \( -name Makefile -o -name meson.build -o -name .gitignore \) -print -quit | grep -q .
 
 cert_count=$(grep -c 'BEGIN CERTIFICATE' "$git_cacert")
 test "$cert_count" -ge 100
@@ -66,6 +85,7 @@ exec_path=$(git_cmd --exec-path)
 test "$exec_path" = "$pkg_dir/libexec/git-core"
 
 git_cmd init "$repo_dir" >/dev/null
+test "$(stat -c '%a' "$repo_dir/.git/description")" = "644"
 test -f "$repo_dir/.git/hooks/applypatch-msg.sample"
 git_cmd -C "$repo_dir" config user.name toolshed
 git_cmd -C "$repo_dir" config user.email toolshed@example.com

@@ -1,21 +1,29 @@
 # Hermetic git prebuilt (`//git`)
 
-Builds Linux `git-<version>-<platform>.tar.zst` release artifacts matching the
-`bins-v*` packaging flow used for `sq`.
+Builds Linux `git-<version>-<platform>.tar.zst` release artifacts for the
+`bins-v*` flow. Unlike `sq`, which still packages with aspect's mtree/bsdtar
+path, `git` uses `rules_pkg` so file modes, template selection, and the
+`git-remote-https` link are declared directly in Bazel.
 
 ## Runtime layout
 
 Each tarball contains:
 
-- `BUILD.bazel`
-- `bin/git`
-- `libexec/git-core/git`
-- `libexec/git-core/git-remote-http`
-- `libexec/git-core/git-remote-https` (currently packaged as a byte-identical copy of `git-remote-http`)
-- `share/git-core/ca-certificates.crt`
-- `share/git-core/templates/**`
+- `BUILD.bazel` (`0644`)
+- `bin/git` (`0755`)
+- `libexec/git-core/git` (`0755`)
+- `libexec/git-core/git-remote-http` (`0755`)
+- `libexec/git-core/git-remote-https` (symlink to `git-remote-http`)
+- `share/git-core/ca-certificates.crt` (`0644`)
+- `share/git-core/templates/description` (`0644`)
+- `share/git-core/templates/info/exclude` (`0644`)
+- `share/git-core/templates/hooks/*.sample` (`0755`)
 
 `bin/git` is self-contained: extract the tarball and run it directly.
+
+The template tree is intentionally pruned to the files `git init` should copy
+into new repositories. Source-tree build files such as `Makefile`,
+`meson.build`, and `.gitignore` are excluded from the packaged runtime.
 
 ## Runtime environment
 

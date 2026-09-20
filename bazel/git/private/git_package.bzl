@@ -1,7 +1,7 @@
 """Build and package the registry git source target for Linux toolchains."""
 
-load("@aspect_bazel_lib//lib:tar.bzl", "mtree_mutate", "mtree_spec", "tar")
-load("@rules_pkg//pkg:providers.bzl", "PackageFilesInfo")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_files", "pkg_mklink", "strip_prefix")
+load("@rules_pkg//pkg:pkg.bzl", "pkg_tar")
 load("//:versions.bzl", "VERSIONS")
 
 _PLATFORMS = {
@@ -45,35 +45,51 @@ def _copy_file(ctx, src, out, progress_message):
         progress_message = progress_message,
     )
 
+_BUILD_BAZEL = """exports_files(glob(["**"]))
+filegroup(name = "git", srcs = ["bin/git"], visibility = ["//visibility:public"])
+filegroup(name = "runtime", srcs = glob(["libexec/**", "share/**"]), visibility = ["//visibility:public"])
+"""
+
 def _template_dest(src):
     parts = src.short_path.split("/templates/", 1)
     if len(parts) != 2:
         fail("template path missing /templates/: %s" % src.short_path)
     return "share/git-core/templates/" + parts[1]
 
+def _want_template(rel):
+    return (
+        rel == "share/git-core/templates/description" or
+        rel == "share/git-core/templates/info/exclude" or
+        (
+            rel.startswith("share/git-core/templates/hooks/") and
+            rel.endswith(".sample")
+        )
+    )
+
 def _git_files_impl(ctx):
     package_dir = "git-%s-%s" % (VERSIONS["git"], ctx.attr.platform)
     git = ctx.attr.git[0][DefaultInfo].files.to_list()[0]
     git_remote_http = ctx.attr.git_remote_http[0][DefaultInfo].files.to_list()[0]
     templates = sorted(ctx.attr.templates[0][DefaultInfo].files.to_list(), key = lambda f: f.short_path)
-    cacert = ctx.file.cacert
 
     git_wrapper = ctx.actions.declare_file(package_dir + "/bin/git")
     git_out = ctx.actions.declare_file(package_dir + "/libexec/git-core/git")
     git_remote_http_out = ctx.actions.declare_file(package_dir + "/libexec/git-core/git-remote-http")
-    git_remote_https_out = ctx.actions.declare_file(package_dir + "/libexec/git-core/git-remote-https")
-    cacert_out = ctx.actions.declare_file(package_dir + "/share/git-core/ca-certificates.crt")
-    template_outs = []
+    executables = [git_wrapper, git_out, git_remote_http_out]
+    data = []
 
     _strip_binary(ctx, git, git_out, "Stripping git for " + ctx.attr.platform)
     _strip_binary(ctx, git_remote_http, git_remote_http_out, "Stripping git-remote-http for " + ctx.attr.platform)
-    _copy_file(ctx, cacert, cacert_out, "Copying cacert for " + ctx.attr.platform)
     for src in templates:
         rel = _template_dest(src)
+        if not _want_template(rel):
+            continue
         out = ctx.actions.declare_file(package_dir + "/" + rel)
         _copy_file(ctx, src, out, "Copying template %s for %s" % (rel, ctx.attr.platform))
-        template_outs.append((rel, out))
-    _copy_file(ctx, git_remote_http_out, git_remote_https_out, "Copying git-remote-https for " + ctx.attr.platform)
+        if rel.startswith("share/git-core/templates/hooks/"):
+            executables.append(out)
+        else:
+            data.append(out)
     ctx.actions.write(
         output = git_wrapper,
         content = """#!/bin/sh
@@ -100,19 +116,12 @@ exec "$GIT_EXEC_PATH/git" "$@"
         is_executable = True,
     )
 
-    dest_src_map = {
-        "bin/git": git_wrapper,
-        "libexec/git-core/git": git_out,
-        "libexec/git-core/git-remote-http": git_remote_http_out,
-        "libexec/git-core/git-remote-https": git_remote_https_out,
-        "share/git-core/ca-certificates.crt": cacert_out,
-    }
-    for rel, out in template_outs:
-        dest_src_map[rel] = out
-
     return [
-        DefaultInfo(files = depset([git_wrapper, git_out, git_remote_http_out, git_remote_https_out, cacert_out] + [out for _, out in template_outs])),
-        PackageFilesInfo(dest_src_map = dest_src_map, attributes = {}),
+        DefaultInfo(files = depset(executables + data)),
+        OutputGroupInfo(
+            executables = depset(executables),
+            data = depset(data),
+        ),
     ]
 
 git_files = rule(
@@ -127,10 +136,6 @@ git_files = rule(
             mandatory = True,
             executable = True,
             cfg = _git_transition,
-        ),
-        "cacert": attr.label(
-            default = "@cacert//file",
-            allow_single_file = True,
         ),
         "templates": attr.label(
             mandatory = True,
@@ -152,15 +157,22 @@ git_files = rule(
 def git_package(name, platform, stripper):
     package_dir = "git-%s-%s" % (VERSIONS["git"], platform)
     files = name + "_files"
+    executables = name + "_executables"
+    data = name + "_data"
     build = name + "_build"
+    packaging_build = name + "_build_files"
+    packaging_exec = name + "_packaging_exec"
+    packaging_data = name + "_packaging_data"
+    packaging_cacert = name + "_packaging_cacert"
+    https_link = name + "_https_link"
+    package_tar = name + "_pkg_tar"
+    tarball = name + "_tar"
+
     native.genrule(
         name = build,
         outs = [package_dir + "/BUILD.bazel"],
         cmd = """cat >"$@" <<'EOF'
-exports_files(glob(["**"]))
-filegroup(name = "git", srcs = ["bin/git"], visibility = ["//visibility:public"])
-filegroup(name = "runtime", srcs = glob(["libexec/**", "share/**"]), visibility = ["//visibility:public"])
-EOF""",
+%sEOF""" % _BUILD_BAZEL,
         tags = ["manual"],
     )
     git_files(
@@ -172,27 +184,79 @@ EOF""",
         tags = ["manual"],
         templates = "@git//:templates",
     )
-    mtree_spec(
-        name = name + "_mtree_src",
-        srcs = [":" + files, ":" + build],
+    native.filegroup(
+        name = executables,
+        srcs = [":" + files],
+        output_group = "executables",
         tags = ["manual"],
     )
-    mtree_mutate(
-        name = name + "_mtree",
-        mtree = ":" + name + "_mtree_src",
+    native.filegroup(
+        name = data,
+        srcs = [":" + files],
+        output_group = "data",
+        tags = ["manual"],
+    )
+    pkg_files(
+        name = packaging_build,
+        srcs = [":" + build],
+        attributes = pkg_attributes(mode = "0644"),
+        strip_prefix = strip_prefix.from_pkg(package_dir),
+        tags = ["manual"],
+    )
+    pkg_files(
+        name = packaging_exec,
+        srcs = [":" + executables],
+        attributes = pkg_attributes(mode = "0755"),
+        strip_prefix = strip_prefix.from_pkg(package_dir),
+        tags = ["manual"],
+    )
+    pkg_files(
+        name = packaging_data,
+        srcs = [":" + data],
+        attributes = pkg_attributes(mode = "0644"),
+        strip_prefix = strip_prefix.from_pkg(package_dir),
+        tags = ["manual"],
+    )
+    pkg_files(
+        name = packaging_cacert,
+        srcs = ["@cacert//file"],
+        attributes = pkg_attributes(mode = "0644"),
+        prefix = "share/git-core",
+        renames = {"@cacert//file": "ca-certificates.crt"},
+        tags = ["manual"],
+    )
+    pkg_mklink(
+        name = https_link,
+        link_name = "libexec/git-core/git-remote-https",
+        target = "git-remote-http",
+        tags = ["manual"],
+    )
+    pkg_tar(
+        name = package_tar,
+        extension = "tar",
+        owner = "0.0",
         package_dir = package_dir,
-        preserve_symlinks = True,
-        srcs = [":" + files, ":" + build],
-        strip_prefix = "git/" + package_dir,
+        package_file_name = package_dir + ".tar",
+        srcs = [
+            ":" + packaging_build,
+            ":" + packaging_exec,
+            ":" + packaging_data,
+            ":" + packaging_cacert,
+            ":" + https_link,
+        ],
         tags = ["manual"],
     )
-    tar(
-        name = name,
-        args = ["--options=zstd:compression-level=19,zstd:threads=4"],
-        compress = "zstd",
+    native.genrule(
+        name = tarball,
+        srcs = [":" + package_tar],
+        outs = [package_dir + ".tar.zst"],
+        cmd = "$(location @@aspect_bazel_lib++toolchains+zstd_linux_amd64//:zstd) -19 -T4 -f $(location :%s) -o $@" % package_tar,
         exec_properties = {"Pool": "linux_x64_xlarge"},
-        mtree = ":" + name + "_mtree",
-        out = package_dir + ".tar.zst",
-        srcs = [":" + files, ":" + build],
+        tools = ["@@aspect_bazel_lib++toolchains+zstd_linux_amd64//:zstd"],
+        tags = ["manual"],
+    )
+    native.filegroup(
+        name = name,
+        srcs = [":" + tarball],
         tags = ["manual"],
     )
