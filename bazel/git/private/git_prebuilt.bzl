@@ -14,17 +14,19 @@ _PLATFORM_TARGETS = {
     },
 }
 
-def render_git_toolchains_build(platform_repos):
+def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label):
     """Render the hub BUILD file for the configured prebuilt toolchains.
 
     Args:
         platform_repos: Mapping from platform suffix to prebuilt repository name.
+        defs_label: Canonical label string for //git:defs.bzl.
+        toolchain_type_label: Canonical label string for //git:toolchain_type.
 
     Returns:
         BUILD file content for the hub repository.
     """
     lines = [
-        "load(\"@envoy_toolshed//git:defs.bzl\", \"git_toolchain\")",
+        "load(\"%s\", \"git_toolchain\")" % defs_label,
         "",
     ]
     for platform in sorted(_PLATFORM_TARGETS):
@@ -35,14 +37,15 @@ def render_git_toolchains_build(platform_repos):
         lines.extend([
             "git_toolchain(",
             "    name = \"%s_impl\"," % target["name"],
-            "    git = \"@%s//:git\"," % repo_name,
-            "    data = [\"@%s//:runtime\"]," % repo_name,
+            # workspace_name is canonical here, so the hub must render @@ labels.
+            "    git = \"@@%s//:git\"," % repo_name,
+            "    data = [\"@@%s//:runtime\"]," % repo_name,
             ")",
             "",
             "toolchain(",
             "    name = \"%s\"," % target["name"],
             "    toolchain = \":%s_impl\"," % target["name"],
-            "    toolchain_type = \"@envoy_toolshed//git:toolchain_type\",",
+            "    toolchain_type = \"%s\"," % toolchain_type_label,
             "    exec_compatible_with = [",
             "        \"@platforms//os:linux\",",
             "        \"%s\"," % target["constraint"],
@@ -75,17 +78,23 @@ def _repo_name(label):
     return label.workspace_name
 
 def _git_toolchains_hub_impl(ctx):
-    ctx.file("BUILD.bazel", render_git_toolchains_build({
-        "linux-aarch64": _repo_name(ctx.attr.linux_aarch64) if ctx.attr.linux_aarch64 else None,
-        "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
-    }))
+    ctx.file("BUILD.bazel", render_git_toolchains_build(
+        {
+            "linux-aarch64": _repo_name(ctx.attr.linux_aarch64) if ctx.attr.linux_aarch64 else None,
+            "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
+        },
+        ctx.attr.defs_label,
+        ctx.attr.toolchain_type_label,
+    ))
     return ctx.repo_metadata(reproducible = True)
 
 git_toolchains_hub = repository_rule(
     implementation = _git_toolchains_hub_impl,
     attrs = {
+        "defs_label": attr.string(mandatory = True),
         "linux_aarch64": attr.label(default = None),
         "linux_x86_64": attr.label(default = None),
+        "toolchain_type_label": attr.string(mandatory = True),
     },
 )
 

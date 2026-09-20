@@ -72,7 +72,7 @@ my_rule = rule(
 The source fallback can be forced for debugging with:
 
 ```console
-bazel test //git/test:toolchain_source_version_test   --extra_toolchains=@envoy_toolshed//git:source_toolchain
+bazel test //git/test:toolchain_source_version_test --extra_toolchains=@envoy_toolshed//git:source_toolchain
 ```
 
 Prebuilt SHAs can be overridden, or a platform disabled, in `MODULE.bazel`:

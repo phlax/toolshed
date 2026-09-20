@@ -21,6 +21,7 @@ bzl_library(
         "//git/private:git_source.bzl",
         "//git/private:transitions.bzl",
     ],
+    deps = ["//private:extension_utils_bzl"],
     visibility = ["//visibility:private"],
 )
 

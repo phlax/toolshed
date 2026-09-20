@@ -2,36 +2,18 @@
 
 load("//:versions.bzl", "VERSIONS")
 load("//git/private:git_prebuilt.bzl", "GIT_PREBUILT_STRIP_PREFIX", "GIT_PREBUILT_URL", "git_cacert", "git_prebuilt", "git_toolchains_hub")
+load("//private:extension_utils.bzl", "single_setup_tag")
 
 _NO_OVERRIDE = "__envoy_toolshed_git_default__"
-
-def _single_setup_tag(module_ctx, ext_name, repos, attrs):
-    tags = [
-        tag
-        for mod in module_ctx.modules
-        for tag in mod.tags.setup
-    ]
-    if not tags:
-        return None
-    chosen = tags[0]
-    for tag in tags[1:]:
-        for attr_name in attrs:
-            if getattr(tag, attr_name) == getattr(chosen, attr_name):
-                continue
-            fail(
-                (("Conflicting setup() calls found for %s. " +
-                  "Repository names are fixed to %s, so all modules " +
-                  "must request identical configuration " +
-                  "(differing attribute: %s).") % (ext_name, repos, attr_name)),
-            )
-    return chosen
+DEFS_LABEL = str(Label("//git:defs.bzl"))
+TOOLCHAIN_TYPE_LABEL = str(Label("//git:toolchain_type"))
 
 def _git_prebuilt_ext_impl(module_ctx):
-    setup_tag = _single_setup_tag(
-        module_ctx,
-        "git_prebuilt_extension",
-        "@cacert, @git_prebuilt_linux_x86_64, @git_prebuilt_linux_aarch64, @git_toolchains",
-        ["linux_x86_64_sha256", "linux_aarch64_sha256"],
+    setup_tag = single_setup_tag(
+        module_ctx = module_ctx,
+        ext_name = "git_prebuilt_extension",
+        repos = "@cacert, @git_prebuilt_linux_x86_64, @git_prebuilt_linux_aarch64, @git_toolchains",
+        attrs = ["linux_x86_64_sha256", "linux_aarch64_sha256"],
     )
 
     cacert = VERSIONS["cacert"]
@@ -66,19 +48,24 @@ def _git_prebuilt_ext_impl(module_ctx):
 
     git_toolchains_hub(
         name = "git_toolchains",
+        defs_label = DEFS_LABEL,
         linux_aarch64 = platform_labels.get("linux-aarch64"),
         linux_x86_64 = platform_labels.get("linux-x86_64"),
+        toolchain_type_label = TOOLCHAIN_TYPE_LABEL,
     )
 
+# setup() controls per-platform prebuilt SHAs: unset uses VERSIONS["git_sha256"],
+# "" disables that prebuilt repo (source fallback only), and any other value
+# overrides the sha256 for that platform.
 _setup = tag_class(
     attrs = {
         "linux_aarch64_sha256": attr.string(
             default = _NO_OVERRIDE,
-            doc = "SHA256 hash of the prebuilt Linux aarch64 git artifact. Set to an empty string to disable this repo.",
+            doc = "SHA256 for the Linux aarch64 prebuilt git artifact: unset uses VERSIONS[\"git_sha256\"], \"\" disables the prebuilt repo for this platform, any other value overrides the sha256.",
         ),
         "linux_x86_64_sha256": attr.string(
             default = _NO_OVERRIDE,
-            doc = "SHA256 hash of the prebuilt Linux x86_64 git artifact. Set to an empty string to disable this repo.",
+            doc = "SHA256 for the Linux x86_64 prebuilt git artifact: unset uses VERSIONS[\"git_sha256\"], \"\" disables the prebuilt repo for this platform, any other value overrides the sha256.",
         ),
     },
 )

@@ -1,3 +1,4 @@
+load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@aspect_bazel_lib//lib:tar.bzl", "mtree_mutate", "mtree_spec", "tar")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
@@ -12,6 +13,13 @@ load(":llvm_prebuilt.bzl", "llvm_prebuilt_extract_libcxx")
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["sanitizer_libs.bzl", "libcxx_libs.bzl", "libcxx_darwin.bzl", "llvm_minimal.bzl", "extensions.bzl"])
+
+bzl_library(
+    name = "compile_extensions_bzl",
+    srcs = ["extensions.bzl"],
+    deps = ["//private:extension_utils_bzl"],
+    visibility = ["//visibility:public"],
+)
 
 # Build setting to control which toolchain to use
 # This can be set with --//compile:use_gcc_toolchain=true

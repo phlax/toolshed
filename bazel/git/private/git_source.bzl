@@ -57,7 +57,9 @@ def _git_source_wrapper_impl(ctx):
 
     ctx.actions.symlink(output = git_out, target_file = git, is_executable = True)
     ctx.actions.symlink(output = git_remote_http_out, target_file = git_remote_http, is_executable = True)
-    ctx.actions.symlink(output = git_remote_https_out, target_file = git_remote_http_out, is_executable = True)
+    # Point declared symlinks directly at real input Files so remote execution
+    # never has to materialize a symlink-to-symlink chain for git-remote-https.
+    ctx.actions.symlink(output = git_remote_https_out, target_file = git_remote_http, is_executable = True)
     ctx.actions.symlink(output = cacert_out, target_file = cacert)
 
     for src in templates:

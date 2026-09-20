@@ -102,13 +102,19 @@ source_repo_test = analysistest.make(
 
 def _render_hub_build_test_impl(ctx):
     env = unittest.begin(ctx)
-    content = render_git_toolchains_build({
-        "linux-aarch64": None,
-        "linux-x86_64": "git_prebuilt_linux_x86_64",
-    })
+    content = render_git_toolchains_build(
+        {
+            "linux-aarch64": None,
+            "linux-x86_64": "git_prebuilt_linux_x86_64",
+        },
+        "@@envoy_toolshed+//git:defs.bzl",
+        "@@envoy_toolshed+//git:toolchain_type",
+    )
     asserts.true(env, "name = \"linux_x86_64\"" in content)
     asserts.false(env, "name = \"linux_aarch64\"" in content)
-    asserts.true(env, "@git_prebuilt_linux_x86_64//:git" in content)
+    asserts.true(env, "load(\"@@envoy_toolshed+//git:defs.bzl\", \"git_toolchain\")" in content)
+    asserts.true(env, "toolchain_type = \"@@envoy_toolshed+//git:toolchain_type\"" in content)
+    asserts.true(env, "@@git_prebuilt_linux_x86_64//:git" in content)
     return unittest.end(env)
 
 render_hub_build_test = unittest.make(_render_hub_build_test_impl)

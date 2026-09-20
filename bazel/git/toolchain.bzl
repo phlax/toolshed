@@ -12,9 +12,8 @@ def _merge_default_runfiles(ctx, runfiles, target):
     default = target[DefaultInfo]
     runfiles = runfiles.merge(ctx.runfiles(files = default.files.to_list()))
     if default.default_runfiles:
+        # data_runfiles can pull in unrelated data closures from cc_binary-like targets.
         runfiles = runfiles.merge(default.default_runfiles)
-    if default.data_runfiles:
-        runfiles = runfiles.merge(default.data_runfiles)
     return runfiles
 
 def _git_toolchain_impl(ctx):
