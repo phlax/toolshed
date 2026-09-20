@@ -41,10 +41,22 @@ sh_test(
     ],
     env = {
         "GIT_VERSION": VERSIONS["git"],
-        "GLIBC_FLOOR": "2.28",
+        "GLIBC_FLOOR": "2.31",
         "READELF": "$(rootpath //compile:llvm_minimal_host_llvm_readelf)",
         "TARBALL": "$(rootpath :git_linux_x86_64)",
     },
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+sh_test(
+    name = "git_linux_x86_64_https_test",
+    size = "medium",
+    srcs = ["//git/test:assert_git_https.sh"],
+    data = [":git_linux_x86_64"],
+    env = {
+        "TARBALL": "$(rootpath :git_linux_x86_64)",
+    },
+    tags = ["manual", "requires-network", "external"],
     target_compatible_with = ["@platforms//os:linux"],
 )

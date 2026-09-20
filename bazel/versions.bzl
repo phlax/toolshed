@@ -66,6 +66,11 @@ VERSIONS = {
         "Linux-X64": "",
         "Linux-ARM64": "",
     },
+    "cacert": {
+        "version": "2026-08-13",
+        "sha256": "f66dff1bdf8f96060b8177976f8b7d9254bc89bc4db933d769f7384d28480bc9",
+        "url": "https://curl.se/ca/cacert-{version}.pem",
+    },
 
     # Glint binary hashes by architecture
     "glint_sha256": {
