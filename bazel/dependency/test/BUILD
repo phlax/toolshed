@@ -1,27 +1,350 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//dependency:macros.bzl", "module_deps_json")
 load("//dependency:reachability.bzl", "dependency_reachability")
+load("//dependency:registry.bzl", "registry_bazelrc", "repo_registry")
 load(":custom_rule_test.bzl", "custom_library_rule")
 load(":reachability_apparent_name_test.bzl", "apparent_name_test")
 load(":reachability_config_validation_test.bzl", "reachability_config_validation_test")
 load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
 load(":reachability_test_rules.bzl", "dependency_reachability_with_mode")
+load(":registry_test.bzl", "repo_registry_action_test", "repo_registry_runtime_inputs_test", "repo_registry_toolchain_test")
 
 sh_test(
     name = "updater_test",
     size = "small",
     srcs = ["updater_test.sh"],
     data = [
-        "//dependency:bazel-update.sh",
         "testdata/dependency_versions.json",
         "testdata/versions.bzl",
+        "//dependency:bazel-update.sh",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {
         "JQ_BIN": "$(JQ_BIN)",
     },
     toolchains = ["@jq_toolchains//:resolved_toolchain"],
+)
+
+sh_test(
+    name = "version_compare_test",
+    size = "small",
+    srcs = ["version_compare_test.sh"],
+    data = ["//dependency:version-compare.sh"],
+)
+
+genrule(
+    name = "module_report",
+    srcs = [
+        "testdata/module/deps.template.json",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
+        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
+        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+    ],
+    outs = ["module_report.json"],
+    tools = ["@jq_toolchains//:resolved_toolchain"],
+    cmd = """
+set -euo pipefail
+tmpdir="$$(mktemp -d)"
+trap 'rm -rf "$$tmpdir"' EXIT
+bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
+JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
+  bash $(location //dependency:module-update.sh) \
+  /dev/null \
+  "$$tmpdir/deps.json" \
+  --bazelrc="$$tmpdir/.bazelrc" \
+  --report \
+  --json-out="$$tmpdir/report.json"
+sed \
+  -e "s|$$bcr_root/|REGISTRY_BCR/|g" \
+  -e "s|$$envoy_root/|REGISTRY_ENVOY/|g" \
+  "$$tmpdir/report.json" | $(execpath @jq_toolchains//:resolved_toolchain) -S . > "$@"
+""",
+)
+
+diff_test(
+    name = "module_report_test",
+    file1 = ":module_report",
+    file2 = "testdata/module/report.expected.json",
+)
+
+genrule(
+    name = "module_update_bazel_skylib",
+    srcs = [
+        "testdata/module/MODULE.template.bazel",
+        "testdata/module/deps.template.json",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
+        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
+        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+    ],
+    outs = ["module_update_bazel_skylib.bazel"],
+    tools = ["@jq_toolchains//:resolved_toolchain"],
+    cmd = """
+set -euo pipefail
+tmpdir="$$(mktemp -d)"
+trap 'rm -rf "$$tmpdir"' EXIT
+bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
+cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
+BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
+JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
+  bash $(location //dependency:module-update.sh) \
+  "$$tmpdir/MODULE.bazel" \
+  "$$tmpdir/deps.json" \
+  --bazelrc="$$tmpdir/.bazelrc" \
+  bazel_skylib >/dev/null
+cp "$$tmpdir/MODULE.bazel" "$@"
+""",
+)
+
+diff_test(
+    name = "module_update_bazel_skylib_test",
+    file1 = ":module_update_bazel_skylib",
+    file2 = "testdata/module/MODULE.expected.bazel_skylib.bazel",
+)
+
+genrule(
+    name = "module_update_protobuf",
+    srcs = [
+        "testdata/module/MODULE.template.bazel",
+        "testdata/module/deps.template.json",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
+        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
+        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+    ],
+    outs = ["module_update_protobuf.bazel"],
+    tools = ["@jq_toolchains//:resolved_toolchain"],
+    cmd = """
+set -euo pipefail
+tmpdir="$$(mktemp -d)"
+trap 'rm -rf "$$tmpdir"' EXIT
+bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
+cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
+BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
+JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
+  bash $(location //dependency:module-update.sh) \
+  "$$tmpdir/MODULE.bazel" \
+  "$$tmpdir/deps.json" \
+  --bazelrc="$$tmpdir/.bazelrc" \
+  protobuf >/dev/null
+cp "$$tmpdir/MODULE.bazel" "$@"
+""",
+)
+
+diff_test(
+    name = "module_update_protobuf_test",
+    file1 = ":module_update_protobuf",
+    file2 = "testdata/module/MODULE.expected.protobuf.bazel",
+)
+
+genrule(
+    name = "module_update_sq",
+    srcs = [
+        "testdata/module/MODULE.template.bazel",
+        "testdata/module/deps.template.json",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
+        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
+        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+    ],
+    outs = ["module_update_sq.bazel"],
+    tools = ["@jq_toolchains//:resolved_toolchain"],
+    cmd = """
+set -euo pipefail
+tmpdir="$$(mktemp -d)"
+trap 'rm -rf "$$tmpdir"' EXIT
+bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
+sed \
+  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
+  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
+  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
+cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
+BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
+JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
+  bash $(location //dependency:module-update.sh) \
+  "$$tmpdir/MODULE.bazel" \
+  "$$tmpdir/deps.json" \
+  --bazelrc="$$tmpdir/.bazelrc" \
+  sq=1.5.0.envoy >/dev/null
+cp "$$tmpdir/MODULE.bazel" "$@"
+""",
+)
+
+diff_test(
+    name = "module_update_sq_test",
+    file1 = ":module_update_sq",
+    file2 = "testdata/module/MODULE.expected.sq.bazel",
+)
+
+module_deps_json(
+    name = "module_deps_json_fixture",
+    lockfile = "testdata/module/MODULE.bazel.lock",
+)
+
+diff_test(
+    name = "module_deps_json_test",
+    file1 = ":module_deps_json_fixture",
+    file2 = "testdata/module/module_deps.expected.json",
+)
+
+sh_test(
+    name = "module_updater_failure_test",
+    size = "small",
+    srcs = ["module_updater_failure_test.sh"],
+    data = [
+        "testdata/module/MODULE.template.bazel",
+        "testdata/module/deps.template.json",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
+        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
+        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
+        "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {"JQ_BIN": "$(JQ_BIN)"},
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
+)
+
+sh_test(
+    name = "module_updater_live_test",
+    size = "medium",
+    srcs = ["module_updater_live_test.sh"],
+    data = [
+        "//dependency:module-update.sh",
+        "//dependency:version-compare.sh",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {"JQ_BIN": "$(JQ_BIN)"},
+    tags = [
+        "external",
+        "manual",
+        "requires-network",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
+)
+
+registry_bazelrc(
+    name = "rewritten",
+    bazelrc = "testdata/registry.bazelrc",
+    registry = "testdata/resolved.txt",
+    url = "https://raw.githubusercontent.com/envoyproxy/bazel-registry",
+)
+
+diff_test(
+    name = "registry_bazelrc_test",
+    file1 = ":rewritten",
+    file2 = "testdata/registry.expected.bazelrc",
+)
+
+sh_test(
+    name = "registry_bazelrc_failure_test",
+    size = "small",
+    srcs = ["registry_bazelrc_failure_test.sh"],
+    data = [
+        "testdata/registry.missing.bazelrc",
+        "testdata/resolved.txt",
+        "//dependency:registry_bazelrc.sh",
+    ],
+)
+
+repo_registry(
+    name = "resolved_registry",
+    repo = "https://github.com/envoyproxy/bazel-registry.git",
+    tags = ["manual"],
+    url = "https://raw.githubusercontent.com/envoyproxy/bazel-registry",
+)
+
+repo_registry_action_test(
+    name = "repo_registry_action_test",
+    target_under_test = ":resolved_registry",
+)
+
+repo_registry_runtime_inputs_test(
+    name = "repo_registry_runtime_inputs_test",
+    target_under_test = ":resolved_registry",
+)
+
+repo_registry_toolchain_test(
+    name = "repo_registry_toolchain_test",
+)
+
+sh_test(
+    name = "repo_registry_live_test",
+    size = "medium",
+    srcs = ["repo_registry_live_test.sh"],
+    data = [":resolved_registry"],
+    env = {"RESOLVED": "$(rootpath :resolved_registry)"},
+    tags = [
+        "external",
+        "requires-network",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 filegroup(
@@ -55,17 +378,20 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_empty_attribution_patterns",
     testonly = True,
+    attribution_patterns = [],
     roots = [
         ":core_root",
         ":test_root",
     ],
-    attribution_patterns = [],
 )
 
 string_flag(
     name = "reachability_mode",
     build_setting_default = "default",
-    values = ["default", "extra"],
+    values = [
+        "default",
+        "extra",
+    ],
 )
 
 config_setting(
@@ -100,14 +426,14 @@ filegroup(
 dependency_reachability_with_mode(
     name = "reachability_multiconfig",
     testonly = True,
-    roots = [
-        ":variant_core_root",
-        ":variant_test_root",
-    ],
     configs = {
         "default": {},
         "extra": {"//dependency/test:reachability_mode": "extra"},
     },
+    roots = [
+        ":variant_core_root",
+        ":variant_test_root",
+    ],
 )
 
 filegroup(
@@ -129,11 +455,11 @@ filegroup(
 dependency_reachability(
     name = "reachability_attribution",
     testonly = True,
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
     roots = [
         ":attribution_root",
         ":attribution_testonly_root",
     ],
-    attribution_patterns = ["//dependency/test/transitive/ext/..."],
 )
 
 filegroup(
@@ -147,27 +473,27 @@ filegroup(
 dependency_reachability_with_mode(
     name = "reachability_attribution_multiconfig",
     testonly = True,
-    roots = [":attribution_variant_root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
     configs = {
         "default": {},
         "extra": {"//dependency/test:reachability_mode": "extra"},
     },
+    roots = [":attribution_variant_root"],
 )
 
 dependency_reachability(
     name = "reachability_attribution_excluded_baseline",
     testonly = True,
-    roots = ["//dependency/test/transitive/ext/excluded:root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
 )
 
 dependency_reachability(
     name = "reachability_attribution_excluded",
     testonly = True,
-    roots = ["//dependency/test/transitive/ext/excluded:root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
     excluded_patterns = ["rules_pkg*"],
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
 )
 
 sh_test(
@@ -176,9 +502,9 @@ sh_test(
     srcs = ["reachability_test.sh"],
     data = [
         ":reachability",
-        ":reachability_empty_attribution_patterns",
         ":reachability_attribution",
         ":reachability_attribution_multiconfig",
+        ":reachability_empty_attribution_patterns",
         ":reachability_multiconfig",
         "@jq_toolchains//:resolved_toolchain",
     ],
@@ -242,8 +568,8 @@ custom_library_rule(
 filegroup(
     name = "excluded_edge_root",
     srcs = [
-        ":excluded_edge_to_skylib",
         ":excluded_edge_to_rules_shell",
+        ":excluded_edge_to_skylib",
         "@bazel_skylib//lib:sets",
     ],
 )
@@ -251,31 +577,31 @@ filegroup(
 dependency_reachability(
     name = "reachability_excluded_edge",
     testonly = True,
-    roots = [":excluded_edge_root"],
     excluded_edges = ["library"],
+    roots = [":excluded_edge_root"],
 )
 
 dependency_reachability(
     name = "reachability_edge_and_pattern",
     testonly = True,
-    roots = [":excluded_edge_root"],
     excluded_edges = ["library"],
     excluded_patterns = ["bazel_skylib*"],
+    roots = [":excluded_edge_root"],
 )
 
 filegroup(
     name = "pattern_root",
     srcs = [
         "@bazel_skylib//lib:paths",
-        "@bazel_tools//tools/bash/runfiles:runfiles",
+        "@bazel_tools//tools/bash/runfiles",
     ],
 )
 
 dependency_reachability(
     name = "reachability_excluded_pattern",
     testonly = True,
-    roots = [":pattern_root"],
     excluded_patterns = ["bazel_*"],
+    roots = [":pattern_root"],
 )
 
 filegroup(
@@ -292,8 +618,8 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_apparent_exclusion",
     testonly = True,
-    roots = [":apparent_exclusion_root"],
     excluded_patterns = ["apparent_excluded_repo"],
+    roots = [":apparent_exclusion_root"],
 )
 
 filegroup(
@@ -310,8 +636,8 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_excluded_rules_pkg_transitive",
     testonly = True,
-    roots = [":rules_pkg_root"],
     excluded_patterns = ["rules_pkg*"],
+    roots = [":rules_pkg_root"],
 )
 
 dependency_reachability(
@@ -323,9 +649,9 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_empty_exclusions_explicit",
     testonly = True,
-    roots = [":core_root"],
     excluded_edges = [],
     excluded_patterns = [],
+    roots = [":core_root"],
 )
 
 sh_test(
@@ -333,17 +659,17 @@ sh_test(
     size = "small",
     srcs = ["exclusions_reachability_test.sh"],
     data = [
-        ":reachability_excluded_edge",
-        ":reachability_edge_and_pattern",
-        ":reachability_apparent_exclusion_baseline",
         ":reachability_apparent_exclusion",
-        ":reachability_excluded_pattern",
-        ":reachability_rules_pkg_transitive",
-        ":reachability_excluded_rules_pkg_transitive",
+        ":reachability_apparent_exclusion_baseline",
+        ":reachability_attribution_excluded",
+        ":reachability_attribution_excluded_baseline",
+        ":reachability_edge_and_pattern",
         ":reachability_empty_exclusions",
         ":reachability_empty_exclusions_explicit",
-        ":reachability_attribution_excluded_baseline",
-        ":reachability_attribution_excluded",
+        ":reachability_excluded_edge",
+        ":reachability_excluded_pattern",
+        ":reachability_excluded_rules_pkg_transitive",
+        ":reachability_rules_pkg_transitive",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {
@@ -361,6 +687,14 @@ bzl_library(
         "reachability_test_extension.bzl",
         "reachability_test_rules.bzl",
     ],
+    deps = [
+        "@bazel_skylib//lib:unittest",
+    ],
+)
+
+bzl_library(
+    name = "registry_test_lib",
+    srcs = ["registry_test.bzl"],
     deps = [
         "@bazel_skylib//lib:unittest",
     ],
