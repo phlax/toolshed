@@ -17,13 +17,10 @@ expression: |
   {
     dated: (.dated | registry::newest_version),
     plain: (.plain | registry::newest_version),
-    empty: (.empty | registry::newest_version)
+    empty: (try (.empty | registry::newest_version) catch .)
   }
 
 expected:
-  dated:
-    version: 1.1.0-20250101
-  plain:
-    version: 1.1.0
-  empty:
-    error: no replacement versions available
+  dated: 1.1.0-20250101
+  plain: 1.1.0
+  empty: no replacement versions available

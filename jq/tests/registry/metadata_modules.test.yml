@@ -1,0 +1,31 @@
+name: registry::metadata_modules lists hosted modules needing metadata
+
+imports:
+- registry
+
+input:
+  pins:
+  - name: foo
+    version: 1.0.0-20240101
+    file: MODULE.bazel
+    kind: bazel_dep
+    version_start: 0
+    version_end: 0
+  - name: bar
+    version: 2.0.0
+    file: MODULE.bazel
+    kind: bazel_dep
+    version_start: 1
+    version_end: 1
+  exists:
+    modules/foo/metadata.json: true
+    modules/foo/1.0.0-20240101/MODULE.bazel: false
+    modules/bar/metadata.json: false
+    modules/bar/2.0.0/MODULE.bazel: false
+  overrides:
+    foo: 1.1.0-20250101
+
+expression: registry::metadata_modules
+
+expected:
+- foo

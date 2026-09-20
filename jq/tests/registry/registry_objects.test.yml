@@ -1,0 +1,20 @@
+name: registry::registry_objects lists metadata and module paths
+
+imports:
+- registry
+
+input:
+- name: foo
+  version: 1.0.0
+- name: foo
+  version: 1.0.0
+- name: bar
+  version: 2.0.0
+
+expression: registry::registry_objects
+
+expected:
+- modules/foo/metadata.json
+- modules/foo/1.0.0/MODULE.bazel
+- modules/bar/metadata.json
+- modules/bar/2.0.0/MODULE.bazel

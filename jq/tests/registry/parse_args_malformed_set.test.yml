@@ -1,0 +1,12 @@
+name: registry::parse_args rejects malformed set values
+
+imports:
+- registry
+
+input:
+- --set
+- foo
+
+expression: try registry::parse_args catch .
+
+expected: 'FAIL: --set "foo": expected name=version'

@@ -1,0 +1,22 @@
+name: registry::apply_edits updates only version literals
+
+imports:
+- registry
+
+input:
+  files:
+    MODULE.bazel: |
+      bazel_dep(name = "foo", version = "1.0.0-20240101")
+
+before: |
+  .edits = (
+    {files: .files, paths: ["MODULE.bazel"]}
+    | registry::module_pins
+    | map({file, start: .version_start, end: .version_end, to: "1.1.0-20250101"})
+  )
+
+expression: registry::apply_edits
+
+expected:
+  MODULE.bazel: |
+    bazel_dep(name = "foo", version = "1.1.0-20250101")

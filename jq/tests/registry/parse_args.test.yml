@@ -1,0 +1,20 @@
+name: registry::parse_args reads hash and repeated set flags
+
+imports:
+- registry
+
+input:
+- --hash
+- aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+- --set
+- foo=1.0.0
+- --set
+- bar=2.0.0
+
+expression: registry::parse_args
+
+expected:
+  hash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  overrides:
+    foo: 1.0.0
+    bar: 2.0.0

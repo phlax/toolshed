@@ -1,0 +1,11 @@
+name: registry::parse_args rejects unknown flags
+
+imports:
+- registry
+
+input:
+- --wat
+
+expression: try registry::parse_args catch .
+
+expected: 'FAIL: unknown arg: --wat'

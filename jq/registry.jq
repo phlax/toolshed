@@ -5,10 +5,7 @@ def capture_value($match; $name):
   $match.captures[] | select(.name == $name);
 
 def attr_match($body; $attr):
-  try (
-    $body
-    | match("(?s)\\b" + $attr + "\\s*=\\s*\"(?<value>[^\"]*)\"")
-  ) catch null;
+  try ($body | match("(?s)\\b" + $attr + "\\s*=\\s*\"(?<value>[^\"]*)\"")) catch null;
 
 def module_name_attr($kind):
   if $kind == "bazel_dep" then "name" else "module_name" end;
@@ -35,21 +32,15 @@ def registry_path($url_prefix; $hash):
 
 def bazelrc_hash:
   . as $input
-  | reduce ($input.paths // [])[] as $path ({hash: null, error: null};
-      if .error != null then
-        .
-      else
-        (($input.files[$path] // "")
-         | try capture(registry_pattern($input.url_prefix)) catch null) as $match
-        | if $match == null then
-            .error = "Failed to determine current registry hash from \($path)"
-          elif .hash != null and .hash != $match.hash then
-            .error = "Registry hash mismatch: \($path) has \($match.hash), expected \(.hash)"
-          else
-            .hash = $match.hash
-          end
-      end)
-  | if .error != null then {error: .error} else {hash: .hash} end;
+  | reduce ($input.paths // [])[] as $path (null;
+      (($input.files[$path] // "") | try capture(registry_pattern($input.url_prefix)).hash catch null) as $hash
+      | if $hash == null then
+          error("FAIL: failed to determine current registry hash from \($path)")
+        elif . != null and . != $hash then
+          error("FAIL: registry hash mismatch in \($path): \($hash) != \(.)")
+        else
+          $hash
+        end);
 
 def module_pins:
   . as $input
@@ -71,24 +62,51 @@ def module_pins:
             file: $path,
             kind: $kind,
             version_start: ($body_capture.offset + $version_value.offset),
-            version_end: ($body_capture.offset + $version_value.offset + $version_value.length),
+            version_end: ($body_capture.offset + $version_value.offset + $version_value.length)
           }][]];
+
+def registry_objects:
+  reduce .[] as $pin ([];
+    . + [
+      "modules/\($pin.name)/metadata.json",
+      "modules/\($pin.name)/\($pin.version)/MODULE.bazel"
+    ])
+  | unique_preserve;
+
+def batch_check_exists:
+  . as $input
+  | ($input.output | split("\n") | map(select(length > 0))) as $lines
+  | reduce $lines[] as $line ({};
+      if ($line | endswith(" missing")) then
+        .[(($line | sub("^" + ($input.hash | regex_escape) + ":"; "") | sub(" missing$"; "")))] = false
+      else
+        .[(($line | split(" "))[0])] = true
+      end);
+
+def ls_remote_hash:
+  (. | split("\n") | map(select(length > 0))[0]?) as $line
+  | ($line | try capture("^(?<hash>[0-9a-f]+)\\t").hash catch null) as $hash
+  | if $hash == null then
+      error("FAIL: unable to resolve registry branch")
+    else
+      $hash
+    end;
 
 def normalize_date_token($token):
   if ($token | length) == 8 then $token else "20\($token)" end;
 
 def newest_version:
   if length == 0 then
-    {error: "no replacement versions available"}
+    error("no replacement versions available")
   else
     ([.[]
       | {version: ., token: (try capture("-(?<token>\\d{8}|\\d{6})(?=[-.]|$)").token catch null)}
       | select(.token != null)
       | .token |= normalize_date_token(.)] as $dated
      | if ($dated | length) > 0 then
-         {version: ($dated | max_by(.token).version)}
+         $dated | max_by(.token).version
        else
-         {version: .[-1]}
+         .[-1]
        end)
   end;
 
@@ -116,7 +134,7 @@ def module_change($module_info; $target):
         name: $module_info.name,
         from: ($module_info.versions | join(", ")),
         to: $target,
-        files: $module_info.files,
+        files: $module_info.files
       }],
       edits: [($module_info.pins[] | select(.version != $target)
         | {
@@ -125,97 +143,79 @@ def module_change($module_info; $target):
             from: .version,
             to: $target,
             start: .version_start,
-            end: .version_end,
-          })],
+            end: .version_end
+          })]
     }
   end;
 
-def exists:
-  if type == "array" then
-    {pins: .[0], index: .[1]} | exists
-  else
-    . as $input
-    | reduce ($input.pins // [])[] as $pin ({};
-        ($input.index.modules[$pin.name] // null) as $entry
-        | . + {
-            ("modules/\($pin.name)/metadata.json"): ($entry != null),
-            ("modules/\($pin.name)/\($pin.version)/MODULE.bazel"): (($entry.versions // []) | index($pin.version) != null),
-          })
-  end;
-
-def overrides_from_flag:
-  if type == "array" then
-    {entries: .} | overrides_from_flag
-  else
-    reduce (.entries // . // [])[] as $entry ({overrides: {}, errors: []};
-      (($entry | capture("^(?<name>[^=]+)=(?<version>.+)$")?) // null) as $parsed
-      | if $parsed == null then
-          .errors += ["FAIL: --set \($entry | @json): expected name=version"]
+def metadata_modules:
+  . as $input
+  | (module_groups($input.pins // [])) as $grouped
+  | reduce (($grouped | keys_unsorted[]) // empty) as $name ([];
+      ($grouped[$name]) as $module_info
+      | if (hosted_module($input.exists; $name)
+            and (((($input.overrides // {}) | has($name)))
+                 or ([($module_info.versions[] | hosted_version($input.exists; $name; .))] | all | not))) then
+          . + [$name]
         else
-          .overrides[$parsed.name] = $parsed.version
+          .
         end)
-  end;
+  | unique_preserve;
 
 def plan:
-  if type == "array" then
-    {
-      pins: .[0],
-      exists: .[1],
-      index: .[2],
-      current: .[3],
-      info: .[4],
-      overrides: .[5],
-    } | plan
-  else
-    . as $input
-    | ($input.overrides.overrides // $input.overrides // {}) as $overrides
-    | ($input.overrides.errors // []) as $override_errors
-    | (module_groups($input.pins // [])) as $grouped
-    | reduce (($grouped | keys) | sort[]) as $name ({
-        registry: {old: $input.current.hash, new: $input.info.hash},
-        modules: [],
-        edits: [],
-        errors: $override_errors,
-        seen_overrides: [],
-      };
-        ($grouped[$name]) as $module_info
-        | ($overrides[$name] // null) as $override
-        | (hosted_module($input.exists; $name)) as $hosted
-        | if $override != null then
-            .seen_overrides += [$name]
-            | if ($hosted | not) then
-                .errors += ["FAIL: --set \($name)=\($override): module is not served by registry \($input.info.hash)"]
-              elif (hosted_version($input.exists; $name; $override) | not) then
-                .errors += ["FAIL: --set \($name)=\($override): version not found in registry \($input.info.hash)"]
-              else
-                (module_change($module_info; $override)) as $change
-                | .modules += $change.modules
-                | .edits += $change.edits
-              end
-          elif ($hosted | not) then
-            .
-          elif ([($module_info.versions[] | hosted_version($input.exists; $name; .))] | all) then
-            .
-          else
-            (($input.index.modules[$name].metadata.versions // $input.index.modules[$name].versions // []) | newest_version) as $replacement
-            | if $replacement.error != null then
-                .errors += ["FAIL: \($name)@\($module_info.versions[0]) removed from registry and no replacement versions available"]
-              else
-                (module_change($module_info; $replacement.version)) as $change
-                | .modules += $change.modules
-                | .edits += $change.edits
-              end
-          end)
-    | reduce (($overrides | keys_unsorted[]) // empty) as $name (.;
-        if (.seen_overrides | index($name)) != null then
+  . as $input
+  | ($input.overrides // {}) as $overrides
+  | (module_groups($input.pins // [])) as $grouped
+  | reduce (($grouped | keys) | sort[]) as $name ({
+      registry: {old: $input.current_hash, new: $input.target_hash},
+      modules: [],
+      edits: [],
+      errors: [],
+      seen_overrides: []
+    };
+      ($grouped[$name]) as $module_info
+      | ($overrides[$name] // null) as $override
+      | (hosted_module($input.exists; $name)) as $hosted
+      | if $override != null then
+          .seen_overrides += [$name]
+          | if ($hosted | not) then
+              .errors += ["FAIL: --set \($name)=\($override): module is not served by registry \($input.target_hash)"]
+            elif ((($input.metadata[$name].versions // []) | index($override)) == null) then
+              .errors += ["FAIL: --set \($name)=\($override): version not found in registry \($input.target_hash)"]
+            else
+              (module_change($module_info; $override)) as $change
+              | .modules += $change.modules
+              | .edits += $change.edits
+            end
+        elif ($hosted | not) then
           .
-        elif hosted_module($input.exists; $name) then
-          .errors += ["FAIL: --set \($name)=\($overrides[$name]): module is not pinned in configured MODULE.bazel files"]
+        elif ([($module_info.versions[] | hosted_version($input.exists; $name; .))] | all) then
+          .
         else
-          .errors += ["FAIL: --set \($name)=\($overrides[$name]): module is not served by registry \($input.info.hash)"]
+          (try (($input.metadata[$name].versions // []) | newest_version) catch null) as $replacement
+          | if $replacement == null then
+              .errors += ["FAIL: \($name)@\($module_info.versions[0]) removed from registry and no replacement versions available"]
+            else
+              (module_change($module_info; $replacement)) as $change
+              | .modules += $change.modules
+              | .edits += $change.edits
+            end
         end)
-    | del(.seen_overrides)
-  end;
+  | reduce (($overrides | keys_unsorted[]) // empty) as $name (.;
+      if (.seen_overrides | index($name)) != null then
+        .
+      else
+        .errors += ["FAIL: --set \($name)=\($overrides[$name]): module is not pinned in configured MODULE.bazel files"]
+      end)
+  | del(.seen_overrides);
+
+def apply_hash:
+  . as $input
+  | reduce ($input.paths // [])[] as $path ({};
+      . + {
+        ($path): (($input.files[$path] // "")
+          | sub(registry_pattern($input.url_prefix); registry_path($input.url_prefix; $input.hash)))
+      });
 
 def apply_edits:
   . as $input
@@ -223,103 +223,54 @@ def apply_edits:
       .[$edit.file] = (((if has($edit.file) then .[$edit.file] else $input.files[$edit.file] end)
         | .[:$edit.start] + $edit.to + .[$edit.end:])));
 
-def apply_hash:
-  . as $input
-  | reduce ($input.paths // [])[] as $path ({};
-      . + {
-        ($path): (($input.files[$path] // "")
-          | sub(
-              registry_pattern($input.url_prefix);
-              registry_path($input.url_prefix; $input.hash)))
-      });
-
-def apply:
-  if type == "array" then
-    {
-      plan: .[0],
-      current: .[1],
-      bazelrc_files: .[2],
-      module_files: .[3],
-      url_prefix: $ARGS.named.url_prefix,
-    } | apply
-  else
-    . as $input
-    | if (($input.plan.errors // []) | length) > 0 then
-        []
-      else
-        (if $input.plan.registry.old != $input.plan.registry.new then
-           ({files: $input.bazelrc_files, paths: ($input.bazelrc_files | keys_unsorted), url_prefix: $input.url_prefix, hash: $input.plan.registry.new}
-            | apply_hash
-            | to_entries
-            | map({path: .key, content: .value}))
-         else
-           []
-         end) as $hash_edits
-        | ({files: $input.module_files, edits: ($input.plan.edits // [])}
-           | apply_edits
-           | to_entries
-           | map({path: .key, content: .value})) as $module_edits
-        | $hash_edits + $module_edits
-      end
-  end;
-
 def render_report:
   "Registry: \(.registry.old) -> \(.registry.new)\n"
-  + "Registry modules updated:\n"
+  + "module  from -> to  (files)\n"
   + (if (.modules | length) == 0 then
-       "  (none)"
+       "(none)"
      else
        (.modules
-        | map((.files | join(", ")) as $files | "  \(.name)  \(.from) -> \(.to)  (\($files))")
+        | map((.files | join(", ")) as $files | "\(.name)  \(.from) -> \(.to)  (\($files))")
         | join("\n"))
      end);
 
-def check:
-  if type == "array" then
-    (.[3] // false) as $check_only
-    | {
-        hash: (if $check_only then .[0].hash else .[1].hash end),
-        version_txt: .[2].version,
-        branch: ($ARGS.named.branch // .[1].branch),
-        repo: ($ARGS.named.repo // .[1].repo),
-        tags: (.[1].tags // []),
-        commit_exists: (.[1].commit_exists // false),
-        is_ancestor: (.[1].is_ancestor // false),
-        skip_check: (.[1].skip_check // false),
-      } | check
+def parse_set($value):
+  if ($value | test("^[^=]+=.+$")) then
+    ($value | capture("^(?<name>[^=]+)=(?<version>.+)$"))
   else
-    . as $input
-    | if ($input.skip_check // false) then
-        {
-          ok: true,
-          messages: ["WARNING: skipping registry check for \($input.hash)"],
-          errors: [],
-        }
-      elif ($input.commit_exists | not) then
-        {
-          ok: false,
-          messages: [],
-          errors: ["FAIL: Registry commit \($input.hash) not found in \($input.repo)"],
-        }
-      elif ($input.is_ancestor | not) then
-        {
-          ok: false,
-          messages: [],
-          errors: ["FAIL: Registry commit \($input.hash) is not an ancestor of \($input.branch)"],
-        }
-      else
-        {
-          ok: true,
-          messages: ["Registry commit \($input.hash) is an ancestor of \($input.branch)"],
-          errors: [],
-        }
-        | if ($input.tags | length) > 0 then
-            .messages += [($input.tags | join(" ")) as $tags | "Registry commit \($input.hash) is tagged: \($tags)"]
-          elif ($input.version_txt | endswith("-dev")) then
-            .messages += ["WARNING: registry commit \($input.hash) is not a tagged version (ok for \($input.version_txt))"]
-          else
-            .ok = false
-            | .errors += ["FAIL: Registry commit \($input.hash) is not a tagged version, required for release \($input.version_txt)"]
-          end
-      end
+      error("FAIL: --set \($value | @json): expected name=version")
   end;
+
+def parse_args:
+  (if type == "array" then . else $ARGS.positional end) as $argv
+  | reduce $argv[] as $arg ({hash: null, overrides: {}, pending: null};
+      if .pending == "hash" then
+        if $arg == "" then
+          error("FAIL: --hash requires a value")
+        else
+          .hash = $arg | .pending = null
+        end
+      elif .pending == "set" then
+        (parse_set($arg)) as $parsed
+        | .overrides[$parsed.name] = $parsed.version
+        | .pending = null
+      elif $arg == "--hash" then
+        .pending = "hash"
+      elif $arg == "--set" then
+        .pending = "set"
+      elif ($arg | startswith("--hash=")) then
+        ($arg | ltrimstr("--hash=")) as $hash
+        | if $hash == "" then error("FAIL: --hash requires a value") else .hash = $hash end
+      elif ($arg | startswith("--set=")) then
+        (parse_set($arg | ltrimstr("--set="))) as $parsed
+        | .overrides[$parsed.name] = $parsed.version
+      else
+        error("FAIL: unknown arg: \($arg)")
+      end)
+  | if .pending == "hash" then
+      error("FAIL: --hash requires a value")
+    elif .pending == "set" then
+      error("FAIL: --set requires name=version")
+    else
+      del(.pending)
+    end;

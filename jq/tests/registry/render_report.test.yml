@@ -1,0 +1,23 @@
+name: registry::render_report prints module table
+
+imports:
+- registry
+
+input:
+  registry:
+    old: old
+    new: new
+  modules:
+  - name: foo
+    from: 1.0.0-20240101
+    to: 1.1.0-20250101
+    files:
+    - MODULE.bazel
+    - api/MODULE.bazel
+
+expression: registry::render_report
+
+expected: |
+  Registry: old -> new
+  module  from -> to  (files)
+  foo  1.0.0-20240101 -> 1.1.0-20250101  (MODULE.bazel, api/MODULE.bazel)

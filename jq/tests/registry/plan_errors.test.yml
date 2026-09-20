@@ -22,25 +22,17 @@ input:
     modules/foo/1.0.0/MODULE.bazel: false
     modules/bar/metadata.json: true
     modules/bar/0.9.0/MODULE.bazel: false
-  index:
-    modules:
-      foo:
-        versions: []
-        metadata:
-          versions: []
-      bar:
-        versions: []
-  current:
-    hash: old
-  info:
-    hash: new
+  metadata:
+    foo:
+      versions: []
+    bar:
+      versions: []
   overrides:
-    overrides:
-      baz: 1.0.0
-    errors:
-    - 'FAIL: --set "oops": expected name=version'
+    baz: 1.0.0
+  current_hash: old
+  target_hash: new
 
-expression: registry::plan | {registry, modules, errors}
+expression: 'registry::plan | {registry, modules, errors}'
 
 expected:
   registry:
@@ -48,7 +40,6 @@ expected:
     new: new
   modules: []
   errors:
-  - 'FAIL: --set "oops": expected name=version'
   - 'FAIL: bar@0.9.0 removed from registry and no replacement versions available'
   - 'FAIL: foo@1.0.0 removed from registry and no replacement versions available'
-  - 'FAIL: --set baz=1.0.0: module is not served by registry new'
+  - 'FAIL: --set baz=1.0.0: module is not pinned in configured MODULE.bazel files'

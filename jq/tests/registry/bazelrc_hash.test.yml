@@ -17,5 +17,4 @@ input:
 
 expression: registry::bazelrc_hash
 
-expected:
-  hash: ab12cd
+expected: ab12cd

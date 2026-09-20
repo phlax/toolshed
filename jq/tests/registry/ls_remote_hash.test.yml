@@ -1,0 +1,11 @@
+name: registry::ls_remote_hash parses ls-remote output
+
+imports:
+- registry
+
+input: |
+  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refs/heads/main
+
+expression: registry::ls_remote_hash
+
+expected: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

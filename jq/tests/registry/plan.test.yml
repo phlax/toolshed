@@ -26,34 +26,20 @@ input:
   exists:
     modules/foo/metadata.json: true
     modules/foo/1.0.0-20240101/MODULE.bazel: false
-    modules/foo/1.1.0-20250101/MODULE.bazel: true
-    modules/foo/1.0.1-20240201/MODULE.bazel: true
     modules/bar/metadata.json: true
     modules/bar/0.9.0/MODULE.bazel: true
-  index:
-    modules:
-      foo:
-        versions:
-        - 1.0.1-20240201
-        - 1.1.0-20250101
-        metadata:
-          versions:
-          - 1.0.1-20240201
-          - 1.1.0-20250101
-      bar:
-        versions:
-        - 0.9.0
-        metadata:
-          versions:
-          - 0.9.0
+  metadata:
+    foo:
+      versions:
+      - 1.0.1-20240201
+      - 1.1.0-20250101
+    bar:
+      versions:
+      - 0.9.0
   overrides:
-    overrides:
-      bar: 0.9.0
-    errors: []
-  current:
-    hash: old
-  info:
-    hash: new
+    bar: 0.9.0
+  current_hash: old
+  target_hash: new
 
 expression: 'registry::plan | {registry, modules, errors}'
 

@@ -1,7 +1,5 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
-load("@bazel_skylib//rules:build_test.bzl", "build_test")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
-load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//dependency:macros.bzl", "registry_updater")
 load("//dependency:reachability.bzl", "dependency_reachability")
@@ -11,24 +9,9 @@ load(":reachability_config_validation_test.bzl", "reachability_config_validation
 load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
 load(":reachability_test_rules.bzl", "dependency_reachability_with_mode")
 
-sh_test(
-    name = "updater_test",
-    size = "small",
-    srcs = ["updater_test.sh"],
-    data = [
-        "//dependency:bazel-update.sh",
-        "testdata/dependency_versions.json",
-        "testdata/versions.bzl",
-        "@jq_toolchains//:resolved_toolchain",
-    ],
-    env = {
-        "JQ_BIN": "$(JQ_BIN)",
-    },
-    toolchains = ["@jq_toolchains//:resolved_toolchain"],
-)
-
 registry_updater(
     name = "registry",
+    testonly = True,
     bazelrc_files = [
         "testdata/registry/workspace/.bazelrc",
         "testdata/registry/workspace/api/.bazelrc",
@@ -37,31 +20,29 @@ registry_updater(
         "testdata/registry/workspace/MODULE.bazel",
         "testdata/registry/workspace/api/MODULE.bazel",
     ],
-    version_file = "testdata/registry/workspace/VERSION.txt",
-    testonly = True,
 )
 
-diff_test(
-    name = "registry_plan_test",
-    file1 = ":registry.plan",
-    file2 = "testdata/registry/plan.json",
-)
-
-diff_test(
-    name = "registry_report_test",
-    file1 = ":registry.report",
-    file2 = "testdata/registry/report.json",
-)
-
-diff_test(
-    name = "registry_edits_test",
-    file1 = ":registry.edits",
-    file2 = "testdata/registry/edits.json",
-)
-
-build_test(
-    name = "registry_check_ok_test",
-    targets = [":registry.check_ok"],
+sh_test(
+    name = "registry_test",
+    size = "small",
+    srcs = ["registry_test.sh"],
+    data = [
+        "testdata/registry/workspace/.bazelrc",
+        "testdata/registry/workspace/MODULE.bazel",
+        "testdata/registry/workspace/api/.bazelrc",
+        "testdata/registry/workspace/api/MODULE.bazel",
+        ":registry",
+        "//dependency:registry.sh",
+        "@envoy_toolshed_jq//:modules",
+        "@envoy_toolshed_jq//:modules_root.marker",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {
+        "JQ_BIN": "$(JQ_BIN)",
+        "REGISTRY_JQ_BIN": "$(rlocationpath @jq_toolchains//:resolved_toolchain)",
+        "REGISTRY_JQ_MODULES_ROOT_MARKER": "$(rlocationpath @envoy_toolshed_jq//:modules_root.marker)",
+    },
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
 )
 
 filegroup(
@@ -95,17 +76,20 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_empty_attribution_patterns",
     testonly = True,
+    attribution_patterns = [],
     roots = [
         ":core_root",
         ":test_root",
     ],
-    attribution_patterns = [],
 )
 
 string_flag(
     name = "reachability_mode",
     build_setting_default = "default",
-    values = ["default", "extra"],
+    values = [
+        "default",
+        "extra",
+    ],
 )
 
 config_setting(
@@ -140,14 +124,14 @@ filegroup(
 dependency_reachability_with_mode(
     name = "reachability_multiconfig",
     testonly = True,
-    roots = [
-        ":variant_core_root",
-        ":variant_test_root",
-    ],
     configs = {
         "default": {},
         "extra": {"//dependency/test:reachability_mode": "extra"},
     },
+    roots = [
+        ":variant_core_root",
+        ":variant_test_root",
+    ],
 )
 
 filegroup(
@@ -169,11 +153,11 @@ filegroup(
 dependency_reachability(
     name = "reachability_attribution",
     testonly = True,
+    attribution_patterns = ["//dependency/test/transitive/ext/..."],
     roots = [
         ":attribution_root",
         ":attribution_testonly_root",
     ],
-    attribution_patterns = ["//dependency/test/transitive/ext/..."],
 )
 
 filegroup(
@@ -187,27 +171,27 @@ filegroup(
 dependency_reachability_with_mode(
     name = "reachability_attribution_multiconfig",
     testonly = True,
-    roots = [":attribution_variant_root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
     configs = {
         "default": {},
         "extra": {"//dependency/test:reachability_mode": "extra"},
     },
+    roots = [":attribution_variant_root"],
 )
 
 dependency_reachability(
     name = "reachability_attribution_excluded_baseline",
     testonly = True,
-    roots = ["//dependency/test/transitive/ext/excluded:root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
 )
 
 dependency_reachability(
     name = "reachability_attribution_excluded",
     testonly = True,
-    roots = ["//dependency/test/transitive/ext/excluded:root"],
     attribution_patterns = ["//dependency/test/transitive/ext/..."],
     excluded_patterns = ["rules_pkg*"],
+    roots = ["//dependency/test/transitive/ext/excluded:root"],
 )
 
 sh_test(
@@ -216,9 +200,9 @@ sh_test(
     srcs = ["reachability_test.sh"],
     data = [
         ":reachability",
-        ":reachability_empty_attribution_patterns",
         ":reachability_attribution",
         ":reachability_attribution_multiconfig",
+        ":reachability_empty_attribution_patterns",
         ":reachability_multiconfig",
         "@jq_toolchains//:resolved_toolchain",
     ],
@@ -282,8 +266,8 @@ custom_library_rule(
 filegroup(
     name = "excluded_edge_root",
     srcs = [
-        ":excluded_edge_to_skylib",
         ":excluded_edge_to_rules_shell",
+        ":excluded_edge_to_skylib",
         "@bazel_skylib//lib:sets",
     ],
 )
@@ -291,31 +275,31 @@ filegroup(
 dependency_reachability(
     name = "reachability_excluded_edge",
     testonly = True,
-    roots = [":excluded_edge_root"],
     excluded_edges = ["library"],
+    roots = [":excluded_edge_root"],
 )
 
 dependency_reachability(
     name = "reachability_edge_and_pattern",
     testonly = True,
-    roots = [":excluded_edge_root"],
     excluded_edges = ["library"],
     excluded_patterns = ["bazel_skylib*"],
+    roots = [":excluded_edge_root"],
 )
 
 filegroup(
     name = "pattern_root",
     srcs = [
         "@bazel_skylib//lib:paths",
-        "@bazel_tools//tools/bash/runfiles:runfiles",
+        "@bazel_tools//tools/bash/runfiles",
     ],
 )
 
 dependency_reachability(
     name = "reachability_excluded_pattern",
     testonly = True,
-    roots = [":pattern_root"],
     excluded_patterns = ["bazel_*"],
+    roots = [":pattern_root"],
 )
 
 filegroup(
@@ -332,8 +316,8 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_apparent_exclusion",
     testonly = True,
-    roots = [":apparent_exclusion_root"],
     excluded_patterns = ["apparent_excluded_repo"],
+    roots = [":apparent_exclusion_root"],
 )
 
 filegroup(
@@ -350,8 +334,8 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_excluded_rules_pkg_transitive",
     testonly = True,
-    roots = [":rules_pkg_root"],
     excluded_patterns = ["rules_pkg*"],
+    roots = [":rules_pkg_root"],
 )
 
 dependency_reachability(
@@ -363,9 +347,9 @@ dependency_reachability(
 dependency_reachability(
     name = "reachability_empty_exclusions_explicit",
     testonly = True,
-    roots = [":core_root"],
     excluded_edges = [],
     excluded_patterns = [],
+    roots = [":core_root"],
 )
 
 sh_test(
@@ -373,17 +357,17 @@ sh_test(
     size = "small",
     srcs = ["exclusions_reachability_test.sh"],
     data = [
-        ":reachability_excluded_edge",
-        ":reachability_edge_and_pattern",
-        ":reachability_apparent_exclusion_baseline",
         ":reachability_apparent_exclusion",
-        ":reachability_excluded_pattern",
-        ":reachability_rules_pkg_transitive",
-        ":reachability_excluded_rules_pkg_transitive",
+        ":reachability_apparent_exclusion_baseline",
+        ":reachability_attribution_excluded",
+        ":reachability_attribution_excluded_baseline",
+        ":reachability_edge_and_pattern",
         ":reachability_empty_exclusions",
         ":reachability_empty_exclusions_explicit",
-        ":reachability_attribution_excluded_baseline",
-        ":reachability_attribution_excluded",
+        ":reachability_excluded_edge",
+        ":reachability_excluded_pattern",
+        ":reachability_excluded_rules_pkg_transitive",
+        ":reachability_rules_pkg_transitive",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {
