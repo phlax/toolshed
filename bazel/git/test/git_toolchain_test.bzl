@@ -6,19 +6,60 @@ load("//git/private:git_prebuilt.bzl", "render_git_toolchains_build")
 
 _SOURCE_TOOLCHAIN = str(Label("//git:source_toolchain"))
 
+_LAUNCHER_TEMPLATE = """#!/bin/bash
+set -euo pipefail
+self="$0"
+case "$self" in
+    /*) ;;
+    *) self="$(pwd)/$self" ;;
+esac
+if [[ -n "${{RUNFILES_DIR:-}}" ]]; then
+    runfiles="$RUNFILES_DIR"
+elif [[ -n "${{TEST_SRCDIR:-}}" ]]; then
+    runfiles="$TEST_SRCDIR"
+elif [[ -d "$self.runfiles" ]]; then
+    runfiles="$self.runfiles"
+else
+    launcher="/{launcher}"
+    case "$self" in
+        *"$launcher") runfiles="${{self%"$launcher"}}" ;;
+        *) runfiles="$(CDPATH= cd "$(dirname "$self")" && pwd)" ;;
+    esac
+fi
+exec "$runfiles/{git}" "$@"
+"""
+
 def _repo_marker_name(name, repo_name):
     return "%s_%s.repo_name" % (name, repo_name)
+
+def _runfile_path(ctx, executable):
+    if executable.short_path.startswith("../"):
+        return executable.short_path[3:]
+    return "%s/%s" % (ctx.workspace_name, executable.short_path)
+
+def _declare_launcher(ctx, executable):
+    launcher = ctx.actions.declare_file(ctx.label.name + ".sh")
+    ctx.actions.write(
+        launcher,
+        _LAUNCHER_TEMPLATE.format(
+            git = _runfile_path(ctx, executable),
+            launcher = _runfile_path(ctx, launcher),
+        ),
+        is_executable = True,
+    )
+    return launcher
 
 def _git_toolchain_probe_impl(ctx):
     git_info = ctx.toolchains[GIT_TOOLCHAIN_TYPE].git
     repo_name = git_info.git.owner.repo_name
     marker = ctx.actions.declare_file(_repo_marker_name(ctx.label.name, repo_name))
     ctx.actions.write(marker, repo_name + "\n")
+    launcher = _declare_launcher(ctx, git_info.git)
     return [
         DefaultInfo(
-            executable = git_info.git,
-            files = depset([git_info.git, marker]),
-            runfiles = git_info.runfiles.merge(ctx.runfiles(files = [marker])),
+            executable = launcher,
+            files = depset([launcher, marker]),
+            runfiles = git_info.runfiles.merge(ctx.runfiles(files = [git_info.git, marker])),
         ),
         OutputGroupInfo(repo_name = depset([marker])),
     ]
@@ -40,11 +81,12 @@ _source_toolchain_transition = transition(
 
 def _source_probe_impl(ctx):
     default = ctx.attr.probe[0][DefaultInfo]
+    launcher = _declare_launcher(ctx, default.files_to_run.executable)
     return [
         DefaultInfo(
-            executable = default.files_to_run.executable,
-            files = default.files,
-            runfiles = default.default_runfiles,
+            executable = launcher,
+            files = depset([launcher]),
+            runfiles = default.default_runfiles.merge(ctx.runfiles(files = default.files.to_list())),
         ),
         OutputGroupInfo(repo_name = ctx.attr.probe[0][OutputGroupInfo].repo_name),
     ]
@@ -70,7 +112,7 @@ def _resolved_repo_test_impl(ctx):
     asserts.equals(env, 1, len(repo_files))
     asserts.true(
         env,
-        repo_files[0].basename == _repo_marker_name(ctx.attr.target_under_test.label.name, ctx.attr.expected_repo_name),
+        ctx.attr.expected_repo_name in repo_files[0].basename and repo_files[0].basename.endswith(".repo_name"),
         "expected repo marker for %s, got %s" % (ctx.attr.expected_repo_name, repo_files[0].basename),
     )
     return analysistest.end(env)

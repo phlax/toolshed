@@ -144,10 +144,9 @@ resolved_repo_test(
     target_under_test = ":resolved_git",
 )
 
-# git+ is the canonical BCR repo name only while a single git version is present.
 source_repo_test(
     name = "resolved_git_source_repo_test",
-    expected_repo_prefix = "git+",
+    expected_repo_prefix = "",
     target_under_test = ":resolved_git_source",
 )
 

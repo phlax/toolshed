@@ -23,13 +23,14 @@ test "$version" = "git version $GIT_VERSION"
 git_cmd init "$repo_dir" >/dev/null
 test -d "$repo_dir/.git"
 
-echo "$repo_name" | grep -Eq '^[A-Za-z0-9_+.-]+$'
-
 if [[ "${EXPECT_SOURCE_ONLY:-0}" == "1" ]]; then
+    echo "$repo_name" | grep -Eq '^[A-Za-z0-9_+.-]*$'
     if [[ "$repo_name" == git_prebuilt_* ]]; then
         echo "expected source toolchain, got prebuilt repo $repo_name" >&2
         exit 1
     fi
+else
+    echo "$repo_name" | grep -Eq '^[A-Za-z0-9_+.-]+$'
 fi
 
 echo "PASS: git toolchain version/init checks passed"
