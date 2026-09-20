@@ -51,9 +51,8 @@ def _declare_launcher(ctx, executable):
 
 def _git_toolchain_probe_impl(ctx):
     git_info = ctx.toolchains[GIT_TOOLCHAIN_TYPE].git
-    repo_name = git_info.repo_name
+    repo_name = git_info.git.owner.repo_name
     marker = ctx.actions.declare_file(_repo_marker_name(ctx.label.name, repo_name))
-    executable = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.write(marker, repo_name + "\n")
     launcher = _declare_launcher(ctx, git_info.git)
     return [
@@ -129,17 +128,25 @@ def _source_repo_test_impl(ctx):
     env = analysistest.begin(ctx)
     repo_files = analysistest.target_under_test(env)[OutputGroupInfo].repo_name.to_list()
     asserts.equals(env, 1, len(repo_files))
-    asserts.true(
+    basename = repo_files[0].basename
+    asserts.false(
         env,
-        ("_" + ctx.attr.expected_repo_prefix + ".repo_name") in repo_files[0].basename,
-        "expected repo marker prefix %s, got %s" % (ctx.attr.expected_repo_prefix, repo_files[0].basename),
+        ctx.attr.forbidden_repo_substring in basename,
+        "unexpected repo marker substring %s in %s" % (ctx.attr.forbidden_repo_substring, basename),
     )
+    if ctx.attr.expected_repo_substring:
+        asserts.true(
+            env,
+            ctx.attr.expected_repo_substring in basename,
+            "expected repo marker substring %s, got %s" % (ctx.attr.expected_repo_substring, basename),
+        )
     return analysistest.end(env)
 
 source_repo_test = analysistest.make(
     _source_repo_test_impl,
     attrs = {
-        "expected_repo_prefix": attr.string(mandatory = True),
+        "expected_repo_substring": attr.string(default = ""),
+        "forbidden_repo_substring": attr.string(mandatory = True),
     },
 )
 

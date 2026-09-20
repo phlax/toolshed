@@ -146,7 +146,7 @@ resolved_repo_test(
 
 source_repo_test(
     name = "resolved_git_source_repo_test",
-    expected_repo_prefix = "",
+    forbidden_repo_substring = "git_prebuilt_",
     target_under_test = ":resolved_git_source",
 )
 

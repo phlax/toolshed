@@ -2,13 +2,6 @@
 
 load("//git/private:transitions.bzl", "openssl_transition")
 
-GitSourceInfo = provider(
-    doc = "Metadata about the source-built git wrapper.",
-    fields = {
-        "repo_name": "Canonical repo name for the wrapped upstream git executable.",
-    },
-)
-
 def _template_dest(src):
     parts = src.short_path.split("/templates/", 1)
     if len(parts) != 2:
@@ -113,8 +106,6 @@ exec "$GIT_EXEC_PATH/git" "$@"
         executable = git_wrapper,
         files = depset(outputs),
         runfiles = ctx.runfiles(files = outputs),
-    ), GitSourceInfo(
-        repo_name = git_target.label.workspace_name,
     )]
 
 git_source_wrapper = rule(
