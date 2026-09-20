@@ -454,7 +454,7 @@
     },
     "//git:extensions.bzl%git_prebuilt_extension": {
       "general": {
-        "bzlTransitiveDigest": "9IjdAmC6H3GylL+/GNzHXZieAn1AmfOqfQMYTyAICX0=",
+        "bzlTransitiveDigest": "IaUC7wC4J68ZUEsStUpAQGHTH7bEB9InolTFlprBfAI=",
         "usagesDigest": "PTJ9J4ibeXpHG+AY0nNjugIA2FAPEvua7YTlmsbbV9o=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -486,10 +486,8 @@
           "git_toolchains": {
             "repoRuleId": "@@//git/private:git_prebuilt.bzl%git_toolchains_hub",
             "attributes": {
-              "defs_label": "'@@//git:defs.bzl'",
               "linux_aarch64": "@@+git_prebuilt_extension+git_prebuilt_linux_aarch64//:BUILD.bazel",
-              "linux_x86_64": "@@+git_prebuilt_extension+git_prebuilt_linux_x86_64//:BUILD.bazel",
-              "toolchain_type_label": "'@@//git:toolchain_type'"
+              "linux_x86_64": "@@+git_prebuilt_extension+git_prebuilt_linux_x86_64//:BUILD.bazel"
             }
           }
         },
