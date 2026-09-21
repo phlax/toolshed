@@ -23,7 +23,13 @@ set -euo pipefail
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 export HOME="$tmpdir"
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_TERMINAL_PROMPT=0
 COMMIT=$("$5" ls-remote --exit-code "$1" "refs/heads/$2" | cut -f1)
+if ! printf '%s\n' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+    echo "expected 40-hex commit for $1 refs/heads/$2, got: '$COMMIT'" >&2
+    exit 1
+fi
 echo "$3/$COMMIT" > "$4"
 """,
         arguments = [ctx.attr.repo, ctx.attr.ref, ctx.attr.url, out.path, git_info.git.path],

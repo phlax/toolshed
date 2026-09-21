@@ -9,7 +9,7 @@ load(":reachability_apparent_name_test.bzl", "apparent_name_test")
 load(":reachability_config_validation_test.bzl", "reachability_config_validation_test")
 load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
 load(":reachability_test_rules.bzl", "dependency_reachability_with_mode")
-load(":registry_test.bzl", "repo_registry_action_test", "repo_registry_toolchain_test")
+load(":registry_test.bzl", "repo_registry_action_test", "repo_registry_runtime_inputs_test", "repo_registry_toolchain_test")
 
 sh_test(
     name = "updater_test",
@@ -63,8 +63,26 @@ repo_registry_action_test(
     target_under_test = ":resolved_registry",
 )
 
+repo_registry_runtime_inputs_test(
+    name = "repo_registry_runtime_inputs_test",
+    target_under_test = ":resolved_registry",
+)
+
 repo_registry_toolchain_test(
     name = "repo_registry_toolchain_test",
+)
+
+sh_test(
+    name = "repo_registry_live_test",
+    size = "medium",
+    srcs = ["repo_registry_live_test.sh"],
+    data = [":resolved_registry"],
+    env = {"RESOLVED": "$(rootpath :resolved_registry)"},
+    tags = [
+        "external",
+        "requires-network",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 filegroup(
