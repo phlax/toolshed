@@ -30,12 +30,38 @@ def _repo_registry_action_test_impl(ctx):
     )
     asserts.true(
         env,
-        "git_prebuilt" in argv[-1] or "/git+/" in argv[-1],
+        argv[-1].startswith("external/") or "/external/" in argv[-1],
         "expected hermetic git repo path in argv, got %s" % argv[-1],
     )
     return analysistest.end(env)
 
 repo_registry_action_test = analysistest.make(_repo_registry_action_test_impl)
+
+def _repo_registry_runtime_inputs_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    action = _repo_registry_action(env)
+    inputs = action.inputs.to_list()
+    input_basenames = [f.basename for f in inputs]
+    input_paths = [f.short_path for f in inputs]
+    remote_helpers = [
+        path
+        for path in input_paths
+        if path.endswith("/libexec/git-core/git-remote-https") or
+           path.endswith("/libexec/git-core/git-remote-http")
+    ]
+    asserts.true(
+        env,
+        "ca-certificates.crt" in input_basenames,
+        "expected CA bundle in action inputs, got %s" % input_paths,
+    )
+    asserts.true(
+        env,
+        len(remote_helpers) > 0,
+        "expected git https helper in action inputs, got %s" % input_paths,
+    )
+    return analysistest.end(env)
+
+repo_registry_runtime_inputs_test = analysistest.make(_repo_registry_runtime_inputs_test_impl)
 
 def _repo_registry_toolchain_test_impl(ctx):
     env = unittest.begin(ctx)

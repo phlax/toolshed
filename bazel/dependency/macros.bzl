@@ -120,11 +120,13 @@ def registry_updater(
       **kwargs: Additional `write_source_files` keyword arguments.
     """
     helper_tags = ["manual"] + kwargs.pop("tags", [])
+    target_compatible_with = kwargs.pop("target_compatible_with", ["@platforms//os:linux"])
     repo_registry(
         name = name + "_resolved",
         ref = ref,
         repo = repo,
         tags = helper_tags,
+        target_compatible_with = target_compatible_with,
         url = url,
     )
     registry_bazelrc(
@@ -132,24 +134,17 @@ def registry_updater(
         bazelrc = bazelrc,
         registry = ":" + name + "_resolved",
         tags = helper_tags,
+        target_compatible_with = target_compatible_with,
         url = url,
     )
-    if visibility == None:
-        write_source_files(
-            name = name,
-            check_that_out_file_exists = False,
-            diff_test = False,
-            files = {bazelrc: ":" + name + "_bazelrc"},
-            tags = helper_tags,
-            **kwargs
-        )
-    else:
-        write_source_files(
-            name = name,
-            check_that_out_file_exists = False,
-            diff_test = False,
-            files = {bazelrc: ":" + name + "_bazelrc"},
-            tags = helper_tags,
-            visibility = visibility,
-            **kwargs
-        )
+    if visibility != None:
+        kwargs["visibility"] = visibility
+    write_source_files(
+        name = name,
+        check_that_out_file_exists = False,
+        diff_test = False,
+        files = {bazelrc: ":" + name + "_bazelrc"},
+        tags = helper_tags,
+        target_compatible_with = target_compatible_with,
+        **kwargs
+    )

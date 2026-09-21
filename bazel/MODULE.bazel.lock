@@ -374,7 +374,7 @@
     },
     "//compile:extensions.bzl%llvm_minimal_extension": {
       "general": {
-        "bzlTransitiveDigest": "T+65B3goctbjOT15H6O76CTpor9pDAwVUL4EGufdB4I=",
+        "bzlTransitiveDigest": "AhS+r/Xu5d95W5oENOoBuOI0MnDW2AbqqsS8sTrGW3k=",
         "usagesDigest": "D70KHEh4AfB3Cot0T0KB3/nCpqoq5SKbMQLlmQ4WcJI=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -383,7 +383,7 @@
           "llvm_minimal_linux_x64": {
             "repoRuleId": "@@//compile:llvm_minimal.bzl%llvm_minimal_repo",
             "attributes": {
-              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.16/llvm-minimal-22.1.8-Linux-X64.tar.zst",
+              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.18/llvm-minimal-22.1.8-Linux-X64.tar.zst",
               "sha256": "6cb4cca6df33be00c80fa1639062c973d1cafe4e7ad98a9b4bdf21bf9dec5806",
               "strip_prefix": "llvm-minimal-22.1.8-Linux-X64"
             }
@@ -391,7 +391,7 @@
           "llvm_minimal_linux_arm64": {
             "repoRuleId": "@@//compile:llvm_minimal.bzl%llvm_minimal_repo",
             "attributes": {
-              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.16/llvm-minimal-22.1.8-Linux-ARM64.tar.zst",
+              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.18/llvm-minimal-22.1.8-Linux-ARM64.tar.zst",
               "sha256": "9a6cc0a84d524342e578db739b04e8a3875adb40b38887e4e074661e925f8a9c",
               "strip_prefix": "llvm-minimal-22.1.8-Linux-ARM64"
             }
@@ -399,7 +399,7 @@
           "llvm_minimal_macos_arm64": {
             "repoRuleId": "@@//compile:llvm_minimal.bzl%llvm_minimal_repo",
             "attributes": {
-              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.16/llvm-minimal-22.1.8-macOS-ARM64.tar.zst",
+              "url": "https://github.com/envoyproxy/toolshed/releases/download/bins-v0.2.18/llvm-minimal-22.1.8-macOS-ARM64.tar.zst",
               "sha256": "928e51aa7c97fbb8c5c50075118f4b36e36363b1a2c3af2dfef9aea1ef526ade",
               "strip_prefix": "llvm-minimal-22.1.8-macOS-ARM64"
             }
@@ -452,6 +452,30 @@
         "recordedRepoMappingEntries": []
       }
     },
+    "//dependency/test:reachability_test_extension.bzl%reachability_test_extension": {
+      "general": {
+        "bzlTransitiveDigest": "XQ29jldKZrofMxse6SyWwTha5NHmIp+pOD0+X5RKSRY=",
+        "usagesDigest": "WM1vYn878mgCrIRc/mgMS1L4p1Vz4L9EpujVFaOvbm0=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "apparent_excluded_transitive_repo": {
+            "repoRuleId": "@@//dependency/test:reachability_test_extension.bzl%_test_repo",
+            "attributes": {
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"leaf\",\n    srcs = [],\n)\n"
+            }
+          },
+          "apparent_excluded_repo": {
+            "repoRuleId": "@@//dependency/test:reachability_test_extension.bzl%_test_repo",
+            "attributes": {
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nfilegroup(\n    name = \"direct\",\n    srcs = [\"@apparent_excluded_transitive_repo//:leaf\"],\n)\n"
+            }
+          }
+        },
+        "recordedRepoMappingEntries": []
+      }
+    },
     "//git:extensions.bzl%git_prebuilt_extension": {
       "general": {
         "bzlTransitiveDigest": "9IjdAmC6H3GylL+/GNzHXZieAn1AmfOqfQMYTyAICX0=",
@@ -498,7 +522,7 @@
     },
     "//sysroot:extensions.bzl%sysroot_extension": {
       "general": {
-        "bzlTransitiveDigest": "BFDYjkG0dTS4QM4+yyNk7Qc20Iyx6GyU25eWhQnWHYs=",
+        "bzlTransitiveDigest": "h4Oz8I0A9K18HtQmy534zEeJaBLjc2cM4KR50s/DIC4=",
         "usagesDigest": "BoZeTvpbLBBcgIx54Y7seGt9XcYQ3V5evLSC6zSkOuQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -507,8 +531,8 @@
           "sysroot_linux_amd64": {
             "repoRuleId": "@@//sysroot:sysroot.bzl%sysroot",
             "attributes": {
-              "version": "0.2.16",
-              "sha256": "5134f12e58c9acea186b520d985cd5beec2518f24bdb346f08f930edd45544e1",
+              "version": "0.2.18",
+              "sha256": "b9841e1ef1d2b2a9ebe2c73c8888275021a38042b04035f6fabad26bf53ea7af",
               "arch": "amd64",
               "glibc_version": "2.31",
               "stdcc_version": "13"
@@ -517,8 +541,8 @@
           "sysroot_linux_arm64": {
             "repoRuleId": "@@//sysroot:sysroot.bzl%sysroot",
             "attributes": {
-              "version": "0.2.16",
-              "sha256": "659b3fefbd4e24eb9fcc51bd0429815b27b7edadea38dcab07bb16221970163f",
+              "version": "0.2.18",
+              "sha256": "c6a768cf16f1f0455a7797299fe8f9a2e3a65328ac0e0d186d129501aafeff32",
               "arch": "arm64",
               "glibc_version": "2.31",
               "stdcc_version": "13"
