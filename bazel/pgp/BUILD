@@ -1,7 +1,8 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
-load("//:versions.bzl", "VERSIONS")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//:versions.bzl", "VERSIONS")
+load("//pgp/private:sq_package.bzl", "sq_package")
 
 exports_files([
     "defs.bzl",
@@ -55,24 +56,31 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-alias(
+# Packaging targets stay in the public package so toolshed CI always emits the
+# published tarballs at stable bazel-bin paths. They remain `manual`, so only
+# toolshed's own explicit CI builds analyze them with the dev-only source deps.
+sq_package(
     name = "sq_linux_x86_64",
-    actual = "//pgp/dev:sq_linux_x86_64",
-    tags = ["manual"],
+    platform = "Linux-X64",
+    stripper = "//compile:llvm_minimal_host_llvm_strip",
     visibility = ["//visibility:public"],
 )
 
-alias(
+sq_package(
     name = "sq_linux_arm64",
-    actual = "//pgp/dev:sq_linux_arm64",
-    tags = ["manual"],
+    platform = "Linux-ARM64",
+    stripper = "//compile:llvm_minimal_host_llvm_strip",
     visibility = ["//visibility:public"],
 )
 
-alias(
+filegroup(
     name = "sq_packages",
-    actual = "//pgp/dev:sq_packages",
+    srcs = [
+        ":sq_linux_arm64",
+        ":sq_linux_x86_64",
+    ],
     tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//visibility:public"],
 )
 

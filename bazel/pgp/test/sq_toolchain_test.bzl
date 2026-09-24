@@ -4,6 +4,7 @@ load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load("//pgp:defs.bzl", "PGP_TOOLCHAIN_TYPE")
 load("//pgp/private:sq_prebuilt.bzl", "render_sq_toolchains_build")
 
+_PREBUILT_TOOLCHAINS = str(Label("@sq_toolchains//:all"))
 _SOURCE_TOOLCHAIN = str(Label("//pgp/dev:sq_toolchain"))
 
 _LAUNCHER_TEMPLATE = """#!/bin/bash
@@ -26,7 +27,7 @@ else
         *) runfiles="$(CDPATH= cd "$(dirname "$self")" && pwd)" ;;
     esac
 fi
-mapfile -t matches < <(find "$runfiles" -type f -path '*/bin/sq' | sort)
+mapfile -t matches < <(find -L "$runfiles" \\( -path '*/bin/sq' -o -name sq_from_source \\) -exec readlink -f {{}} \\; | sort -u)
 if [[ "${{#matches[@]}}" -ne 1 ]]; then
     echo "expected exactly one sq binary in runfiles, got ${{#matches[@]}}" >&2
     printf 'matches:\\n%s\\n' "${{matches[*]:-}}" >&2
@@ -82,6 +83,15 @@ _source_toolchain_transition = transition(
     outputs = ["//command_line_option:extra_toolchains"],
 )
 
+def _prebuilt_toolchain_transition_impl(_settings, _attr):
+    return {"//command_line_option:extra_toolchains": [_PREBUILT_TOOLCHAINS]}
+
+_prebuilt_toolchain_transition = transition(
+    implementation = _prebuilt_toolchain_transition_impl,
+    inputs = [],
+    outputs = ["//command_line_option:extra_toolchains"],
+)
+
 def _source_probe_impl(ctx):
     probe = ctx.attr.probe[0]
     default = probe[DefaultInfo]
@@ -103,36 +113,54 @@ def _source_probe_impl(ctx):
         OutputGroupInfo(repo_name = probe[OutputGroupInfo].repo_name),
     ]
 
-source_toolchain_probe = rule(
-    implementation = _source_probe_impl,
-    executable = True,
-    attrs = {
+def _probe_attrs(cfg):
+    return {
         "probe": attr.label(
             mandatory = True,
             executable = True,
-            cfg = _source_toolchain_transition,
+            cfg = cfg,
         ),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
         ),
-    },
+    }
+
+prebuilt_toolchain_probe = rule(
+    implementation = _source_probe_impl,
+    executable = True,
+    attrs = _probe_attrs(_prebuilt_toolchain_transition),
+)
+
+source_toolchain_probe = rule(
+    implementation = _source_probe_impl,
+    executable = True,
+    attrs = _probe_attrs(_source_toolchain_transition),
 )
 
 def _resolved_repo_test_impl(ctx):
     env = analysistest.begin(ctx)
     repo_files = analysistest.target_under_test(env)[OutputGroupInfo].repo_name.to_list()
     asserts.equals(env, 1, len(repo_files))
-    asserts.true(
-        env,
-        ctx.attr.expected_repo_name in repo_files[0].basename and repo_files[0].basename.endswith(".repo_name"),
-        "expected repo marker for %s, got %s" % (ctx.attr.expected_repo_name, repo_files[0].basename),
-    )
+    basename = repo_files[0].basename
+    if ctx.attr.expect_main_repo:
+        asserts.true(
+            env,
+            basename.endswith("_.repo_name"),
+            "expected main-repo marker, got %s" % basename,
+        )
+    else:
+        asserts.true(
+            env,
+            ctx.attr.expected_repo_name in basename and basename.endswith(".repo_name"),
+            "expected repo marker for %s, got %s" % (ctx.attr.expected_repo_name, basename),
+        )
     return analysistest.end(env)
 
 resolved_repo_test = analysistest.make(
     _resolved_repo_test_impl,
     attrs = {
-        "expected_repo_name": attr.string(mandatory = True),
+        "expect_main_repo": attr.bool(default = False),
+        "expected_repo_name": attr.string(default = ""),
     },
 )
 
@@ -146,11 +174,18 @@ def _source_repo_test_impl(ctx):
         ctx.attr.forbidden_repo_substring in basename,
         "unexpected repo marker substring %s in %s" % (ctx.attr.forbidden_repo_substring, basename),
     )
+    if ctx.attr.expect_main_repo:
+        asserts.true(
+            env,
+            basename.endswith("_.repo_name"),
+            "expected main-repo marker, got %s" % basename,
+        )
     return analysistest.end(env)
 
 source_repo_test = analysistest.make(
     _source_repo_test_impl,
     attrs = {
+        "expect_main_repo": attr.bool(default = False),
         "forbidden_repo_substring": attr.string(mandatory = True),
     },
 )

@@ -69,7 +69,9 @@ my_rule = rule(
 ```
 
 toolshed itself also keeps a dev-only source fallback registered for local
-builds and release packaging. It can be forced for debugging with:
+builds and tests. The published packaging targets stay `manual` in `//git` so
+toolshed CI still emits stable `bazel-bin/git/...` artifacts. The source
+toolchain can be forced for debugging with:
 
 ```console
 bazel test //git/test:toolchain_source_version_test --extra_toolchains=@envoy_toolshed//git/dev:source_toolchain

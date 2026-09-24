@@ -203,7 +203,8 @@ register_toolchains("//:source_sq_toolchain")
 ```
 
 toolshed itself keeps `//pgp/dev:sq_toolchain` as a dev-only source fallback
-for its own builds, tests, and release packaging targets.
+for its own builds and tests. The published packaging targets stay `manual` in
+`//pgp` so toolshed CI still emits stable `bazel-bin/pgp/...` artifacts.
 
 ## Auditing your own targets
 
