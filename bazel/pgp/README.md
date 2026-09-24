@@ -145,6 +145,12 @@ By default, toolshed registers prebuilt `sq` toolchains published in the
 resolves a prebuilt signer on Linux x86_64 and arm64 without adding the
 source-only `sq` module to downstream module graphs.
 
+### Behaviour change
+
+Non-Linux exec platforms such as macOS no longer get an automatic toolshed
+source fallback for `@envoy_toolshed//pgp:toolchain_type`. They must opt into a
+source-built signer explicitly as documented below.
+
 Swapping in a different signer (for example a purpose-built Rust signer) is a
 matter of registering another toolchain - the rules do not change:
 
@@ -196,8 +202,8 @@ Register that toolchain in the downstream `MODULE.bazel`:
 register_toolchains("//:source_sq_toolchain")
 ```
 
-toolshed itself keeps `//pgp:sq_toolchain` as a dev-only source fallback for
-its own builds, tests, and release packaging targets.
+toolshed itself keeps `//pgp/dev:sq_toolchain` as a dev-only source fallback
+for its own builds, tests, and release packaging targets.
 
 ## Auditing your own targets
 

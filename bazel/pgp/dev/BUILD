@@ -23,12 +23,14 @@ sq_package(
     name = "sq_linux_x86_64",
     platform = "Linux-X64",
     stripper = "//compile:llvm_minimal_host_llvm_strip",
+    visibility = ["//visibility:public"],
 )
 
 sq_package(
     name = "sq_linux_arm64",
     platform = "Linux-ARM64",
     stripper = "//compile:llvm_minimal_host_llvm_strip",
+    visibility = ["//visibility:public"],
 )
 
 filegroup(

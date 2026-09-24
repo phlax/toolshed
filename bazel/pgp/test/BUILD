@@ -60,7 +60,8 @@ filegroup(
 )
 
 # Stub signer/toolchain for the analysis tests. Real signing uses the default
-# registered `//pgp:sq_toolchain`.
+# registered prebuilt `@sq_toolchains` toolchain, with `//pgp/dev:sq_toolchain`
+# as the dev-only source fallback.
 sh_binary(
     name = "stub_signer",
     srcs = ["stub_signer.sh"],

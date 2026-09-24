@@ -57,7 +57,7 @@ sq_binary = rule(
     },
 )
 
-def sq_package(name, platform, stripper):
+def sq_package(name, platform, stripper, visibility = None):
     package_dir = "sq-%s-%s" % (VERSIONS["sq"], platform)
     binary = name + "_binary"
     build = name + "_build"
@@ -98,4 +98,5 @@ EOF""",
         out = package_dir + ".tar.zst",
         srcs = [":" + binary, ":" + build],
         tags = ["manual"],
+        visibility = visibility,
     )
