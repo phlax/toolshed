@@ -7,11 +7,11 @@ set -euo pipefail
 
 repo_name=$(tr -d '\n' <"$REPO_NAME_FILE")
 
-# `sq version` prints `sq <version>` on its first stdout line; anything on
-# stderr (eg. warnings about the disabled home/cert store) must not be mixed in.
-if ! version_out="$("$SQ" version 2>"${TEST_TMPDIR:-/tmp}/sq-version.stderr")"; then
+# `sq version` may emit its version banner on stderr in some environments, so
+# validate the first line of the combined output instead of stdout alone.
+if ! version_out="$("$SQ" version 2>&1)"; then
     echo "'$SQ version' failed:" >&2
-    cat "${TEST_TMPDIR:-/tmp}/sq-version.stderr" >&2 || true
+    echo "$version_out" >&2
     exit 1
 fi
 version="${version_out%%$'\n'*}"
@@ -19,7 +19,6 @@ if [[ "$version" != "sq $SQ_VERSION" ]]; then
     echo "unexpected sq version line: '$version' (expected 'sq $SQ_VERSION')" >&2
     echo "full output:" >&2
     echo "$version_out" >&2
-    cat "${TEST_TMPDIR:-/tmp}/sq-version.stderr" >&2 || true
     exit 1
 fi
 
