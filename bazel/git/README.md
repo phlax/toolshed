@@ -75,6 +75,12 @@ builds and release packaging. It can be forced for debugging with:
 bazel test //git/test:toolchain_source_version_test --extra_toolchains=@envoy_toolshed//git/dev:source_toolchain
 ```
 
+### Behaviour change
+
+Non-Linux exec platforms such as macOS no longer get an automatic toolshed
+source fallback for `@envoy_toolshed//git:toolchain_type`. They must opt into a
+source-built toolchain explicitly as documented below.
+
 Prebuilt SHAs can be overridden, or a platform disabled, in `MODULE.bazel`:
 
 ```starlark

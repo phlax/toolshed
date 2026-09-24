@@ -58,18 +58,21 @@ alias(
 alias(
     name = "sq_linux_x86_64",
     actual = "//pgp/dev:sq_linux_x86_64",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "sq_linux_arm64",
     actual = "//pgp/dev:sq_linux_arm64",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "sq_packages",
     actual = "//pgp/dev:sq_packages",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 

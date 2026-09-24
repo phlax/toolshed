@@ -7,6 +7,16 @@ load("//private:extension_utils.bzl", "single_setup_tag")
 _NO_OVERRIDE = "__envoy_toolshed_sq_default__"
 DEFS_LABEL = str(Label("//pgp:defs.bzl"))
 TOOLCHAIN_TYPE_LABEL = str(Label("//pgp:toolchain_type"))
+_PLATFORMS = {
+    "Linux-ARM64": struct(
+        attr = "linux_aarch64_sha256",
+        repo = "sq_prebuilt_linux_aarch64",
+    ),
+    "Linux-X64": struct(
+        attr = "linux_x86_64_sha256",
+        repo = "sq_prebuilt_linux_x86_64",
+    ),
+}
 
 def _sq_prebuilt_ext_impl(module_ctx):
     setup_tag = single_setup_tag(
@@ -18,17 +28,15 @@ def _sq_prebuilt_ext_impl(module_ctx):
 
     platform_labels = {}
     for platform in sorted(VERSIONS["sq_sha256"]):
-        attr_name = {
-            "Linux-ARM64": "linux_aarch64_sha256",
-            "Linux-X64": "linux_x86_64_sha256",
-        }[platform]
-        override = getattr(setup_tag, attr_name) if setup_tag else _NO_OVERRIDE
+        if platform not in _PLATFORMS:
+            fail("Unhandled sq prebuilt platform in VERSIONS[\"sq_sha256\"]: %s" % platform)
+        platform_info = _PLATFORMS[platform]
+        override = getattr(setup_tag, platform_info.attr) if setup_tag else _NO_OVERRIDE
         sha256 = VERSIONS["sq_sha256"][platform] if override == _NO_OVERRIDE else override
         if not sha256:
             continue
-        repo_name = "sq_prebuilt_" + attr_name[:-7]
         sq_prebuilt(
-            name = repo_name,
+            name = platform_info.repo,
             sha256 = sha256,
             strip_prefix = SQ_PREBUILT_STRIP_PREFIX.format(
                 platform = platform,
@@ -40,7 +48,7 @@ def _sq_prebuilt_ext_impl(module_ctx):
                 version = VERSIONS["sq"],
             ),
         )
-        platform_labels[platform] = "@%s//:BUILD.bazel" % repo_name
+        platform_labels[platform] = "@%s//:BUILD.bazel" % platform_info.repo
 
     sq_toolchains_hub(
         name = "sq_toolchains",

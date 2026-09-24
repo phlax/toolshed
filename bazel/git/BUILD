@@ -38,17 +38,20 @@ alias(
 alias(
     name = "git_linux_x86_64",
     actual = "//git/dev:git_linux_x86_64",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "git_linux_aarch64",
     actual = "//git/dev:git_linux_aarch64",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
 
 alias(
     name = "git_packages",
     actual = "//git/dev:git_packages",
+    tags = ["manual"],
     visibility = ["//visibility:public"],
 )
