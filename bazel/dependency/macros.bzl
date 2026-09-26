@@ -1,5 +1,6 @@
 """Macros for dependency update utilities."""
 
+load("@aspect_bazel_lib//lib:jq.bzl", "jq")
 load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//dependency:registry.bzl", "registry_bazelrc", "repo_registry")
@@ -146,5 +147,139 @@ def registry_updater(
         files = {bazelrc: ":" + name + "_bazelrc"},
         tags = helper_tags,
         target_compatible_with = target_compatible_with,
+        **kwargs
+    )
+
+_MODULE_DEPS_JSON_FILTER = """
+def version_key:
+  if contains("-") then
+    (split("-")
+     | {release: (.[0]
+                  | split(".")
+                  | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end)),
+        has_prerelease: true,
+        prerelease: (.[1:]
+                     | join("-")
+                     | split(".")
+                     | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end))})
+  else
+    {release: (split(".")
+               | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end)),
+     has_prerelease: false,
+     prerelease: []}
+  end
+  | [.release, (if .has_prerelease then 0 else 1 end), .prerelease];
+
+.registryFileHashes // {}
+| keys
+| map(select(test("^.+/modules/[^/]+/[^/]+/source\\\\.json$")))
+| map(capture("^(?<registry>.+)/modules/(?<name>[^/]+)/(?<version>[^/]+)/source\\\\.json$"))
+| group_by(.name)
+| map({
+    name: .[0].name,
+    info: (map({
+              version: .version,
+              registry: .registry,
+              key: (.version | version_key),
+            })
+           | sort_by(.key)
+           | last),
+  })
+| map({
+    (.name): {
+      module_url: (.info.registry + "/modules/" + .name + "/" + .info.version + "/"),
+      registry: (.info.registry + "/"),
+      urls: [(.info.registry + "/modules/" + .name + "/" + .info.version + "/")],
+      version: .info.version,
+    },
+  })
+| add // {}
+"""
+
+def module_deps_json(
+        name,
+        lockfile,
+        visibility = None):
+    """Generate dependency JSON from a `MODULE.bazel.lock` file.
+
+    Args:
+      name: Target name.
+      lockfile: Label of the lockfile to parse.
+      visibility: Optional visibility.
+    """
+    jq(
+        name = name,
+        srcs = [lockfile],
+        out = name + ".json",
+        filter = _MODULE_DEPS_JSON_FILTER,
+        visibility = visibility,
+    )
+
+def module_updater(
+        name,
+        dependencies,
+        module_file,
+        bazelrc = None,
+        registries = None,
+        jq_toolchain = "@jq_toolchains//:resolved_toolchain",
+        update_script = "@envoy_toolshed//dependency:module-update.sh",
+        version_compare_script = "@envoy_toolshed//dependency:version-compare.sh",
+        data = None,
+        deps = None,
+        toolchains = None,
+        visibility = None,
+        **kwargs):
+    """Create a bzlmod dependency updater runnable.
+
+    Args:
+      name: Target name.
+      dependencies: Label for dependency JSON metadata.
+      module_file: Label for the `MODULE.bazel` file to update.
+      bazelrc: Optional `.bazelrc` label used to discover registries.
+      registries: Optional explicit list of registry URLs or paths.
+      jq_toolchain: jq toolchain target label.
+      update_script: Module updater script label.
+      version_compare_script: Version comparison helper script label.
+      data: Additional runtime data labels.
+      deps: Additional runtime deps.
+      toolchains: Additional toolchains.
+      visibility: Optional visibility.
+      **kwargs: Additional `sh_binary` keyword arguments.
+    """
+    if not bazelrc and not registries:
+        fail("module_updater requires either bazelrc or registries")
+
+    toolchains = [jq_toolchain] + (toolchains or [])
+    deps = deps or []
+    data = (data or []) + [
+        jq_toolchain,
+        update_script,
+        version_compare_script,
+        dependencies,
+        module_file,
+    ]
+    env = {
+        "JQ_BIN": "$(rootpath %s)" % jq_toolchain,
+    }
+    args = [
+        "$(location %s)" % module_file,
+        "$(location %s)" % dependencies,
+    ]
+    if bazelrc:
+        data.append(bazelrc)
+        env["MODULE_UPDATER_BAZELRC"] = "$(location %s)" % bazelrc
+    if registries:
+        env["MODULE_UPDATER_REGISTRIES"] = "\n".join(registries)
+    if visibility != None:
+        kwargs["visibility"] = visibility
+
+    sh_binary(
+        name = name,
+        srcs = [update_script],
+        data = data,
+        env = env,
+        args = args,
+        deps = deps,
+        toolchains = toolchains,
         **kwargs
     )

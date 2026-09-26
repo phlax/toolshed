@@ -1,14 +1,16 @@
 load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
-load("//dependency:macros.bzl", "registry_updater", "updater")
+load("//dependency:macros.bzl", "module_deps_json", "module_updater", "registry_updater", "updater")
 
 exports_files([
     "README.md",
     "bazel-update.sh",
     "macros.bzl",
+    "module-update.sh",
     "reachability.bzl",
     "registry.bzl",
     "registry_bazelrc.sh",
+    "version-compare.sh",
 ])
 
 bzl_library(
@@ -48,4 +50,17 @@ updater(
 registry_updater(
     name = "update_registry",
     bazelrc = "//:.bazelrc",
+)
+
+module_deps_json(
+    name = "toolshed_module_deps",
+    lockfile = "//:MODULE.bazel.lock",
+    visibility = ["//visibility:private"],
+)
+
+module_updater(
+    name = "update_module",
+    bazelrc = "//:.bazelrc",
+    dependencies = ":toolshed_module_deps",
+    module_file = "//:MODULE.bazel",
 )
