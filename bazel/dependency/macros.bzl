@@ -25,193 +25,49 @@ def updater(
         toolchains = None,
         pydict = False,
         **kwargs):
-    """Create a shell-based dependency updater binary.
-
-    Args:
-      name: Target name.
-      dependencies: Label for the dependency metadata input.
-      version_file: Label for the version file to update.
-      jq_toolchain: jq toolchain target label.
-      update_script: Updater script label.
-      post_script: Optional post-processing script label.
-      data: Additional runtime data labels.
-      deps: Additional runtime deps.
-      dep_search: Optional dependency search override.
-      sha_search: Optional sha search override.
-      version_search: Optional version search override.
-      repo_selector: Optional repo selector override.
-      sha_selector: Optional sha selector override.
-      url_selector: Optional URL selector override.
-      version_path_replace: Optional version path replacement override.
-      version_selector: Optional version selector override.
-      toolchains: Additional toolchains.
-      pydict: Whether to use Python dict matching defaults.
-      **kwargs: Additional `sh_binary` keyword arguments.
-    """
+    """Create a shell-based dependency updater binary."""
     toolchains = [jq_toolchain] + (toolchains or [])
     deps = deps or []
-    data = (data or []) + [
-        jq_toolchain,
-        update_script,
-        dependencies,
-        version_file,
-    ]
-    args = [
-        "$(location %s)" % version_file,
-        "$(location %s)" % dependencies,
-    ]
+    data = (data or []) + [jq_toolchain, update_script, dependencies, version_file]
+    args = ["$(location %s)" % version_file, "$(location %s)" % dependencies]
     env = {"JQ_BIN": "$(rootpath %s)" % jq_toolchain}
     if pydict:
-        env["DEP_SEARCH"] = "__DEP__ = dict("
-        env["SHA_SEARCH"] = "sha256 = \"__EXISTING_SHA__\","
-        env["VERSION_SEARCH"] = "version = \"__EXISTING_VERSION__\","
-
-    if dep_search:
-        env["DEP_SEARCH"] = dep_search
-    if sha_search:
-        env["SHA_SEARCH"] = sha_search
-    if version_search:
-        env["VERSION_SEARCH"] = version_search
-    if repo_selector:
-        env["REPO_SELECTOR"] = repo_selector
-    if sha_selector:
-        env["SHA_SELECTOR"] = sha_selector
-    if url_selector:
-        env["URL_SELECTOR"] = url_selector
-    if version_path_replace:
-        env["VERSION_PATH_REPLACE"] = version_path_replace
-    if version_selector:
-        env["VERSION_SELECTOR"] = version_selector
-
+        env.update({
+            "DEP_SEARCH": "__DEP__ = dict(",
+            "SHA_SEARCH": "sha256 = \"__EXISTING_SHA__\",",
+            "VERSION_SEARCH": "version = \"__EXISTING_VERSION__\",",
+        })
+    if dep_search: env["DEP_SEARCH"] = dep_search
+    if sha_search: env["SHA_SEARCH"] = sha_search
+    if version_search: env["VERSION_SEARCH"] = version_search
+    if repo_selector: env["REPO_SELECTOR"] = repo_selector
+    if sha_selector: env["SHA_SELECTOR"] = sha_selector
+    if url_selector: env["URL_SELECTOR"] = url_selector
+    if version_path_replace: env["VERSION_PATH_REPLACE"] = version_path_replace
+    if version_selector: env["VERSION_SELECTOR"] = version_selector
     if post_script:
         data.append(post_script)
         env["VERSION_UPDATE_POST_SCRIPT"] = "$(location %s)" % post_script
+    sh_binary(name = name, srcs = [update_script], data = data, env = env, args = args, deps = deps, toolchains = toolchains, **kwargs)
 
-    sh_binary(
-        name = name,
-        srcs = [update_script],
-        data = data,
-        env = env,
-        args = args,
-        deps = deps,
-        toolchains = toolchains,
-        **kwargs
-    )
-
-def registry_updater(
-        name,
-        bazelrc,
-        repo = "https://github.com/envoyproxy/bazel-registry.git",
-        url = "https://raw.githubusercontent.com/envoyproxy/bazel-registry",
-        ref = "main",
-        visibility = None,
-        **kwargs):
-    """Rewrite the `--registry=<url>/<sha>` pin in `bazelrc` to the current `ref` of `repo`.
-
-    Creates `<name>` (a `write_source_files` runnable) plus private helpers
-    `<name>_resolved` and `<name>_bazelrc`.
-
-    Args:
-      name: Target name for the generated updater.
-      bazelrc: Label of the `.bazelrc` file to rewrite.
-      repo: Git repository URL for the Bazel registry.
-      url: Raw content URL prefix used in the pinned `--registry=` line.
-      ref: Git branch to resolve in `repo`.
-      visibility: Optional visibility for the runnable target.
-      **kwargs: Additional `write_source_files` keyword arguments.
-    """
+def registry_updater(name, bazelrc, repo = "https://github.com/envoyproxy/bazel-registry.git", url = "https://raw.githubusercontent.com/envoyproxy/bazel-registry", ref = "main", visibility = None, **kwargs):
+    """Rewrite the `--registry=<url>/<sha>` pin in `bazelrc` to the current `ref` of `repo`."""
     helper_tags = ["manual"] + kwargs.pop("tags", [])
     target_compatible_with = kwargs.pop("target_compatible_with", ["@platforms//os:linux"])
-    repo_registry(
-        name = name + "_resolved",
-        ref = ref,
-        repo = repo,
-        tags = helper_tags,
-        target_compatible_with = target_compatible_with,
-        url = url,
-    )
-    registry_bazelrc(
-        name = name + "_bazelrc",
-        bazelrc = bazelrc,
-        registry = ":" + name + "_resolved",
-        tags = helper_tags,
-        target_compatible_with = target_compatible_with,
-        url = url,
-    )
-    if visibility != None:
-        kwargs["visibility"] = visibility
-    write_source_files(
-        name = name,
-        check_that_out_file_exists = False,
-        diff_test = False,
-        files = {bazelrc: ":" + name + "_bazelrc"},
-        tags = helper_tags,
-        target_compatible_with = target_compatible_with,
-        **kwargs
-    )
+    repo_registry(name = name + "_resolved", ref = ref, repo = repo, tags = helper_tags, target_compatible_with = target_compatible_with, url = url)
+    registry_bazelrc(name = name + "_bazelrc", bazelrc = bazelrc, registry = ":" + name + "_resolved", tags = helper_tags, target_compatible_with = target_compatible_with, url = url)
+    if visibility != None: kwargs["visibility"] = visibility
+    write_source_files(name = name, check_that_out_file_exists = False, diff_test = False, files = {bazelrc: ":" + name + "_bazelrc"}, tags = helper_tags, target_compatible_with = target_compatible_with, **kwargs)
 
-_MODULE_DEPS_JSON_FILTER = """
-def version_key:
-  if contains("-") then
-    (split("-")
-     | {release: (.[0]
-                  | split(".")
-                  | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end)),
-        has_prerelease: true,
-        prerelease: (.[1:]
-                     | join("-")
-                     | split(".")
-                     | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end))})
-  else
-    {release: (split(".")
-               | map(if test("^[0-9]+$") then [0, tonumber] else [1, .] end)),
-     has_prerelease: false,
-     prerelease: []}
-  end
-  | [.release, (if .has_prerelease then 0 else 1 end), .prerelease];
-
-.registryFileHashes // {}
-| keys
-| map(select(test("^.+/modules/[^/]+/[^/]+/source\\\\.json$")))
-| map(capture("^(?<registry>.+)/modules/(?<name>[^/]+)/(?<version>[^/]+)/source\\\\.json$"))
-| group_by(.name)
-| map({
-    name: .[0].name,
-    info: (map({
-              version: .version,
-              registry: .registry,
-              key: (.version | version_key),
-            })
-           | sort_by(.key)
-           | last),
-  })
-| map({
-    (.name): {
-      module_url: (.info.registry + "/modules/" + .name + "/" + .info.version + "/"),
-      registry: (.info.registry + "/"),
-      urls: [(.info.registry + "/modules/" + .name + "/" + .info.version + "/")],
-      version: .info.version,
-    },
-  })
-| add // {}
-"""
-
-def module_deps_json(
-        name,
-        lockfile,
-        visibility = None):
-    """Generate dependency JSON from a `MODULE.bazel.lock` file.
-
-    Args:
-      name: Target name.
-      lockfile: Label of the lockfile to parse.
-      visibility: Optional visibility.
-    """
+def module_deps_json(name, lockfile, visibility = None):
+    """Generate dependency JSON from a `MODULE.bazel.lock` file."""
     jq(
         name = name,
         srcs = [lockfile],
         out = name + ".json",
-        filter = _MODULE_DEPS_JSON_FILTER,
+        filter_file = "//dependency:module_deps_json.jq",
+        args = ["-L", "dependency"],
+        data = ["//dependency:jq_libs"],
         visibility = visibility,
     )
 
@@ -223,63 +79,27 @@ def module_updater(
         registries = None,
         jq_toolchain = "@jq_toolchains//:resolved_toolchain",
         update_script = "@envoy_toolshed//dependency:module-update.sh",
-        version_compare_script = "@envoy_toolshed//dependency:version-compare.sh",
+        buildozer = "@buildifier//:buildozer",
         data = None,
         deps = None,
         toolchains = None,
         visibility = None,
         **kwargs):
-    """Create a bzlmod dependency updater runnable.
-
-    Args:
-      name: Target name.
-      dependencies: Label for dependency JSON metadata.
-      module_file: Label for the `MODULE.bazel` file to update.
-      bazelrc: Optional `.bazelrc` label used to discover registries.
-      registries: Optional explicit list of registry URLs or paths.
-      jq_toolchain: jq toolchain target label.
-      update_script: Module updater script label.
-      version_compare_script: Version comparison helper script label.
-      data: Additional runtime data labels.
-      deps: Additional runtime deps.
-      toolchains: Additional toolchains.
-      visibility: Optional visibility.
-      **kwargs: Additional `sh_binary` keyword arguments.
-    """
+    """Create a bzlmod dependency updater runnable."""
     if not bazelrc and not registries:
         fail("module_updater requires either bazelrc or registries")
-
     toolchains = [jq_toolchain] + (toolchains or [])
     deps = deps or []
-    data = (data or []) + [
-        jq_toolchain,
-        update_script,
-        version_compare_script,
-        dependencies,
-        module_file,
-    ]
+    data = (data or []) + [jq_toolchain, update_script, buildozer, dependencies, module_file, "//dependency:jq_libs"]
     env = {
         "JQ_BIN": "$(rootpath %s)" % jq_toolchain,
+        "BUILDOZER": "$(rootpath %s)" % buildozer,
+        "MODULE_UPDATER_JQ_DIR": "$(rootpath //dependency:version.jq)",
     }
-    args = [
-        "$(location %s)" % module_file,
-        "$(location %s)" % dependencies,
-    ]
+    args = ["$(location %s)" % module_file, "$(location %s)" % dependencies]
     if bazelrc:
         data.append(bazelrc)
         env["MODULE_UPDATER_BAZELRC"] = "$(location %s)" % bazelrc
-    if registries:
-        env["MODULE_UPDATER_REGISTRIES"] = "\n".join(registries)
-    if visibility != None:
-        kwargs["visibility"] = visibility
-
-    sh_binary(
-        name = name,
-        srcs = [update_script],
-        data = data,
-        env = env,
-        args = args,
-        deps = deps,
-        toolchains = toolchains,
-        **kwargs
-    )
+    if registries: env["MODULE_UPDATER_REGISTRIES"] = "\n".join(registries)
+    if visibility != None: kwargs["visibility"] = visibility
+    sh_binary(name = name, srcs = [update_script], data = data, env = env, args = args, deps = deps, toolchains = toolchains, **kwargs)

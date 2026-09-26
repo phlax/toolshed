@@ -6,6 +6,7 @@ load("//dependency:macros.bzl", "module_deps_json")
 load("//dependency:reachability.bzl", "dependency_reachability")
 load("//dependency:registry.bzl", "registry_bazelrc", "repo_registry")
 load(":custom_rule_test.bzl", "custom_library_rule")
+load(":fixtures.bzl", "module_updater_fixture")
 load(":reachability_apparent_name_test.bzl", "apparent_name_test")
 load(":reachability_config_validation_test.bzl", "reachability_config_validation_test")
 load(":reachability_package_pattern_test.bzl", "reachability_package_pattern_test")
@@ -29,105 +30,89 @@ sh_test(
 )
 
 sh_test(
-    name = "version_compare_test",
+    name = "version_jq_test",
     size = "small",
-    srcs = ["version_compare_test.sh"],
-    data = ["//dependency:version-compare.sh"],
+    srcs = ["version_jq_test.sh"],
+    data = [
+        "//dependency:jq_libs",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {"JQ_BIN": "$(JQ_BIN)"},
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
 )
 
 genrule(
-    name = "module_report",
+    name = "registries_json",
     srcs = [
-        "testdata/module/deps.template.json",
         "testdata/module/report.bazelrc.template",
         "testdata/module/registry_bcr/REGISTRY_MARKER",
-        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
-        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
-        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
         "testdata/module/registry_envoy/REGISTRY_MARKER",
-        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/modules/sq/metadata.json",
-        "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
+        "//dependency:registries.jq",
     ],
-    outs = ["module_report.json"],
+    outs = ["registries.json"],
     tools = ["@jq_toolchains//:resolved_toolchain"],
     cmd = """
 set -euo pipefail
-tmpdir="$$(mktemp -d)"
-trap 'rm -rf "$$tmpdir"' EXIT
 bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
 envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
 sed \
   -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
   -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
-JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
-  bash $(location //dependency:module-update.sh) \
-  /dev/null \
-  "$$tmpdir/deps.json" \
-  --bazelrc="$$tmpdir/.bazelrc" \
-  --report \
-  --json-out="$$tmpdir/report.json"
+  $(location testdata/module/report.bazelrc.template) \
+  | $(execpath @jq_toolchains//:resolved_toolchain) -Rsc --argjson extra '[]' -f $(location //dependency:registries.jq) \
+  | $(execpath @jq_toolchains//:resolved_toolchain) -S . \
+  | sed \
+  -e "s|$$bcr_root/|REGISTRY_BCR/|g" \
+  -e "s|$$envoy_root/|REGISTRY_ENVOY/|g" > "$@"
+""",
+)
+
+diff_test(
+    name = "registries_jq_test",
+    file1 = ":registries_json",
+    file2 = "testdata/module/registries.expected.json",
+)
+
+module_updater_fixture(
+    name = "module_update_bazel_skylib",
+    args = ["bazel_skylib"],
+    out = "module_update_bazel_skylib.bazel",
+)
+
+module_updater_fixture(
+    name = "module_report",
+    args = [
+        "--report",
+        "--json-out=$$tmpdir/report.json",
+    ],
+    out = "module_report.json",
+)
+
+genrule(
+    name = "module_report_normalized",
+    srcs = [
+        ":module_report",
+        "testdata/module/report.bazelrc.template",
+        "testdata/module/registry_bcr/REGISTRY_MARKER",
+        "testdata/module/registry_envoy/REGISTRY_MARKER",
+    ],
+    outs = ["module_report.normalized.json"],
+    tools = ["@jq_toolchains//:resolved_toolchain"],
+    cmd = """
+set -euo pipefail
+bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
 sed \
   -e "s|$$bcr_root/|REGISTRY_BCR/|g" \
   -e "s|$$envoy_root/|REGISTRY_ENVOY/|g" \
-  "$$tmpdir/report.json" | $(execpath @jq_toolchains//:resolved_toolchain) -S . > "$@"
+  $(location :module_report) | $(execpath @jq_toolchains//:resolved_toolchain) -S . > "$@"
 """,
 )
 
 diff_test(
     name = "module_report_test",
-    file1 = ":module_report",
+    file1 = ":module_report_normalized",
     file2 = "testdata/module/report.expected.json",
-)
-
-genrule(
-    name = "module_update_bazel_skylib",
-    srcs = [
-        "testdata/module/MODULE.template.bazel",
-        "testdata/module/deps.template.json",
-        "testdata/module/report.bazelrc.template",
-        "testdata/module/registry_bcr/REGISTRY_MARKER",
-        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
-        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
-        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/REGISTRY_MARKER",
-        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/modules/sq/metadata.json",
-        "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
-    ],
-    outs = ["module_update_bazel_skylib.bazel"],
-    tools = ["@jq_toolchains//:resolved_toolchain"],
-    cmd = """
-set -euo pipefail
-tmpdir="$$(mktemp -d)"
-trap 'rm -rf "$$tmpdir"' EXIT
-bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
-envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
-cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
-BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
-JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
-  bash $(location //dependency:module-update.sh) \
-  "$$tmpdir/MODULE.bazel" \
-  "$$tmpdir/deps.json" \
-  --bazelrc="$$tmpdir/.bazelrc" \
-  bazel_skylib >/dev/null
-cp "$$tmpdir/MODULE.bazel" "$@"
-""",
 )
 
 diff_test(
@@ -136,48 +121,10 @@ diff_test(
     file2 = "testdata/module/MODULE.expected.bazel_skylib.bazel",
 )
 
-genrule(
+module_updater_fixture(
     name = "module_update_protobuf",
-    srcs = [
-        "testdata/module/MODULE.template.bazel",
-        "testdata/module/deps.template.json",
-        "testdata/module/report.bazelrc.template",
-        "testdata/module/registry_bcr/REGISTRY_MARKER",
-        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
-        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
-        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/REGISTRY_MARKER",
-        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/modules/sq/metadata.json",
-        "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
-    ],
-    outs = ["module_update_protobuf.bazel"],
-    tools = ["@jq_toolchains//:resolved_toolchain"],
-    cmd = """
-set -euo pipefail
-tmpdir="$$(mktemp -d)"
-trap 'rm -rf "$$tmpdir"' EXIT
-bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
-envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
-cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
-BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
-JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
-  bash $(location //dependency:module-update.sh) \
-  "$$tmpdir/MODULE.bazel" \
-  "$$tmpdir/deps.json" \
-  --bazelrc="$$tmpdir/.bazelrc" \
-  protobuf >/dev/null
-cp "$$tmpdir/MODULE.bazel" "$@"
-""",
+    args = ["protobuf"],
+    out = "module_update_protobuf.bazel",
 )
 
 diff_test(
@@ -186,48 +133,10 @@ diff_test(
     file2 = "testdata/module/MODULE.expected.protobuf.bazel",
 )
 
-genrule(
+module_updater_fixture(
     name = "module_update_sq",
-    srcs = [
-        "testdata/module/MODULE.template.bazel",
-        "testdata/module/deps.template.json",
-        "testdata/module/report.bazelrc.template",
-        "testdata/module/registry_bcr/REGISTRY_MARKER",
-        "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
-        "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
-        "testdata/module/registry_bcr/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/REGISTRY_MARKER",
-        "testdata/module/registry_envoy/modules/protobuf/metadata.json",
-        "testdata/module/registry_envoy/modules/sq/metadata.json",
-        "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
-    ],
-    outs = ["module_update_sq.bazel"],
-    tools = ["@jq_toolchains//:resolved_toolchain"],
-    cmd = """
-set -euo pipefail
-tmpdir="$$(mktemp -d)"
-trap 'rm -rf "$$tmpdir"' EXIT
-bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
-envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/deps.template.json) > "$$tmpdir/deps.json"
-sed \
-  -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
-  -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/report.bazelrc.template) > "$$tmpdir/.bazelrc"
-cp $(location testdata/module/MODULE.template.bazel) "$$tmpdir/MODULE.bazel"
-BUILD_WORKSPACE_DIRECTORY="$$tmpdir" \
-JQ_BIN=$(execpath @jq_toolchains//:resolved_toolchain) \
-  bash $(location //dependency:module-update.sh) \
-  "$$tmpdir/MODULE.bazel" \
-  "$$tmpdir/deps.json" \
-  --bazelrc="$$tmpdir/.bazelrc" \
-  sq=1.5.0.envoy >/dev/null
-cp "$$tmpdir/MODULE.bazel" "$@"
-""",
+    args = ["sq=1.5.0.envoy"],
+    out = "module_update_sq.bazel",
 )
 
 diff_test(
@@ -248,6 +157,19 @@ diff_test(
 )
 
 sh_test(
+    name = "module_deps_json_duplicate_test",
+    size = "small",
+    srcs = ["module_deps_json_duplicate_test.sh"],
+    data = [
+        "//dependency:jq_libs",
+        "testdata/module/MODULE.duplicate.lock",
+        "@jq_toolchains//:resolved_toolchain",
+    ],
+    env = {"JQ_BIN": "$(JQ_BIN)"},
+    toolchains = ["@jq_toolchains//:resolved_toolchain"],
+)
+
+sh_test(
     name = "module_updater_failure_test",
     size = "small",
     srcs = ["module_updater_failure_test.sh"],
@@ -262,11 +184,15 @@ sh_test(
         "testdata/module/registry_envoy/REGISTRY_MARKER",
         "testdata/module/registry_envoy/modules/protobuf/metadata.json",
         "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "//dependency:jq_libs",
         "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
+        "@buildifier//:buildozer",
         "@jq_toolchains//:resolved_toolchain",
     ],
-    env = {"JQ_BIN": "$(JQ_BIN)"},
+    env = {
+        "BUILDOZER": "$(rootpath @buildifier//:buildozer)",
+        "JQ_BIN": "$(JQ_BIN)",
+    },
     toolchains = ["@jq_toolchains//:resolved_toolchain"],
 )
 
@@ -275,8 +201,8 @@ sh_test(
     size = "medium",
     srcs = ["module_updater_live_test.sh"],
     data = [
+        "//dependency:jq_libs",
         "//dependency:module-update.sh",
-        "//dependency:version-compare.sh",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {"JQ_BIN": "$(JQ_BIN)"},
