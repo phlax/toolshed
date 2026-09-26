@@ -6,6 +6,7 @@ exports_files([
     "README.md",
     "bazel-update.sh",
     "macros.bzl",
+    "metadata.jq",
     "module-update.sh",
     "module_deps_json.jq",
     "reachability.bzl",
@@ -21,6 +22,7 @@ filegroup(
     name = "jq_libs",
     srcs = [
         "module_deps_json.jq",
+        "metadata.jq",
         "registries.jq",
         "report.jq",
         "resolve.jq",

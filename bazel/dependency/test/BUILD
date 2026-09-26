@@ -35,6 +35,8 @@ sh_test(
     srcs = ["version_jq_test.sh"],
     data = [
         "//dependency:jq_libs",
+        "version_compare.jq",
+        "version_sort.jq",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {"JQ_BIN": "$(JQ_BIN)"},

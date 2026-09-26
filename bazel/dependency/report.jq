@@ -7,7 +7,7 @@ def first_registry_for($registries; $current): $registries | map(select((.value.
 def cmp_gt($a; $b): $a != null and ($b == null or compare_versions($a; $b) == 1);
 def nonempty_string_or_null($value): if ($value | type) == "string" and ($value | length) > 0 then $value else null end;
 
-. as $input
+{deps: $deps, registries: $registries, metadata: $metadata} as $input
 | $input.deps
 | to_entries
 | map(select(.value.version | type == "string"))
