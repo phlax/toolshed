@@ -21,8 +21,8 @@ exports_files([
 filegroup(
     name = "jq_libs",
     srcs = [
-        "module_deps_json.jq",
         "metadata.jq",
+        "module_deps_json.jq",
         "registries.jq",
         "report.jq",
         "resolve.jq",
