@@ -1,13 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# NOTE: must remain bash 3.2 compatible (macOS /bin/bash): no mapfile/readarray,
-# no namerefs, no associative arrays.
-#
-# jq filters below intentionally use `$name` variables inside single quotes
-# (jq's own variable syntax, bound via --arg/--argjson), not shell expansion.
-# shellcheck disable=SC2016
-
 usage() {
   cat <<'EOF'
 Usage:
@@ -88,8 +81,9 @@ run_buildozer() {
 }
 
 MODULE_FILE="$1"; DEP_DATA="$2"; shift 2
-JQ="${JQ_BIN:-jq}"; BUILDOZER="${BUILDOZER:-}"; JQ_DIR="${MODULE_UPDATER_JQ_DIR:-}"
-[[ -f "$JQ_DIR" ]] && JQ_DIR="${JQ_DIR%/*}"
+JQ="${JQ_BIN:-jq}"; BUILDOZER="${BUILDOZER:-}"
+: "${MODULE_UPDATER_JQ_DIR:?MODULE_UPDATER_JQ_DIR must be set to the runfiles path of version.jq}"
+JQ_DIR="$(dirname "${MODULE_UPDATER_JQ_DIR}")"
 REPORT=0; FAIL_ON_OUTDATED=0; ALLOW_YANKED=false; JSON_OUT=""; BAZELRC="${MODULE_UPDATER_BAZELRC:-/dev/null}"; DEP=""; REQUESTED_VERSION=""; REQUESTED_REGISTRY=""
 TMPDIR="$(mktemp -d)"; trap 'rm -rf "$TMPDIR"' EXIT
 FETCH_METADATA_ERROR=""
@@ -148,18 +142,14 @@ for registry in "${registries[@]}"; do
   idx=$((idx + 1))
 done
 find "$TMPDIR" -path '*/[0-9]*/*.json' | sort >"$TMPDIR/files"
-META_FILTER='def base: reduce $regs[] as $r ({}; .[$r] = (reduce $deps[] as $d ({}; .[$d] = null))); reduce inputs as $m (base; (input_filename | capture("/(?<i>[0-9]+)/(?<dep>[^/]+)\\.json$")) as $p | .[$regs[$p.i|tonumber]][$p.dep] = $m)'
+files=()
 if [[ -s "$TMPDIR/files" ]]; then
-  files=()
   while IFS= read -r file; do
     [[ -n "$file" ]] && files+=("$file")
   done <"$TMPDIR/files"
-  METADATA_JSON="$($JQ -n --argjson regs "$REGISTRIES_JSON" --argjson deps "$DEPS_JSON" "$META_FILTER" "${files[@]}")"
-else
-  METADATA_JSON="$($JQ -n --argjson regs "$REGISTRIES_JSON" --argjson deps "$DEPS_JSON" 'reduce $regs[] as $r ({}; .[$r] = (reduce $deps[] as $d ({}; .[$d] = null)))')"
 fi
-$JQ -n --argjson deps "$(cat "$DEP_DATA")" --argjson registries "$REGISTRIES_JSON" --argjson metadata "$METADATA_JSON" '{deps: $deps, registries: $registries, metadata: $metadata}' >"$TMPDIR/report_input.json"
-REPORT_JSON="$($JQ -S -L "$JQ_DIR" -f "$JQ_DIR/report.jq" "$TMPDIR/report_input.json")"
+METADATA_JSON="$($JQ -n --argjson regs "$REGISTRIES_JSON" --argjson deps "$DEPS_JSON" -f "$JQ_DIR/metadata.jq" "${files[@]}")"
+REPORT_JSON="$($JQ -Sn -L "$JQ_DIR" --argjson deps "$(cat "$DEP_DATA")" --argjson registries "$REGISTRIES_JSON" --argjson metadata "$METADATA_JSON" -f "$JQ_DIR/report.jq")"
 if (( REPORT == 1 )); then
   if [[ -n "$JSON_OUT" ]]; then
     printf '%s\n' "$REPORT_JSON" >"$JSON_OUT"
@@ -171,10 +161,10 @@ if (( REPORT == 1 )); then
   exit 0
 fi
 [[ -x "$BUILDOZER" ]] || { echo "buildozer binary not found: ${BUILDOZER}" >&2; exit 1; }
-RESOLUTION="$($JQ -cn -L "$JQ_DIR" --arg dep "$DEP" --arg requested_version "$REQUESTED_VERSION" --arg requested_registry "$REQUESTED_REGISTRY" --argjson allow_yanked "$ALLOW_YANKED" --argjson report_entry "$($JQ -c --arg dep "$DEP" '.[$dep] // null' <<<"$REPORT_JSON")" '{dep: $dep, report_entry: $report_entry, requested_version: $requested_version, requested_registry: $requested_registry, allow_yanked: $allow_yanked}' | $JQ -L "$JQ_DIR" -f "$JQ_DIR/resolve.jq")"
+RESOLUTION="$($JQ -cn -L "$JQ_DIR" --arg dep "$DEP" --arg requested_version "$REQUESTED_VERSION" --arg requested_registry "$REQUESTED_REGISTRY" --argjson allow_yanked "$ALLOW_YANKED" --argjson report "$REPORT_JSON" -f "$JQ_DIR/resolve.jq")"
 ERR="$($JQ -r '.error // empty' <<<"$RESOLUTION")"; [[ -z "$ERR" ]] || { echo "$ERR" >&2; exit 1; }
 MODULE_PATH="$(resolve_module)"; grep -Eq '^[[:space:]]*module[[:space:]]*\(' "$MODULE_PATH" || { echo "Expected module() declaration in ${MODULE_PATH}" >&2; exit 1; }
-TARGET="$($JQ -r '.target' <<<"$RESOLUTION")"; CURRENT="$($JQ -r --arg dep "$DEP" '.[$dep].current' <<<"$REPORT_JSON")"; CHANGED=0; rc=0
+TARGET="$($JQ -r '.target' <<<"$RESOLUTION")"; CURRENT="$($JQ -r '.current' <<<"$RESOLUTION")"; CHANGED=0; rc=0
 if [[ "$TARGET" == "$CURRENT" ]]; then echo "${DEP}: already at ${TARGET}"; exit 0; fi
 
 if ! "$BUILDOZER" 'print name' "${MODULE_PATH}:${DEP}" >/dev/null 2>&1; then
