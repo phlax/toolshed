@@ -90,4 +90,5 @@ assert_failure "Version 99.0.0 for protobuf is not published on any configured r
 assert_failure "Version 1.9.1 for bazel_skylib is yanked" bazel_skylib=1.9.1
 assert_failure "Unable to determine registry for missing_dep; pass --registry" missing_dep
 assert_failure "Dependency aspect_bazel_lib not found in" aspect_bazel_lib
+assert_failure "Failed to fetch http://127.0.0.1:65535/modules/aspect_bazel_lib/metadata.json" --report --registry=http://127.0.0.1:65535/
 assert_success_stdout "protobuf: already at 35.1.bcr.envoy" protobuf=35.1.bcr.envoy

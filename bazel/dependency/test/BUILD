@@ -50,21 +50,21 @@ genrule(
         "//dependency:registries.jq",
     ],
     outs = ["registries.json"],
-    tools = ["@jq_toolchains//:resolved_toolchain"],
     cmd = """
 set -euo pipefail
-bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
-envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+bcr_root="$$(dirname $(execpath testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(execpath testdata/module/registry_envoy/REGISTRY_MARKER))"
 sed \
   -e "s|__REGISTRY_BCR__|$$bcr_root|g" \
   -e "s|__REGISTRY_ENVOY__|$$envoy_root|g" \
-  $(location testdata/module/report.bazelrc.template) \
-  | $(execpath @jq_toolchains//:resolved_toolchain) -Rsc --argjson extra '[]' -f $(location //dependency:registries.jq) \
+  $(execpath testdata/module/report.bazelrc.template) \
+  | $(execpath @jq_toolchains//:resolved_toolchain) -Rsc --argjson extra '[]' -f $(execpath //dependency:registries.jq) \
   | $(execpath @jq_toolchains//:resolved_toolchain) -S . \
   | sed \
   -e "s|$$bcr_root/|REGISTRY_BCR/|g" \
   -e "s|$$envoy_root/|REGISTRY_ENVOY/|g" > "$@"
 """,
+    tools = ["@jq_toolchains//:resolved_toolchain"],
 )
 
 diff_test(
@@ -75,17 +75,17 @@ diff_test(
 
 module_updater_fixture(
     name = "module_update_bazel_skylib",
-    args = ["bazel_skylib"],
     out = "module_update_bazel_skylib.bazel",
+    args = ["bazel_skylib"],
 )
 
 module_updater_fixture(
     name = "module_report",
+    out = "module_report.json",
     args = [
         "--report",
         "--json-out=$$tmpdir/report.json",
     ],
-    out = "module_report.json",
 )
 
 genrule(
@@ -97,16 +97,16 @@ genrule(
         "testdata/module/registry_envoy/REGISTRY_MARKER",
     ],
     outs = ["module_report.normalized.json"],
-    tools = ["@jq_toolchains//:resolved_toolchain"],
     cmd = """
 set -euo pipefail
-bcr_root="$$(dirname $(location testdata/module/registry_bcr/REGISTRY_MARKER))"
-envoy_root="$$(dirname $(location testdata/module/registry_envoy/REGISTRY_MARKER))"
+bcr_root="$$(dirname $(execpath testdata/module/registry_bcr/REGISTRY_MARKER))"
+envoy_root="$$(dirname $(execpath testdata/module/registry_envoy/REGISTRY_MARKER))"
 sed \
   -e "s|$$bcr_root/|REGISTRY_BCR/|g" \
   -e "s|$$envoy_root/|REGISTRY_ENVOY/|g" \
-  $(location :module_report) | $(execpath @jq_toolchains//:resolved_toolchain) -S . > "$@"
+  $(execpath :module_report) | $(execpath @jq_toolchains//:resolved_toolchain) -S . > "$@"
 """,
+    tools = ["@jq_toolchains//:resolved_toolchain"],
 )
 
 diff_test(
@@ -123,8 +123,8 @@ diff_test(
 
 module_updater_fixture(
     name = "module_update_protobuf",
-    args = ["protobuf"],
     out = "module_update_protobuf.bazel",
+    args = ["protobuf"],
 )
 
 diff_test(
@@ -135,8 +135,8 @@ diff_test(
 
 module_updater_fixture(
     name = "module_update_sq",
-    args = ["sq=1.5.0.envoy"],
     out = "module_update_sq.bazel",
+    args = ["sq=1.5.0.envoy"],
 )
 
 diff_test(
@@ -161,8 +161,8 @@ sh_test(
     size = "small",
     srcs = ["module_deps_json_duplicate_test.sh"],
     data = [
-        "//dependency:jq_libs",
         "testdata/module/MODULE.duplicate.lock",
+        "//dependency:jq_libs",
         "@jq_toolchains//:resolved_toolchain",
     ],
     env = {"JQ_BIN": "$(JQ_BIN)"},
@@ -176,7 +176,6 @@ sh_test(
     data = [
         "testdata/module/MODULE.template.bazel",
         "testdata/module/deps.template.json",
-        "testdata/module/report.bazelrc.template",
         "testdata/module/registry_bcr/REGISTRY_MARKER",
         "testdata/module/registry_bcr/modules/aspect_bazel_lib/metadata.json",
         "testdata/module/registry_bcr/modules/bazel_skylib/metadata.json",
@@ -184,6 +183,7 @@ sh_test(
         "testdata/module/registry_envoy/REGISTRY_MARKER",
         "testdata/module/registry_envoy/modules/protobuf/metadata.json",
         "testdata/module/registry_envoy/modules/sq/metadata.json",
+        "testdata/module/report.bazelrc.template",
         "//dependency:jq_libs",
         "//dependency:module-update.sh",
         "@buildifier//:buildozer",

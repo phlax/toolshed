@@ -1,5 +1,4 @@
-def _quote(arg):
-    return "'" + arg.replace("'", "'\''") + "'"
+"""Test fixtures for dependency updater targets."""
 
 def module_updater_fixture(name, args, out):
     output_source = "report.json" if "--report" in args else "MODULE.bazel"
