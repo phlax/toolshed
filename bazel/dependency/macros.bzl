@@ -90,7 +90,7 @@ def module_updater(
         fail("module_updater requires either bazelrc or registries")
     toolchains = [jq_toolchain] + (toolchains or [])
     deps = deps or []
-    data = (data or []) + [jq_toolchain, update_script, buildozer, dependencies, module_file, "//dependency:jq_libs"]
+    data = (data or []) + [jq_toolchain, update_script, buildozer, dependencies, module_file, "//dependency:jq_libs", "//dependency:version.jq"]
     env = {
         "JQ_BIN": "$(rootpath %s)" % jq_toolchain,
         "BUILDOZER": "$(rootpath %s)" % buildozer,
