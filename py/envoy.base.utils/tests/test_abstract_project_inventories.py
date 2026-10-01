@@ -306,58 +306,36 @@ def test_abstract_inventories_changes(patches, items, sync):
 
 
 @pytest.mark.parametrize("response", [None, 404, "OTHER"])
-@pytest.mark.parametrize("legacy_response", [None, 404, "OTHER"])
-async def test_abstract_inventories_fetch(
-        patches, response, legacy_response):
+async def test_abstract_inventories_fetch(patches, response):
     project = MagicMock()
     inventories = DummyInventories(project)
     patched = patches(
         "AInventories.inventory_url",
-        "AInventories.legacy_inventory_url",
         prefix="envoy.base.utils.abstract.project.inventory")
     version = MagicMock()
-    primary = MagicMock()
-    primary.status = response
-    primary.read = AsyncMock()
-    legacy = MagicMock()
-    legacy.status = legacy_response
-    legacy.read = AsyncMock()
-    get = AsyncMock(side_effect=[primary, legacy])
+    response_mock = MagicMock()
+    response_mock.status = response
+    response_mock.read = AsyncMock()
+    get = AsyncMock(return_value=response_mock)
     project.session.get.side_effect = get
 
-    with patched as (m_url, m_legacy):
+    with patched as (m_url, ):
         result = await inventories.fetch(version)
 
     assert (
         m_url.call_args
         == [(version, ), {}])
     if response != 404:
-        assert result == primary.read.return_value
+        assert result == response_mock.read.return_value
         assert (
-            get.call_args_list
-            == [[(m_url.return_value, ), {}]])
-        assert (
-            primary.read.call_args
+            response_mock.read.call_args
             == [(), {}])
-        assert not m_legacy.called
-        assert not legacy.read.called
-        return
-    assert not primary.read.called
-    assert (
-        get.call_args_list
-        == [[(m_url.return_value, ), {}],
-            [(m_legacy.return_value, ), {}]])
-    assert (
-        m_legacy.call_args
-        == [(version, ), {}])
-    if legacy_response == 404:
+    else:
         assert result is None
-        assert not legacy.read.called
-        return
-    assert result == legacy.read.return_value
+        assert not response_mock.read.called
     assert (
-        legacy.read.call_args
-        == [(), {}])
+        get.call_args
+        == [(m_url.return_value, )])
 
 
 def test_abstract_inventories_inventory_path(patches):
@@ -432,27 +410,6 @@ def test_abstract_inventories_inventory_url_default(monkeypatch):
         inventories.inventory_url(version)
         == ("https://storage.googleapis.com/envoy-docs-archive/"
             "envoy/docs/v1.36.3/objects.inv"))
-    assert (
-        inventories.legacy_inventory_url(version)
-        == ("https://github.com/envoyproxy/archive/raw/main/"
-            "docs/envoy/v1.36.3/objects.inv"))
-
-
-def test_abstract_inventories_legacy_inventory_url(patches):
-    project = MagicMock()
-    inventories = DummyInventories(project)
-    patched = patches(
-        "INVENTORY_LEGACY_URL_FMT",
-        prefix="envoy.base.utils.abstract.project.inventory")
-    version = MagicMock()
-
-    with patched as (m_tpl, ):
-        assert (
-            inventories.legacy_inventory_url(version)
-            == m_tpl.format.return_value)
-    assert (
-        m_tpl.format.call_args
-        == [(), dict(version=version.base_version)])
 
 
 def test_abstract_inventories_rel_inventory_path(patches):
