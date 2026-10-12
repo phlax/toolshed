@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 from packaging import version as _version
 import pytest
+from yamllint.config import YamlLintConfig
 
 from envoy.base import utils
 from envoy.code import check
@@ -83,7 +84,9 @@ def test_changelogcheck_changes_checker(patches):
     assert (
         m_class.return_value.call_args
         == [(project.changelogs.sections,
-             project.changelogs.areas), {}])
+             project.changelogs.areas),
+            dict(yamllint_config_path=project.path.joinpath(".yamllint"))])
+    assert project.path.joinpath.call_args == [(".yamllint", ), {}]
     assert "changes_checker" in changelog.__dict__
 
 
@@ -701,8 +704,8 @@ async def test_changelogstatus_check_areas_file(
 
 class DummyChangelogChangesChecker(check.AChangelogChangesChecker):
 
-    def __init__(self, sections, areas=None):
-        super().__init__(sections, {} if areas is None else areas)
+    def __init__(self, sections, areas=None, **kwargs):
+        super().__init__(sections, {} if areas is None else areas, **kwargs)
 
     @property
     def change_checkers(self):
@@ -716,8 +719,46 @@ def test_changeschecker_constructor():
     changelog = DummyChangelogChangesChecker("SECTIONS")
     assert changelog.sections == "SECTIONS"
     assert changelog.areas == {}
+    assert changelog._yamllint_config is None
+    assert changelog._yamllint_config_path is None
     with pytest.raises(NotImplementedError):
         changelog.change_checkers
+
+
+def test_changeschecker_yamllint_config_passed(tmp_path):
+    config = YamlLintConfig("extends: default")
+    config_path = tmp_path / ".yamllint"
+    config_path.write_text("invalid config")
+    changelog = DummyChangelogChangesChecker(
+        "SECTIONS",
+        yamllint_config=config,
+        yamllint_config_path=config_path)
+
+    assert changelog._yamllint_config is config
+    assert changelog._yamllint_config_path == config_path
+    assert changelog.yamllint_config is config
+    assert changelog.__dict__["yamllint_config"] is config
+
+
+@pytest.mark.parametrize("exists", [True, False])
+@pytest.mark.parametrize("explicit_path", [True, False])
+def test_changeschecker_yamllint_config(
+        tmp_path, monkeypatch, exists, explicit_path):
+    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / ".yamllint"
+    if exists:
+        config_path.write_text(
+            "extends: default\nrules:\n  line-length: {max: 140}\n")
+    changelog = DummyChangelogChangesChecker(
+        "SECTIONS",
+        yamllint_config_path=config_path if explicit_path else None)
+
+    config = changelog.yamllint_config
+
+    assert isinstance(config, YamlLintConfig)
+    assert config.rules["line-length"]["max"] == (140 if exists else 80)
+    assert changelog.__dict__["yamllint_config"] is config
+    assert changelog.yamllint_config is config
 
 
 def test_changeschecker_max_version_for_changes_section(patches):
@@ -1036,16 +1077,37 @@ def test_changeschecker_check_entry_content(content, expected):
     [(f"{'a' * 134} b", ()),
      ("a" * 137, ()),
      (f"{'a' * 135} b",
-      ("entry.rst:1: Changelog entry line is 137 characters "
-       "(maximum 136)", )),
+      ("entry.rst:1: line too long (141 > 140 characters)", )),
      (f"valid\n{'a' * 135} b\n{'a' * 136} c",
-      ("entry.rst:2: Changelog entry line is 137 characters "
-       "(maximum 136)",
-       "entry.rst:3: Changelog entry line is 138 characters "
-       "(maximum 136)"))])
+      ("entry.rst:2: line too long (141 > 140 characters)",
+       "entry.rst:3: line too long (142 > 140 characters)")),
+     (":ref:`envoy_v3_api_field_extensions.bootstrap.reverse_tunnel."
+      "downstream_socket_interface.v3.DownstreamReverseConnection"
+      "SocketInterface.maintain_interval`", ()),
+     (f"key: {'a' * 137}", ()),
+     ("The downstream reverse-tunnel initiator\n"
+      "(``envoy.bootstrap.reverse_tunnel.downstream_socket_interface``) "
+      "now accepts\n"
+      ":ref:`maintain_interval "
+      "<envoy_v3_api_field_extensions.bootstrap.reverse_tunnel."
+      "downstream_socket_interface.v3.DownstreamReverseConnection"
+      "SocketInterface.maintain_interval>`\n"
+      "to control how often each host is re-checked and missing tunnels "
+      "are dialed.\n",
+      ("entry.rst:3: line too long (177 > 140 characters)", )),
+     ("valid  \n", ()),
+     ("", ())])
 def test_changeschecker_check_entry_line_lengths(
         tmp_path, content, expected):
-    changelog = DummyChangelogChangesChecker("SECTIONS")
+    changelog = DummyChangelogChangesChecker(
+        "SECTIONS",
+        yamllint_config=YamlLintConfig(
+            "extends: default\n"
+            "rules:\n"
+            "  line-length:\n"
+            "    max: 140\n"
+            "    allow-non-breakable-words: true\n"
+            "    allow-non-breakable-inline-mappings: true\n"))
     path = tmp_path / "entry.rst"
     path.write_text(content)
 
