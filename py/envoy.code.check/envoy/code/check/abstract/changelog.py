@@ -7,6 +7,8 @@ from functools import cached_property
 from collections.abc import Iterator
 
 from packaging import version as _version
+from yamllint import linter as yamllint_linter  # type:ignore
+from yamllint.config import YamlLintConfig  # type:ignore
 
 import abstracts
 
@@ -22,8 +24,8 @@ from envoy.code.check import abstract, interface
 
 
 MAX_VERSION_FOR_CHANGES_SECTION = "1.16"
-# YAML block scalars add four spaces to Envoy's 140-character limit.
-MAX_CHANGELOG_ENTRY_LINE_LENGTH = 136
+YAML_ENTRY_INDENT = "    "
+YAMLLINT_CONFIG = ".yamllint"
 VALID_CHANGELOG_AREA_RE = re.compile(r"^[a-z0-9_\-/]+$")
 VALID_CHANGELOG_AREA_PATTERN = r"[a-z0-9_\-/]+"
 
@@ -37,9 +39,14 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
     def __init__(
             self,
             sections: utils.typing.ChangelogSectionsDict,
-            areas: "utils.typing.ChangelogAreasDict") -> None:
+            areas: "utils.typing.ChangelogAreasDict",
+            *,
+            yamllint_config: YamlLintConfig | None = None,
+            project_path: pathlib.Path | None = None) -> None:
         self.sections = sections
         self.areas = areas
+        self._yamllint_config = yamllint_config
+        self._project_path = project_path
 
     @property  # type:ignore
     @abstracts.interfacemethod
@@ -53,6 +60,17 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
     @cached_property
     def max_version_for_changes_section(self) -> _version.Version:
         return _version.Version(MAX_VERSION_FOR_CHANGES_SECTION)
+
+    @cached_property
+    def yamllint_config(self) -> YamlLintConfig:
+        if self._yamllint_config is not None:
+            return self._yamllint_config
+        config_path = (
+            self._project_path or pathlib.Path(".")).joinpath(YAMLLINT_CONFIG)
+        return (
+            YamlLintConfig(file=config_path)
+            if config_path.exists()
+            else YamlLintConfig("extends: default"))
 
     def check_entry(
             self,
@@ -179,14 +197,15 @@ class AChangelogChangesChecker(metaclass=abstracts.Abstraction):
     def check_entry_line_lengths(
             self,
             path: pathlib.Path) -> tuple[str, ...]:
+        content = "".join(
+            f"{YAML_ENTRY_INDENT}{line}\n"
+            for line
+            in path.read_text().splitlines())
         return tuple(
-            f"{path}:{line_number}: Changelog entry line is "
-            f"{len(line)} characters (maximum "
-            f"{MAX_CHANGELOG_ENTRY_LINE_LENGTH})"
-            for line_number, line
-            in enumerate(path.read_text().splitlines(), start=1)
-            if (len(line) > MAX_CHANGELOG_ENTRY_LINE_LENGTH
-                and len(line.split()) > 1))
+            f"{path}:{problem.line}: {problem.desc}"
+            for problem
+            in yamllint_linter.run(content, self.yamllint_config)
+            if problem.rule == "line-length")
 
     def check_entry_files(
             self,
@@ -399,7 +418,8 @@ class AChangelogCheck(
     def changes_checker(self) -> interface.IChangelogChangesChecker:
         return self.changes_checker_class(
             self.project.changelogs.sections,
-            self.project.changelogs.areas)
+            self.project.changelogs.areas,
+            project_path=self.project.path)
 
     @property  # type:ignore
     @abstracts.interfacemethod
