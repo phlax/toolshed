@@ -175,8 +175,15 @@ if [[ "$VARIANT" == "libstdcxx" ]] && [[ -z "$PPA_TOOLCHAIN" ]]; then
     usage
 fi
 
+case "$ARCH" in
+    amd64) TRIPLE="x86_64-linux-gnu" ;;
+    arm64) TRIPLE="aarch64-linux-gnu" ;;
+    *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
+esac
+
 echo "Building sysroot with the following configuration:"
 echo "  Architecture: $ARCH"
+echo "  Target triple: $TRIPLE"
 echo "  glibc version: $GLIBC_VERSION"
 echo "  Debian version: $DEBIAN_VERSION"
 echo "  Variant: $VARIANT"
@@ -273,32 +280,34 @@ install_libstdcc () {
 }
 
 install_libgcc_dev_link () {
+    if [[ "$VARIANT" != "base" ]]; then
+        return
+    fi
     # The runtime package omits the unversioned dev link from libgcc-N-dev.
     # Provide it for literal -lgcc_s users (notably rustc), without -lgcc:
     # base sysroots use compiler-rt and do not include libgcc.a.
     echo ""
     echo "Step 5: Ensuring unversioned libgcc_s.so link..."
-    local triple
-    case "$ARCH" in
-        amd64) triple="x86_64-linux-gnu" ;;
-        arm64) triple="aarch64-linux-gnu" ;;
-        *) echo "Unsupported arch for libgcc_s link: $ARCH"; exit 1 ;;
-    esac
     local libdir
-    for libdir in "lib/$triple" "usr/lib/$triple"; do
+    for libdir in "lib/$TRIPLE" "usr/lib/$TRIPLE"; do
         if [[ -e "$WORK_DIR/$libdir/libgcc_s.so.1" ]]; then
-            if [[ ! -e "$WORK_DIR/usr/lib/$triple/libgcc_s.so" ]]; then
-                sudo mkdir -p "$WORK_DIR/usr/lib/$triple"
+            if [[ ! -e "$WORK_DIR/usr/lib/$TRIPLE/libgcc_s.so" ]]; then
+                sudo mkdir -p "$WORK_DIR/usr/lib/$TRIPLE"
+                # Debian's libgcc-N-dev uses INPUT ( /lib/<triple>/libgcc_s.so.1 -lgcc ).
+                # A bare filename lets GNU ld and lld use the -L/sysroot search path,
+                # regardless of merged-/usr layout and sysroot-prefix handling.
+                # Omit -lgcc: base sysroots have no libgcc.a; consumers use -rtlib=compiler-rt.
                 echo "/* GNU ld script - provided by toolshed sysroot */
 INPUT ( libgcc_s.so.1 )" \
-                    | sudo tee "$WORK_DIR/usr/lib/$triple/libgcc_s.so" > /dev/null
-                sudo chmod 0644 "$WORK_DIR/usr/lib/$triple/libgcc_s.so"
-                echo "Created usr/lib/$triple/libgcc_s.so -> libgcc_s.so.1"
+                    | sudo tee "$WORK_DIR/usr/lib/$TRIPLE/libgcc_s.so" > /dev/null
+                sudo chmod 0644 "$WORK_DIR/usr/lib/$TRIPLE/libgcc_s.so"
+                echo "Created usr/lib/$TRIPLE/libgcc_s.so -> libgcc_s.so.1"
             fi
             return
         fi
     done
-    echo "Error: libgcc_s.so.1 not found in sysroot"
+    echo "Error: libgcc_s.so.1 not found in sysroot; libgcc_s files present:" >&2
+    sudo find "$WORK_DIR" -name 'libgcc_s.so*' >&2 || true
     exit 1
 }
 

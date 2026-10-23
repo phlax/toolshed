@@ -25,8 +25,9 @@ The workflow builds sysroots with the following configurations:
 The base variant includes the `libgcc_s.so.1` runtime and an unversioned
 `usr/lib/<triple>/libgcc_s.so` linker script so literal `-lgcc_s` links resolve
 (needed by, for example, rustc). It does not include `libgcc.a` or libstdc++;
-consumers should use `-rtlib=compiler-rt`. The libstdc++ variant retains the
-development linker script supplied by Debian's `libgcc-N-dev` package.
+consumers should use `-rtlib=compiler-rt`. The libstdc++ variant does not get this
+script; it uses the development linker script supplied by Debian's `libgcc-N-dev`
+package instead.
 
 ## Architecture Support
 
