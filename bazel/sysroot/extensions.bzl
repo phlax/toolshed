@@ -1,7 +1,7 @@
 """Module extension for sysroot configuration in bzlmod."""
 
 load(":macos_sysroot.bzl", "setup_macos_sysroot_build")
-load(":sysroot.bzl", "sysroot", "setup_sysroots")
+load(":sysroot.bzl", "setup_sysroots", "sysroot")
 
 def _sysroot_impl(module_ctx):
     """Implementation of the sysroot module extension.
@@ -34,21 +34,21 @@ def _sysroot_impl(module_ctx):
 _setup = tag_class(
     attrs = {
         "version": attr.string(
-            doc = "Version of sysroot release to use (default: uses VERSIONS['bins_release'])",
+            doc = "Release to use (default: VERSIONS['bins_release'] for base sysroots, VERSIONS['sysroot_stdcc_release'] for deprecated variants)",
         ),
         "glibc_version": attr.string(
             default = "2.31",
             doc = "glibc version to use (default: '2.31', also available: '2.28')",
-        ),
-        "stdcc_version": attr.string(
-            default = "",
-            doc = "libstdc++ version to use (default: '' for base sysroot without libstdc++; set to e.g. '13' for the libstdc++ variant)",
         ),
         "name_prefix": attr.string(
             default = "",
             doc = """Optional prefix for sysroot repository names (default: '').
                     Allows multiple sysroot setups, e.g., name_prefix='old' creates
                     @old_sysroot_linux_amd64 and @old_sysroot_linux_arm64""",
+        ),
+        "stdcc_version": attr.string(
+            default = "",
+            doc = "Deprecated libstdc++ sysroot variant (e.g., '13'). Use the base sysroot and hermetic GCC toolchain instead.",
         ),
     },
 )
