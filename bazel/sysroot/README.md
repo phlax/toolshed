@@ -10,21 +10,30 @@ The workflow builds sysroots with the following configurations:
 - **Base:** Debian bullseye
 - **Compatibility:** Modern Linux distributions
 - **Kernel Headers:** 5.10+ (from bullseye-backports)
-- **Archive:** `sysroot-glibc2.31-{arch}.tar.xz`
+- **Variants:**
+  - **Base:** `sysroot-glibc2.31-{arch}.tar.xz`
+  - **With libstdc++13:** `sysroot-glibc2.31-libstdc++13-{arch}.tar.xz`
 
 ### glibc 2.28 (Older)
 - **Base:** Debian buster
 - **Compatibility:** Ubuntu 18.04, RHEL 8, and older distributions
 - **Kernel Headers:** 5.10+ (from buster-backports)
-- **Archive:** `sysroot-glibc2.28-{arch}.tar.xz`
+- **Variants:**
+  - **Base:** `sysroot-glibc2.28-{arch}.tar.xz`
+  - **With libstdc++13:** `sysroot-glibc2.28-libstdc++13-{arch}.tar.xz`
 
-Each sysroot includes the `libgcc_s.so.1` runtime and an unversioned
+Each base sysroot includes the `libgcc_s.so.1` runtime and an unversioned
 `usr/lib/<triple>/libgcc_s.so` linker script so literal `-lgcc_s` links resolve
 (needed by, for example, rustc). It does not include `libgcc.a` or libstdc++;
 Clang consumers should use `-rtlib=compiler-rt`. C++ standard-library headers and
-libraries must come from the selected toolchain, not the sysroot.
+libraries for GCC and LLVM come from the selected toolchain, not the sysroot.
 
 ### GCC and LLVM share the base sysroot
+
+Both GCC and LLVM toolchains use the **base** sysroot. The libstdc++13 sysroot
+variant continues to be built and published for consumers that need it.
+Do not pass that variant to `gcc.toolchain(sysroot = ...)`: GCC must use the
+base sysroot so `-l:libstdc++.a` resolves to GCC's own archive.
 
 `--config=gcc` selects hermetic GCC 13.4.0; `--config=rbe-gcc` retains the
 existing remote execution platforms. Both GCC target architectures execute on
@@ -50,7 +59,7 @@ the other runtimes, GCC CRT, and base-sysroot exports at or below GLIBC_2.31
 stdlib fixture linked with these inputs on both architectures with a measured
 maximum GLIBC_2.25 and no dynamic libstdc++/libgcc_s dependencies.
 The repository rule removes the archive's bundled libc sysroot and explicitly
-uses toolshed's glibc 2.31 sysroot.
+uses toolshed's glibc 2.31 base sysroot.
 Replacement GCC archives **must build their target runtimes against glibc
 <= 2.31**; changing `--sysroot` cannot lower the glibc requirement of an
 already-built libstdc++.
@@ -63,7 +72,7 @@ toolshed's registrations are dev-only. Register GCC before LLVM, as in
 toolshed's `MODULE.bazel`.
 Each generated repository exports `:cc_toolchain`, `:config`, `:files`,
 `:libstdcxx` (headers and static library), and `:libgcc` (static runtime archives).
-The sysroot label must point directly into the `sysroot` package, not its
+The base sysroot label must point directly into the `sysroot` package, not its
 root-package alias.
 
 Consumers compiling with a non-GCC toolchain but needing the libstdc++ ABI
@@ -85,7 +94,7 @@ cc_binary(
 Use the appropriate `@<gcc_repo>//:libstdcxx` for the compilation architecture.
 Its `CcInfo` supplies headers as compile inputs, include directories, and the
 static archive as a link input, including on RBE. Keep libc/CRT from the base
-sysroot: adding `-L` for a legacy sysroot's entire `usr/lib/<triple>` can mix
+sysroot: adding `-L` for a libstdc++13 sysroot's entire `usr/lib/<triple>` can mix
 libc/libpthread versions and produce `GLIBC_PRIVATE` and `__libc_csu_*` errors.
 
 **Release TODO:** the next `bins-v*` release must regenerate both wee8
@@ -159,6 +168,11 @@ setup_sysroots(
     glibc_version = "2.28",
 )
 
+# Or use the libstdc++13 sysroot variant
+setup_sysroots(
+    stdcc_version = "13",
+)
+
 # Or use multiple sysroot configurations with name prefixes
 setup_sysroots(
     glibc_version = "2.31",
@@ -191,6 +205,11 @@ sysroot_ext.setup()
 #     glibc_version = "2.28",
 # )
 
+# Or use the libstdc++13 sysroot variant:
+# sysroot_ext.setup(
+#     stdcc_version = "13",
+# )
+
 # Or use multiple sysroot configurations with name prefixes:
 # sysroot_ext.setup(
 #     glibc_version = "2.31",
@@ -219,21 +238,6 @@ The setup will automatically validate your configuration:
 All SHA256 hashes are centrally managed in `versions.bzl` as
 `sysroot_hashes[glibc_version][variant][arch]`, where variant is `"base"` or `"13"`.
 
-### Migrating existing configurations
-
-New sysroots no longer bundle libstdc++. Downloads with `stdcc_version = "13"`
-on repository-rule, `setup_sysroots`, and module-extension calls remain supported
-for already-published `sysroot-glibc{2.28,2.31}-libstdc++13-{amd64,arm64}.tar.xz`
-archives. **This variant is deprecated and will not be rebuilt in future
-`bins-v*` releases.** Its default download remains pinned to the legacy release;
-an explicit `version` overrides that pin. Consumers must migrate to
-`@<gcc_repo>//:libstdcxx` and remove `stdcc_version`.
-
-For sysroot *builds*, remove `variant`, `ppa_toolchain`, and `stdcc_version`
-arguments from `sysrootfs` calls. The script no longer accepts `--variant`,
-`--ppa-toolchain`, or `--stdcc`. Use the unsuffixed build targets below.
-Existing unsuffixed archive names and hashes are unchanged.
-
 ## Building Sysroots with Bazel
 
 You can build sysroots locally using Bazel. The builds are marked as `manual` so they won't be built by default.
@@ -250,8 +254,12 @@ bazel build //sysroot:sysroots
 # Or build specific sysroots:
 bazel build //sysroot:sysroot_glibc231_amd64
 bazel build //sysroot:sysroot_glibc231_arm64
+bazel build //sysroot:sysroot_glibc231_libstdcxx_amd64
+bazel build //sysroot:sysroot_glibc231_libstdcxx_arm64
 bazel build //sysroot:sysroot_glibc228_amd64
 bazel build //sysroot:sysroot_glibc228_arm64
+bazel build //sysroot:sysroot_glibc228_libstdcxx_amd64
+bazel build //sysroot:sysroot_glibc228_libstdcxx_arm64
 ```
 
 The built sysroots will be in `bazel-bin/sysroot/` directory.
@@ -269,6 +277,17 @@ bazel run //sysroot:build_sysroot -- \
   --debian bullseye \
   --workdir "$PWD/sysroot-build" \
   --output "$PWD/sysroot-glibc2.31-amd64.tar.xz"
+
+# Build with libstdc++13
+bazel run //sysroot:build_sysroot -- \
+  --arch amd64 \
+  --glibc 2.31 \
+  --debian bullseye \
+  --variant libstdcxx \
+  --ppa-toolchain focal \
+  --stdcc 13 \
+  --workdir "$PWD/sysroot-build" \
+  --output "$PWD/sysroot-glibc2.31-libstdc++13-amd64.tar.xz"
 
 # Keep specific directories (e.g., keep bin and sbin for debugging)
 bazel run //sysroot:build_sysroot -- \
@@ -341,9 +360,11 @@ bazel build //sysroot:sysroots
 Or build specific glibc versions:
 
 ```bash
-# Build all glibc 2.31 sysroots
-bazel build //sysroot:sysroot_glibc231_amd64 //sysroot:sysroot_glibc231_arm64
+# Build both variants of all glibc 2.31 sysroots
+bazel build //sysroot:sysroot_glibc231_amd64 //sysroot:sysroot_glibc231_arm64 \
+  //sysroot:sysroot_glibc231_libstdcxx_amd64 //sysroot:sysroot_glibc231_libstdcxx_arm64
 
-# Build all glibc 2.28 sysroots
-bazel build //sysroot:sysroot_glibc228_amd64 //sysroot:sysroot_glibc228_arm64
+# Build both variants of all glibc 2.28 sysroots
+bazel build //sysroot:sysroot_glibc228_amd64 //sysroot:sysroot_glibc228_arm64 \
+  //sysroot:sysroot_glibc228_libstdcxx_amd64 //sysroot:sysroot_glibc228_libstdcxx_arm64
 ```

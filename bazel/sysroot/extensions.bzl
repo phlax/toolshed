@@ -34,7 +34,7 @@ def _sysroot_impl(module_ctx):
 _setup = tag_class(
     attrs = {
         "version": attr.string(
-            doc = "Release to use (default: VERSIONS['bins_release'] for base sysroots, VERSIONS['sysroot_stdcc_release'] for deprecated variants)",
+            doc = "Release to use (default: VERSIONS['bins_release'])",
         ),
         "glibc_version": attr.string(
             default = "2.31",
@@ -48,7 +48,7 @@ _setup = tag_class(
         ),
         "stdcc_version": attr.string(
             default = "",
-            doc = "Deprecated libstdc++ sysroot variant (e.g., '13'). Use the base sysroot and hermetic GCC toolchain instead.",
+            doc = "libstdc++ version (e.g., '13'). If not specified, base sysroot without libstdc++ is used.",
         ),
     },
 )

@@ -39,6 +39,11 @@ GLIBC = [
     "2.31",
 ]
 
+STDCC = [
+    "13",
+    "",
+]
+
 sh_binary(
     name = "build_sysroot",
     srcs = ["build_sysroot.sh"],
@@ -50,6 +55,7 @@ sysroot_daily_stamp()
 sysroots(
     arches = ARCHES,
     glibc = GLIBC,
+    stdcc = STDCC,
 )
 
 macos_sysroot_extract(

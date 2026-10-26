@@ -104,12 +104,9 @@ VERSIONS = {
         },
     },
 
-    # Last release containing deprecated libstdc++ sysroot variants. Do not bump with bins_release.
-    "sysroot_stdcc_release": "0.2.27",
-
     # Sysroot hashes organized by glibc version, stdlib variant, and architecture.
-    # Deprecated libstdc++ variants retain their published hashes but are no longer built.
     # Format: sysroot_hashes[glibc_version][stdlib_variant][arch]
+    # stdlib_variant is "base" or the libstdc++ version (e.g., "13").
     "sysroot_hashes": {
         "2.31": {
             "base": {

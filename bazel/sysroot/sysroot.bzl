@@ -114,7 +114,7 @@ sysroot = repository_rule(
             doc = "glibc version (e.g., '2.31' or '2.28')",
         ),
         "stdcc_version": attr.string(
-            doc = "Deprecated libstdc++ sysroot variant (e.g., '13'). Only previously published archives are available.",
+            doc = "libstdc++ version (e.g., '13'). If not specified, base sysroot without libstdc++ is used.",
         ),
     },
     doc = "Downloads sysroot for the specified or host architecture",
@@ -125,7 +125,7 @@ def _get_sysroot_hash(glibc_version, stdcc_version, arch):
 
     Args:
         glibc_version: glibc version (e.g., "2.31" or "2.28")
-        stdcc_version: Deprecated libstdc++ variant, or None for the base sysroot
+        stdcc_version: libstdc++ version (e.g., "13"), or None for the base sysroot
         arch: Architecture (e.g., "amd64" or "arm64")
 
     Returns:
@@ -243,22 +243,18 @@ def setup_sysroots(
     """Setup function to configure sysroots, shared by module extensions and direct callers.
 
     Args:
-        version: Release to use (defaults to VERSIONS["bins_release"] for base sysroots,
-                 or the pinned VERSIONS["sysroot_stdcc_release"] for deprecated variants).
+        version: Release to use (defaults to VERSIONS["bins_release"]).
         glibc_version: glibc version to use (default: "2.31", also available: "2.28")
-        stdcc_version: Deprecated libstdc++ variant (e.g., "13"), retained for published archives only.
+        stdcc_version: libstdc++ version (e.g., "13"). If not specified, base sysroot without libstdc++ is used.
         name_prefix: Optional prefix for sysroot repository names (default: "")
                     Allows multiple sysroot setups, e.g., name_prefix="old" creates
                     @old_sysroot_linux_amd64 and @old_sysroot_linux_arm64
     """
 
-    if stdcc_version:
-        print("WARNING: stdcc_version is deprecated; libstdc++ sysroot variants are no longer built. Use the base sysroot and hermetic GCC toolchain instead.")
-
     # Get hashes from versions.bzl based on configuration
     amd64_sha256 = _get_sysroot_hash(glibc_version, stdcc_version, "amd64")
     arm64_sha256 = _get_sysroot_hash(glibc_version, stdcc_version, "arm64")
-    release = version or (VERSIONS["sysroot_stdcc_release"] if stdcc_version else VERSIONS["bins_release"])
+    release = version or VERSIONS["bins_release"]
 
     # Construct repository names with optional prefix
     if name_prefix:

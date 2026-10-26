@@ -11,8 +11,12 @@ def _sysroot_build_test_impl(ctx):
         [
             "sysroot-glibc2.28-amd64.tar.xz",
             "sysroot-glibc2.28-arm64.tar.xz",
+            "sysroot-glibc2.28-libstdc++13-amd64.tar.xz",
+            "sysroot-glibc2.28-libstdc++13-arm64.tar.xz",
             "sysroot-glibc2.31-amd64.tar.xz",
             "sysroot-glibc2.31-arm64.tar.xz",
+            "sysroot-glibc2.31-libstdc++13-amd64.tar.xz",
+            "sysroot-glibc2.31-libstdc++13-arm64.tar.xz",
         ],
         sorted([file.basename for file in target[DefaultInfo].files.to_list()]),
     )
@@ -22,23 +26,12 @@ sysroot_build_test = analysistest.make(_sysroot_build_test_impl)
 
 def _sysroot_hashes_test_impl(ctx):
     env = unittest.begin(ctx)
-    asserts.equals(env, "0.2.27", VERSIONS["sysroot_stdcc_release"])
     hashes = VERSIONS["sysroot_hashes"]
-    published = {
-        "2.28": {
-            "amd64": "b0a230b3875f36dc50739fb4711e8745a0b65fd1b1e4d0c4961c6832980c0510",
-            "arm64": "8fd6257c1a6ea3048d03d46e3a452873f885fd17ced5640deb3b3994c8dda4bf",
-        },
-        "2.31": {
-            "amd64": "0562bde13b68aa1c49ab286c5bb765158a9f17fb69f3f1d190672ef171502dbf",
-            "arm64": "db9c5b96cd4ecc9b5ec4ac865d5e91eacf2020ef583aa262c6a906741f46ca11",
-        },
-    }
-    for glibc_version, variants in hashes.items():
+    for variants in hashes.values():
         asserts.equals(env, ["13", "base"], sorted(variants.keys()))
-        asserts.equals(env, published[glibc_version], variants["13"])
-        for arch in ["amd64", "arm64"]:
-            asserts.equals(env, 64, len(variants["base"][arch]))
+        for variant in ["13", "base"]:
+            for arch in ["amd64", "arm64"]:
+                asserts.equals(env, 64, len(variants[variant][arch]))
     return unittest.end(env)
 
 sysroot_hashes_test = unittest.make(_sysroot_hashes_test_impl)
