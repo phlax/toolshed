@@ -13,7 +13,7 @@ def location(ctx, file):
     """Return a shell expression resolving a File through runfiles."""
     return '"$(rlocation %s)"' % shell.quote(runfile_path(ctx, file))
 
-def launcher(ctx, command, files, dependencies = []):
+def launcher(ctx, command, files, dependencies = [], roots = []):
     """Expand the common launcher and collect its complete runfiles.
 
     Args:
@@ -21,11 +21,16 @@ def launcher(ctx, command, files, dependencies = []):
         command: Shell command to append after runfiles initialization.
         files: Runtime Files, including staged module trees.
         dependencies: Targets whose default runfiles should be merged.
+        roots: Staged module directories to resolve before running command.
 
     Returns:
         DefaultInfo with the executable launcher and runtime closure.
     """
     output = ctx.actions.declare_file(ctx.label.name + ".sh")
+
+    # Plain assignments, unlike $(...) in argument position, abort under set -e.
+    for i, root in enumerate(roots):
+        command = 'JQ_ROOT_%d="$(jq_root %s)"\n%s' % (i, shell.quote(runfile_path(ctx, root) + "/.jq_root"), command)
     ctx.actions.expand_template(
         template = ctx.file._launcher,
         output = output,
@@ -56,8 +61,8 @@ def jq_command(ctx, roots):
     """
     jq = ctx.toolchains[JQ_TOOLCHAIN_TYPE].jqinfo.bin
     command = location(ctx, jq)
-    for root in roots:
-        command += ' -L "$(jq_root %s)"' % shell.quote(runfile_path(ctx, root) + "/.jq_root")
+    for i in range(len(roots)):
+        command += ' -L "$JQ_ROOT_%d"' % i
     return jq, command
 
 def _jq_binary_impl(ctx):
@@ -81,7 +86,7 @@ def _jq_binary_impl(ctx):
     else:
         command += " " + shell.quote(ctx.attr.filter)
     return [
-        launcher(ctx, 'exec %s "$@"' % command, files + ctx.files.data, ctx.attr.data + ctx.attr.deps),
+        launcher(ctx, 'exec %s "$@"' % command, files + ctx.files.data, ctx.attr.data + ctx.attr.deps, roots),
         info,
     ]
 
