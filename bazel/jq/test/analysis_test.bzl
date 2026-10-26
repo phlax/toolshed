@@ -9,7 +9,7 @@ def _provider_test_impl(ctx):
     asserts.true(env, JqInfo in target)
     info = target[JqInfo]
     asserts.equals(env, ctx.attr.roots, [root.basename for root in info.roots.to_list()])
-    asserts.equals(env, sorted(ctx.attr.sources), sorted([src.basename for src in info.transitive_srcs.to_list()]))
+    asserts.equals(env, sorted(ctx.attr.sources), sorted([src.short_path for src in info.transitive_srcs.to_list()]))
     asserts.true(env, all([not src.is_directory for src in info.transitive_srcs.to_list()]))
     asserts.true(env, all([root.is_directory for root in info.roots.to_list()]))
     return analysistest.end(env)

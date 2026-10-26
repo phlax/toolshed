@@ -69,7 +69,7 @@ jq_library = rule(
     attrs = {
         "srcs": attr.label_list(allow_files = [".jq", ".json"]),
         "deps": attr.label_list(providers = [JqInfo]),
-        "strip_import_prefix": attr.string(doc = "Package-relative prefix, or workspace-relative if starting with '/'."),
+        "strip_import_prefix": attr.string(doc = "Package-relative prefix, or repository-relative if starting with '/'. For sources from an external repository, '../<repo>/' is stripped first, so a '/'-prefixed value is relative to that repository's root, not the main repository."),
         "import_prefix": attr.string(doc = "Prefix prepended to each stripped import path."),
     },
 )

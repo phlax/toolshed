@@ -78,8 +78,8 @@ provider_test(
         "str.modules",
     ],
     sources = [
-        "greet.jq",
-        "str.jq",
+        "jq/test/greet.jq",
+        "jq/test/str.jq",
     ],
     target_under_test = ":greet",
 )
@@ -93,9 +93,9 @@ provider_test(
         "override.modules",
     ],
     sources = [
-        "greet.jq",
-        "str.jq",
-        "str.jq",
+        "jq/test/greet.jq",
+        "jq/test/str.jq",
+        "jq/test/overrides/str.jq",
     ],
     target_under_test = ":diamond",
 )
@@ -125,12 +125,12 @@ provider_test(
         "absolute_prefix.modules",
     ],
     sources = [
-        "config.json",
-        "feature.jq",
-        "generated.jq",
-        "greet.jq",
-        "helper.jq",
-        "str.jq",
+        "jq/test/config.json",
+        "jq/test/generated.jq",
+        "jq/test/greet.jq",
+        "jq/test/modules/feature.jq",
+        "jq/test/modules/helper.jq",
+        "jq/test/str.jq",
     ],
     target_under_test = ":notice",
 )
@@ -182,6 +182,22 @@ sh_test(
     args = ["$(rlocationpath :false_binary)"],
     data = [
         ":false_binary",
+        "@bazel_tools//tools/bash/runfiles",
+    ],
+)
+
+jq_binary(
+    name = "rooted_binary",
+    filter = ".",
+    deps = [":str"],
+)
+
+sh_test(
+    name = "missing_root_test",
+    srcs = ["missing_root.sh"],
+    args = ["$(rlocationpath :rooted_binary)"],
+    data = [
+        ":rooted_binary",
         "@bazel_tools//tools/bash/runfiles",
     ],
 )
@@ -238,7 +254,7 @@ jq_test(
 provider_test(
     name = "generated_provider_test",
     roots = ["generated.modules"],
-    sources = ["generated.jq"],
+    sources = ["jq/test/generated.jq"],
     target_under_test = ":generated",
 )
 

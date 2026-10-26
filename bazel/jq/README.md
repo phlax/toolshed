@@ -19,13 +19,16 @@ jq_library(
 Each library copies its sources (including generated files) into one staged
 directory. Import paths are package-relative, with `strip_import_prefix` removed
 and `import_prefix` prepended. A strip prefix beginning with `/` is relative to
-the repository root instead. Prefixes must be normalized paths without `..`.
+the repository root instead; for sources from an external repository this is
+that repository's root, not the main repository's. Prefixes must be normalized paths without `..`.
 The example provides `import "app/str" as str;` and
-`import "app/config" as $config;`. In a top-level program (an inline `filter`
-or `-f main.jq`), `import "./x"` resolves relative to the working directory.
-Inside a module, it resolves relative to the importing module's own file,
-preserving the staged layout. Put shared code in a `jq_library` rather than
-next to `main.jq`.
+`import "app/config" as $config;`. Relative import paths such as `import "./x"` are always resolved against the
+`-L` roots, not against the importing file. To import a sibling from inside a
+nested module, add a `{search: "./"}` metadata entry, e.g.
+`import "./helper" as helper {search: "./"};`; relative `search` values are
+resolved relative to the importing module's file (or the working directory for
+a top-level `filter` or `-f main.jq`). `test/modules/feature.jq` is a worked
+example. Put shared code in a `jq_library` rather than next to `main.jq`.
 
 `JqInfo.roots` is a preorder depset: the library's own root comes first,
 followed by its dependencies in declaration order (shared roots appear once).
@@ -78,7 +81,8 @@ genrule(
 `jq_test` is a direct Bazel test rule, defaults to `size = "small"`, and forwards
 common test attributes such as `args`, `env`, `tags`, `timeout`, and `visibility`.
 Use `jq_args` for jq flags; standard `args` and `--test_arg` reach the invocation
-after the program and any `srcs`.
+after the program and any `srcs`. In cases mode they are not forwarded, since jq
+would treat them as extra case files.
 
 * **Assertion:** specify `filter` or `main`. Runs with `-e`, so a final `false`,
   `null`, no output, or jq error fails. `srcs` become positional inputs; without

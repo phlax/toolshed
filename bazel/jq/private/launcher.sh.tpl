@@ -15,7 +15,10 @@ source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null ||
 jq_root() {
   local marker
   marker="$(rlocation "$1")"
-  [[ -n "$marker" ]] || return 1
+  if [[ -z "$marker" || ! -e "$marker" ]]; then
+    echo >&2 "jq launcher: cannot resolve module root marker '$1'"
+    exit 1
+  fi
   dirname "$marker"
 }
 

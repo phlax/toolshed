@@ -11,7 +11,7 @@ def _test_runner_impl(ctx):
     dependencies = ctx.attr.deps[:]
     if ctx.file.cases:
         files.append(ctx.file.cases)
-        command = 'exec %s --run-tests %s "$@"' % (command, location(ctx, ctx.file.cases))
+        command = "exec %s --run-tests %s" % (command, location(ctx, ctx.file.cases))
     else:
         dependencies.append(ctx.attr.binary)
         files.append(ctx.executable.binary)
@@ -32,8 +32,8 @@ def _test_runner_impl(ctx):
         else:
             command = "exec " + invocation
     return [
-        launcher(ctx, command, files + ctx.files.data, dependencies + ctx.attr.data),
-        testing.TestEnvironment(
+        launcher(ctx, command, files + ctx.files.data, dependencies + ctx.attr.data, roots),
+        RunEnvironmentInfo(
             environment = {
                 key: ctx.expand_make_variables("env", ctx.expand_location(value, targets = ctx.attr.data), {})
                 for key, value in ctx.attr.env.items()
@@ -80,6 +80,7 @@ def jq_test(
     With no input srcs or args, assertion and golden modes add -n. Only assertion
     mode adds -e. Golden JSON is normalized using jq -S unless raw is true.
     Common test attributes such as tags, timeout, and visibility pass through.
+    In cases mode, args and --test_arg are not forwarded to jq.
 
     Args:
         name: Test target name.
