@@ -87,7 +87,7 @@ jobs:
     - name: RBE auth check
       id: rbe
       if: inputs.rbe && github.event_name == 'pull_request'
-      uses: envoyproxy/toolshed/actions/github/container/auth@358540eca0af3a423fed5fe00ac656b73be3af2d
+      uses: envoyproxy/toolshed/actions/github/container/auth@dce384ec7c69aec53dbd84997ad50ceec255943c
       with:
         container: hello-world
     - name: Bazel targets (${{ inputs.action }}/${{ inputs.bazel-mode }})
@@ -120,7 +120,7 @@ jobs:
           bazel/bazel-*
     - name: Bazel source
       if: ${{ steps.source-tarball.outputs.tarball }}
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
       with:
         name: bazel-source
         path: ${{ steps.source-tarball.outputs.tarball }}
@@ -141,7 +141,7 @@ jobs:
           | "${{ inputs.bazel-path }}/bazel-bin/\(.)"
     - name: Bazel artifacts
       if: ${{ inputs.upload && (steps.artifact-paths.outputs.value || steps.source-tarball.outputs.tarball) }}
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
       with:
         name: ${{ inputs.artifact-name }}
         path: |
