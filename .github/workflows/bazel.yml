@@ -104,6 +104,7 @@ jobs:
             //:macos_packages
             //compile:llvm_minimal_packages
             //git:git_packages
+            //hunspell/source:hunspell_packages
             //pgp:sq_packages
             //sysroot:sysroots
             //v8:wee8_packages
