@@ -46,8 +46,10 @@ exec platforms with a published `git-<version>-<platform>.tar.zst`
 On a host platform with no prebuilt (eg macOS) the hub also registers the
 host's `git` from `PATH`, constrained to that host platform, so consumers that
 require the toolchain type still resolve there. Builds on hosts with a prebuilt
-are unaffected, and remote execution on Linux always uses the prebuilt. Pass
-`git_prebuilt_ext.setup(host_fallback = False)` to disable the fallback.
+are unaffected, and remote execution on Linux always uses the prebuilt. The
+root module can disable the fallback with
+`git_prebuilt_ext.setup(host_fallback = False)`; dependencies' `setup()` calls
+do not affect it.
 
 For `genrule`/`sh_*` consumers, declare the toolchain and use `$(GIT)`:
 
