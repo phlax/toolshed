@@ -4,6 +4,7 @@ load("//:versions.bzl", "VERSIONS")
 load(
     ":git_toolchain_test.bzl",
     "git_toolchain_probe",
+    "host_platform_test",
     "render_hub_build_test",
     "render_source_hub_files_test",
     "resolved_repo_test",
@@ -156,6 +157,10 @@ source_repo_test(
 
 render_hub_build_test(
     name = "render_hub_build_test",
+)
+
+host_platform_test(
+    name = "host_platform_test",
 )
 
 render_source_hub_files_test(
