@@ -2,7 +2,7 @@
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load("//git:defs.bzl", "GIT_TOOLCHAIN_TYPE")
-load("//git/private:git_prebuilt.bzl", "render_git_toolchains_build")
+load("//git/private:git_prebuilt.bzl", "host_platform", "render_git_toolchains_build")
 load("//git/private:git_source_hub.bzl", "render_git_source_build", "render_git_source_defs", "render_git_source_transitions")
 
 _SOURCE_TOOLCHAIN = str(Label("@envoy_toolshed_git_source//:source_toolchain"))
@@ -166,9 +166,44 @@ def _render_hub_build_test_impl(ctx):
     asserts.true(env, "load(\"@" + "@envoy_toolshed+//git:defs.bzl\", \"git_toolchain\")" in content)
     asserts.true(env, "toolchain_type = \"@" + "@envoy_toolshed+//git:toolchain_type\"" in content)
     asserts.true(env, "@" + "@git_prebuilt_linux_x86_64//:git" in content)
+    asserts.false(env, "name = \"host\"" in content)
+
+    # A host without a prebuilt gets a toolchain for the host's git, constrained to that host.
+    content = render_git_toolchains_build(
+        {"linux-x86_64": "git_prebuilt_linux_x86_64"},
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
+        host = "macos-aarch64",
+    )
+    asserts.true(env, "name = \"host\"" in content)
+    asserts.true(env, "srcs = [\"host/git\"]" in content)
+    asserts.true(env, "\"@platforms//os:macos\"" in content)
+    asserts.true(env, "\"@platforms//cpu:aarch64\"" in content)
+
+    # A host that has a prebuilt keeps using it.
+    content = render_git_toolchains_build(
+        {"linux-x86_64": "git_prebuilt_linux_x86_64"},
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
+        host = "linux-x86_64",
+    )
+    asserts.false(env, "name = \"host\"" in content)
     return unittest.end(env)
 
 render_hub_build_test = unittest.make(_render_hub_build_test_impl)
+
+def _host_platform_test_impl(ctx):
+    env = unittest.begin(ctx)
+    asserts.equals(env, "macos-aarch64", host_platform("mac os x", "aarch64"))
+    asserts.equals(env, "macos-x86_64", host_platform("Mac OS X", "x86_64"))
+    asserts.equals(env, "linux-x86_64", host_platform("linux", "amd64"))
+    asserts.equals(env, "linux-aarch64", host_platform("Linux", "arm64"))
+    asserts.equals(env, "windows-x86_64", host_platform("windows 11", "amd64"))
+    asserts.equals(env, None, host_platform("freebsd", "x86_64"))
+    asserts.equals(env, None, host_platform("linux", "ppc64le"))
+    return unittest.end(env)
+
+host_platform_test = unittest.make(_host_platform_test_impl)
 
 def _render_source_hub_files_test_impl(ctx):
     env = unittest.begin(ctx)
