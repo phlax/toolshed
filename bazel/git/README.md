@@ -43,11 +43,12 @@ Registering `@envoy_toolshed//git:toolchain_type` resolves a prebuilt git on
 exec platforms with a published `git-<version>-<platform>.tar.zst`
 (`linux-x86_64`, `linux-aarch64` today).
 
-On a host platform with no prebuilt (eg macOS) the hub also registers the
-host's `git` from `PATH`, constrained to that host platform, so consumers that
-require the toolchain type still resolve there. Builds on hosts with a prebuilt
-are unaffected, and remote execution on Linux always uses the prebuilt. The
-root module can disable the fallback with
+On a macOS host, for which no prebuilt is published, the hub also registers
+the host's `git` from `PATH`, constrained to that host platform, so consumers
+that require the toolchain type still resolve there. Linux hosts and
+remote execution always use the prebuilt; disabling a Linux prebuilt with
+`setup(linux_x86_64_sha256 = "")` keeps the source fallback and does not enable
+the host fallback. The root module can disable the fallback with
 `git_prebuilt_ext.setup(host_fallback = False)`; dependencies' `setup()` calls
 do not affect it.
 

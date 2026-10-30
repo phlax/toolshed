@@ -14,10 +14,10 @@ _PLATFORM_TARGETS = {
     },
 }
 
-_OS_CONSTRAINTS = {
-    "linux": "@platforms//os:linux",
+# Host platforms the hub may fall back to the host's git on. Linux always has a
+# prebuilt (or the source fallback), and Windows is untested.
+_HOST_FALLBACK_OS_CONSTRAINTS = {
     "macos": "@platforms//os:macos",
-    "windows": "@platforms//os:windows",
 }
 
 _CPU_CONSTRAINTS = {
@@ -31,6 +31,21 @@ _CPU_ALIASES = {
     "arm64": "aarch64",
     "x86_64": "x86_64",
 }
+
+def host_fallback_platform(host):
+    """Return `host` if the hub may fall back to the host's git on it, else None.
+
+    Args:
+        host: Platform suffix from `host_platform`, or None.
+
+    Returns:
+        `host` when it never has a prebuilt and its OS supports the fallback, else None.
+    """
+    if not host or host in _PLATFORM_TARGETS:
+        return None
+    if host.split("-", 1)[0] not in _HOST_FALLBACK_OS_CONSTRAINTS:
+        return None
+    return host
 
 def host_platform(os_name, arch):
     """Map a `repository_os` name and arch to a `<os>-<cpu>` platform suffix.
@@ -64,8 +79,8 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
         defs_label: Canonical label string for //git:defs.bzl.
         toolchain_type_label: Canonical label string for //git:toolchain_type.
         host: Platform suffix of the host (eg `macos-aarch64`) to render a toolchain for using
-            the hub's `host/git` (a symlink to the host's git), or None. Ignored for platforms
-            that have a prebuilt.
+            the hub's `host/git` (a symlink to the host's git), or None. Ignored unless
+            `host_fallback_platform` accepts it.
 
     Returns:
         BUILD file content for the hub repository.
@@ -98,7 +113,7 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
             ")",
             "",
         ])
-    if host and not platform_repos.get(host):
+    if host_fallback_platform(host):
         os_key, cpu = host.split("-", 1)
         lines.extend([
             "# Host fallback: no prebuilt git is published for %s." % host,
@@ -117,7 +132,7 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
             "    toolchain = \":host_impl\",",
             "    toolchain_type = \"%s\"," % toolchain_type_label,
             "    exec_compatible_with = [",
-            "        \"%s\"," % _OS_CONSTRAINTS[os_key],
+            "        \"%s\"," % _HOST_FALLBACK_OS_CONSTRAINTS[os_key],
             "        \"%s\"," % _CPU_CONSTRAINTS[cpu],
             "    ],",
             ")",
@@ -153,18 +168,20 @@ def _git_toolchains_hub_impl(ctx):
         "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
     }
 
-    # On a host without a prebuilt (eg macOS), fall back to the host's git so consumers
-    # that require the toolchain type still resolve. Only the host platform is covered;
-    # the hub is evaluated per host, so this never leaks into other exec platforms.
+    # On a host platform that never has a prebuilt (macOS), fall back to the host's git so
+    # consumers that require the toolchain type still resolve. A prebuilt disabled with
+    # `setup(<platform>_sha256 = "")` does not qualify: that keeps the source fallback, and a
+    # Linux-constrained host toolchain could be selected for remote Linux workers.
     host = None
     if ctx.attr.host_fallback:
-        host = host_platform(ctx.os.name, ctx.os.arch)
-        if host and not platform_repos.get(host):
-            host_git = ctx.which("git")
-            if host_git:
-                ctx.symlink(host_git, "host/git")
-            else:
-                host = None
+        host = host_fallback_platform(host_platform(ctx.os.name, ctx.os.arch))
+    if host:
+        # `which` does not register PATH as an input; read it so a different git on PATH
+        # re-evaluates the hub.
+        ctx.getenv("PATH")
+        host_git = ctx.which("git")
+        if host_git:
+            ctx.symlink(host_git, "host/git")
         else:
             host = None
 

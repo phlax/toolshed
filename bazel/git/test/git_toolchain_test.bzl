@@ -2,7 +2,7 @@
 
 load("@bazel_skylib//lib:unittest.bzl", "analysistest", "asserts", "unittest")
 load("//git:defs.bzl", "GIT_TOOLCHAIN_TYPE")
-load("//git/private:git_prebuilt.bzl", "host_platform", "render_git_toolchains_build")
+load("//git/private:git_prebuilt.bzl", "host_fallback_platform", "host_platform", "render_git_toolchains_build")
 load("//git/private:git_source_hub.bzl", "render_git_source_build", "render_git_source_defs", "render_git_source_transitions")
 
 _SOURCE_TOOLCHAIN = str(Label("@envoy_toolshed_git_source//:source_toolchain"))
@@ -188,6 +188,26 @@ def _render_hub_build_test_impl(ctx):
         host = "linux-x86_64",
     )
     asserts.false(env, "name = \"host\"" in content)
+
+    # A prebuilt platform with its prebuilt disabled gets no host toolchain either: the
+    # source fallback covers it, and a Linux toolchain could be picked for remote workers.
+    content = render_git_toolchains_build(
+        {"linux-x86_64": None},
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
+        host = "linux-x86_64",
+    )
+    asserts.false(env, "name = \"host\"" in content)
+    asserts.false(env, "git_toolchain(" in content)
+
+    # Only macOS hosts fall back.
+    content = render_git_toolchains_build(
+        {"linux-x86_64": "git_prebuilt_linux_x86_64"},
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
+        host = "windows-x86_64",
+    )
+    asserts.false(env, "name = \"host\"" in content)
     return unittest.end(env)
 
 render_hub_build_test = unittest.make(_render_hub_build_test_impl)
@@ -201,6 +221,13 @@ def _host_platform_test_impl(ctx):
     asserts.equals(env, "windows-x86_64", host_platform("windows 11", "amd64"))
     asserts.equals(env, None, host_platform("freebsd", "x86_64"))
     asserts.equals(env, None, host_platform("linux", "ppc64le"))
+
+    asserts.equals(env, "macos-aarch64", host_fallback_platform("macos-aarch64"))
+    asserts.equals(env, "macos-x86_64", host_fallback_platform("macos-x86_64"))
+    asserts.equals(env, None, host_fallback_platform("linux-x86_64"))
+    asserts.equals(env, None, host_fallback_platform("linux-aarch64"))
+    asserts.equals(env, None, host_fallback_platform("windows-x86_64"))
+    asserts.equals(env, None, host_fallback_platform(None))
     return unittest.end(env)
 
 host_platform_test = unittest.make(_host_platform_test_impl)
