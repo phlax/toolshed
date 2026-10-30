@@ -6,6 +6,7 @@ load("//git/private:git_prebuilt.bzl", "host_fallback_platform", "host_platform"
 load("//git/private:git_source_hub.bzl", "render_git_source_build", "render_git_source_defs", "render_git_source_transitions")
 
 _SOURCE_TOOLCHAIN = str(Label("@envoy_toolshed_git_source//:source_toolchain"))
+_HOST_TOOLCHAIN = str(Label("@envoy_toolshed_git_host_test//:host"))
 
 _LAUNCHER_TEMPLATE = """#!/bin/bash
 set -euo pipefail
@@ -80,6 +81,15 @@ _source_toolchain_transition = transition(
     outputs = ["//command_line_option:extra_toolchains"],
 )
 
+def _host_toolchain_transition_impl(_settings, _attr):
+    return {"//command_line_option:extra_toolchains": [_HOST_TOOLCHAIN]}
+
+_host_toolchain_transition = transition(
+    implementation = _host_toolchain_transition_impl,
+    inputs = [],
+    outputs = ["//command_line_option:extra_toolchains"],
+)
+
 def _source_probe_impl(ctx):
     default = ctx.attr.probe[0][DefaultInfo]
     launcher = _declare_launcher(ctx, default.files_to_run.executable)
@@ -100,6 +110,22 @@ source_toolchain_probe = rule(
             mandatory = True,
             executable = True,
             cfg = _source_toolchain_transition,
+        ),
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+    },
+)
+
+# As `source_toolchain_probe`, forcing the test-only host git toolchain instead.
+host_toolchain_probe = rule(
+    implementation = _source_probe_impl,
+    executable = True,
+    attrs = {
+        "probe": attr.label(
+            mandatory = True,
+            executable = True,
+            cfg = _host_toolchain_transition,
         ),
         "_allowlist_function_transition": attr.label(
             default = "@bazel_tools//tools/allowlists/function_transition_allowlist",

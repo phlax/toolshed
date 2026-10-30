@@ -5,6 +5,7 @@ load(
     ":git_toolchain_test.bzl",
     "git_toolchain_probe",
     "host_platform_test",
+    "host_toolchain_probe",
     "render_hub_build_test",
     "render_source_hub_files_test",
     "resolved_repo_test",
@@ -15,6 +16,7 @@ load(
 exports_files([
     "assert_git_https.sh",
     "assert_git_manifest.sh",
+    "assert_git_toolchain_host.sh",
     "assert_git_toolchain_https.sh",
     "assert_git_toolchain_version.sh",
     "live_prebuilt_consumer.sh",
@@ -27,6 +29,17 @@ git_toolchain_probe(
 source_toolchain_probe(
     name = "resolved_git_source",
     probe = ":resolved_git",
+)
+
+host_toolchain_probe(
+    name = "resolved_git_host",
+    probe = ":resolved_git",
+)
+
+filegroup(
+    name = "resolved_git_host_repo_name",
+    srcs = [":resolved_git_host"],
+    output_group = "repo_name",
 )
 
 filegroup(
@@ -105,6 +118,23 @@ sh_test(
         "external",
         "requires-network",
     ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# The hub's host fallback mechanism (PATH lookup, symlink, git_toolchain over it), exercised
+# on this host through the test-only repo, since the hub itself only renders it for macOS.
+sh_test(
+    name = "toolchain_host_test",
+    size = "small",
+    srcs = [":assert_git_toolchain_host.sh"],
+    data = [
+        ":resolved_git_host",
+        ":resolved_git_host_repo_name",
+    ],
+    env = {
+        "GIT": "$(rootpath :resolved_git_host)",
+        "REPO_NAME_FILE": "$(rootpath :resolved_git_host_repo_name)",
+    },
     target_compatible_with = ["@platforms//os:linux"],
 )
 

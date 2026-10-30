@@ -115,30 +115,85 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
         ])
     if host_fallback_platform(host):
         os_key, cpu = host.split("-", 1)
-        lines.extend([
+        lines.extend(host_toolchain_lines(
+            toolchain_type_label,
+            [_HOST_FALLBACK_OS_CONSTRAINTS[os_key], _CPU_CONSTRAINTS[cpu]],
             "# Host fallback: no prebuilt git is published for %s." % host,
-            "filegroup(",
-            "    name = \"host_git\",",
-            "    srcs = [\"host/git\"],",
-            ")",
-            "",
-            "git_toolchain(",
-            "    name = \"host_impl\",",
-            "    git = \":host_git\",",
-            ")",
-            "",
-            "toolchain(",
-            "    name = \"host\",",
-            "    toolchain = \":host_impl\",",
-            "    toolchain_type = \"%s\"," % toolchain_type_label,
-            "    exec_compatible_with = [",
-            "        \"%s\"," % _HOST_FALLBACK_OS_CONSTRAINTS[os_key],
-            "        \"%s\"," % _CPU_CONSTRAINTS[cpu],
-            "    ],",
-            ")",
-            "",
-        ])
+        ))
     return "\n".join(lines)
+
+def host_toolchain_lines(toolchain_type_label, exec_constraints, comment):
+    """Render a toolchain over the repo's `host/git` (a symlink to the host's git).
+
+    Args:
+        toolchain_type_label: Canonical label string for //git:toolchain_type.
+        exec_constraints: Constraint labels the toolchain is restricted to.
+        comment: Comment line placed above the targets.
+
+    Returns:
+        BUILD file lines declaring `:host_git`, `:host_impl` and `:host`.
+    """
+    return [
+        comment,
+        "filegroup(",
+        "    name = \"host_git\",",
+        "    srcs = [\"host/git\"],",
+        ")",
+        "",
+        "git_toolchain(",
+        "    name = \"host_impl\",",
+        "    git = \":host_git\",",
+        ")",
+        "",
+        "toolchain(",
+        "    name = \"host\",",
+        "    toolchain = \":host_impl\",",
+        "    toolchain_type = \"%s\"," % toolchain_type_label,
+        "    exec_compatible_with = [",
+    ] + [
+        "        \"%s\"," % constraint
+        for constraint in exec_constraints
+    ] + [
+        "    ],",
+        ")",
+        "",
+    ]
+
+def render_host_git_build(defs_label, toolchain_type_label, exec_constraints, comment):
+    """Render a standalone BUILD file with only a host git toolchain (see `host_toolchain_lines`).
+
+    Args:
+        defs_label: Canonical label string for //git:defs.bzl.
+        toolchain_type_label: Canonical label string for //git:toolchain_type.
+        exec_constraints: Constraint labels the toolchain is restricted to.
+        comment: Comment line placed above the targets.
+
+    Returns:
+        BUILD file content.
+    """
+    return "\n".join([
+        "load(\"%s\", \"git_toolchain\")" % defs_label,
+        "",
+    ] + host_toolchain_lines(toolchain_type_label, exec_constraints, comment))
+
+def link_host_git(ctx):
+    """Symlink the host's `git` from PATH to `host/git` in the repo, tracking PATH.
+
+    Args:
+        ctx: Repository context.
+
+    Returns:
+        True if a host git was found and linked, else False.
+    """
+
+    # `which` does not register PATH as an input; read it so a different git on PATH
+    # re-evaluates the repo.
+    ctx.getenv("PATH")
+    host_git = ctx.which("git")
+    if not host_git:
+        return False
+    ctx.symlink(host_git, "host/git")
+    return True
 
 def _git_prebuilt_impl(ctx):
     if not ctx.attr.sha256:
@@ -175,15 +230,8 @@ def _git_toolchains_hub_impl(ctx):
     host = None
     if ctx.attr.host_fallback:
         host = host_fallback_platform(host_platform(ctx.os.name, ctx.os.arch))
-    if host:
-        # `which` does not register PATH as an input; read it so a different git on PATH
-        # re-evaluates the hub.
-        ctx.getenv("PATH")
-        host_git = ctx.which("git")
-        if host_git:
-            ctx.symlink(host_git, "host/git")
-        else:
-            host = None
+    if host and not link_host_git(ctx):
+        host = None
 
     ctx.file("BUILD.bazel", render_git_toolchains_build(
         platform_repos,
