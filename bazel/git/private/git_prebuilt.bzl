@@ -14,13 +14,58 @@ _PLATFORM_TARGETS = {
     },
 }
 
-def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label):
+_OS_CONSTRAINTS = {
+    "linux": "@platforms//os:linux",
+    "macos": "@platforms//os:macos",
+    "windows": "@platforms//os:windows",
+}
+
+_CPU_CONSTRAINTS = {
+    "aarch64": "@platforms//cpu:aarch64",
+    "x86_64": "@platforms//cpu:x86_64",
+}
+
+_CPU_ALIASES = {
+    "aarch64": "aarch64",
+    "amd64": "x86_64",
+    "arm64": "aarch64",
+    "x86_64": "x86_64",
+}
+
+def host_platform(os_name, arch):
+    """Map a `repository_os` name and arch to a `<os>-<cpu>` platform suffix.
+
+    Args:
+        os_name: `repository_ctx.os.name`, eg `mac os x` or `linux`.
+        arch: `repository_ctx.os.arch`, eg `aarch64` or `amd64`.
+
+    Returns:
+        The platform suffix (eg `macos-aarch64`), or None for an unknown OS or CPU.
+    """
+    os_name = os_name.lower()
+    if os_name.startswith("mac"):
+        os_key = "macos"
+    elif os_name.startswith("linux"):
+        os_key = "linux"
+    elif os_name.startswith("windows"):
+        os_key = "windows"
+    else:
+        return None
+    cpu = _CPU_ALIASES.get(arch.lower())
+    if not cpu:
+        return None
+    return "%s-%s" % (os_key, cpu)
+
+def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label, host = None):
     """Render the hub BUILD file for the configured prebuilt toolchains.
 
     Args:
         platform_repos: Mapping from platform suffix to prebuilt repository name.
         defs_label: Canonical label string for //git:defs.bzl.
         toolchain_type_label: Canonical label string for //git:toolchain_type.
+        host: Platform suffix of the host (eg `macos-aarch64`) to render a toolchain for using
+            the hub's `host/git` (a symlink to the host's git), or None. Ignored for platforms
+            that have a prebuilt.
 
     Returns:
         BUILD file content for the hub repository.
@@ -53,6 +98,31 @@ def render_git_toolchains_build(platform_repos, defs_label, toolchain_type_label
             ")",
             "",
         ])
+    if host and not platform_repos.get(host):
+        os_key, cpu = host.split("-", 1)
+        lines.extend([
+            "# Host fallback: no prebuilt git is published for %s." % host,
+            "filegroup(",
+            "    name = \"host_git\",",
+            "    srcs = [\"host/git\"],",
+            ")",
+            "",
+            "git_toolchain(",
+            "    name = \"host_impl\",",
+            "    git = \":host_git\",",
+            ")",
+            "",
+            "toolchain(",
+            "    name = \"host\",",
+            "    toolchain = \":host_impl\",",
+            "    toolchain_type = \"%s\"," % toolchain_type_label,
+            "    exec_compatible_with = [",
+            "        \"%s\"," % _OS_CONSTRAINTS[os_key],
+            "        \"%s\"," % _CPU_CONSTRAINTS[cpu],
+            "    ],",
+            ")",
+            "",
+        ])
     return "\n".join(lines)
 
 def _git_prebuilt_impl(ctx):
@@ -78,20 +148,41 @@ def _repo_name(label):
     return label.workspace_name
 
 def _git_toolchains_hub_impl(ctx):
+    platform_repos = {
+        "linux-aarch64": _repo_name(ctx.attr.linux_aarch64) if ctx.attr.linux_aarch64 else None,
+        "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
+    }
+
+    # On a host without a prebuilt (eg macOS), fall back to the host's git so consumers
+    # that require the toolchain type still resolve. Only the host platform is covered;
+    # the hub is evaluated per host, so this never leaks into other exec platforms.
+    host = None
+    if ctx.attr.host_fallback:
+        host = host_platform(ctx.os.name, ctx.os.arch)
+        if host and not platform_repos.get(host):
+            host_git = ctx.which("git")
+            if host_git:
+                ctx.symlink(host_git, "host/git")
+            else:
+                host = None
+        else:
+            host = None
+
     ctx.file("BUILD.bazel", render_git_toolchains_build(
-        {
-            "linux-aarch64": _repo_name(ctx.attr.linux_aarch64) if ctx.attr.linux_aarch64 else None,
-            "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
-        },
+        platform_repos,
         ctx.attr.defs_label,
         ctx.attr.toolchain_type_label,
+        host = host,
     ))
-    return ctx.repo_metadata(reproducible = True)
+
+    # The host fallback depends on PATH, so only the prebuilt-only hub is reproducible.
+    return ctx.repo_metadata(reproducible = host == None)
 
 git_toolchains_hub = repository_rule(
     implementation = _git_toolchains_hub_impl,
     attrs = {
         "defs_label": attr.string(mandatory = True),
+        "host_fallback": attr.bool(default = True),
         "linux_aarch64": attr.label(default = None),
         "linux_x86_64": attr.label(default = None),
         "toolchain_type_label": attr.string(mandatory = True),

@@ -43,6 +43,12 @@ Registering `@envoy_toolshed//git:toolchain_type` resolves a prebuilt git on
 exec platforms with a published `git-<version>-<platform>.tar.zst`
 (`linux-x86_64`, `linux-aarch64` today).
 
+On a host platform with no prebuilt (eg macOS) the hub also registers the
+host's `git` from `PATH`, constrained to that host platform, so consumers that
+require the toolchain type still resolve there. Builds on hosts with a prebuilt
+are unaffected, and remote execution on Linux always uses the prebuilt. Pass
+`git_prebuilt_ext.setup(host_fallback = False)` to disable the fallback.
+
 For `genrule`/`sh_*` consumers, declare the toolchain and use `$(GIT)`:
 
 ```starlark
