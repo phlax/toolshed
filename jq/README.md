@@ -112,6 +112,14 @@ none jq runs with `--null-input`.
 
 Rules using `rules_jq` directly can depend on `@envoy_toolshed_jq//:library`.
 
+### `@envoy_toolshed_jq//:jq`
+
+jq with the modules importable, for scripts and actions that run jq
+themselves: use it in place of the toolchain jq, with no `-L`, eg
+`"$JQ_BIN" -n 'import "str" as str; "  x  " | str::trim'`. It is a
+pass-through `rules_jq` `jq_binary`, so add it to `data` (or `tools`) and pass
+its `$(rlocationpath)`/`$(execpath)`.
+
 ```starlark
 load("@envoy_toolshed_jq//:defs.bzl", "toolshed_jq")
 
