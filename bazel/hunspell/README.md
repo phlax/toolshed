@@ -14,7 +14,8 @@ Each `bins-v*` release publishes `hunspell-<version>-linux-{x86_64,aarch64}.tar.
 - `BUILD.bazel`
 - `bin/hunspell`: statically linked against the C++ runtime, built against toolshed's glibc
   2.31 sysroot. No readline/curses, iconv or gettext.
-- `share/hunspell/en_US.{aff,dic}`: SCOWL en_US (`dictionary-en`).
+- `share/hunspell/en_US.{aff,dic}`: SCOWL en_US (`dictionary-en`), with the apostrophe added to
+  `WORDCHARS` so contractions check as one word.
 - `share/doc/`: hunspell and dictionary licenses.
 
 ## Consuming the toolchain

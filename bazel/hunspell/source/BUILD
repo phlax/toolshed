@@ -4,9 +4,22 @@
 load("//hunspell:defs.bzl", "hunspell_toolchain")
 load("//hunspell/private:hunspell_package.bzl", "hunspell_package")
 
+# SCOWL's affix file declares only digits as extra word characters, so hunspell splits
+# contractions ("doesn't" checks "doesn" and "t"). Add the apostrophe, as aspell and the
+# LibreOffice en_US dictionary (which uses the typographic one) treat it.
+genrule(
+    name = "en_US_aff",
+    srcs = ["@dictionary_en//:index.aff"],
+    outs = ["en_US.aff"],
+    cmd = """
+    grep -q '^WORDCHARS 0123456789$$' $(execpath @dictionary_en//:index.aff) \
+    && sed "s/^WORDCHARS 0123456789$$/WORDCHARS 0123456789'/" $(execpath @dictionary_en//:index.aff) > $@
+    """,
+)
+
 hunspell_toolchain(
     name = "source_impl",
-    affix = "@dictionary_en//:index.aff",
+    affix = ":en_US_aff",
     dictionary = "@dictionary_en//:index.dic",
     hunspell = "@hunspell_src//:hunspell",
 )
@@ -21,7 +34,7 @@ toolchain(
 [
     hunspell_package(
         name = "hunspell_%s" % platform.replace("-", "_"),
-        affix = "@dictionary_en//:index.aff",
+        affix = ":en_US_aff",
         dictionary = "@dictionary_en//:index.dic",
         hunspell = "@hunspell_src//:hunspell",
         licenses = {

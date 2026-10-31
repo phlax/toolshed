@@ -7,7 +7,7 @@ dict="$2"
 personal="${TEST_TMPDIR:-$(mktemp -d)}/personal.dic"
 printf 'envoyproxy\n' > "$personal"
 
-output="$(printf 'hello\nhelo\nenvoyproxy\nrunning\n' \
+output="$(printf "hello\nhelo\nenvoyproxy\nrunning\ndoesn't\n" \
     | env - "$hunspell" -a -i utf-8 -d "$dict" -p "$personal")"
 mapfile -t lines <<< "$output"
 
@@ -24,4 +24,7 @@ fail() {
 [[ "${lines[3]}" == *"hello"* ]] || fail "'helo' should suggest 'hello'"
 [[ "${lines[5]}" == "*" ]] || fail "'envoyproxy' should be accepted from the personal dictionary"
 [[ "${lines[7]}" == "*" || "${lines[7]}" == "+ "* ]] || fail "'running' should be correct"
+# The apostrophe is a word character: a contraction is one correct word (split, "doesn" would
+# be misspelled).
+[[ "${lines[9]}" == "*" ]] || fail "'doesn't' should be one correct word"
 echo "PASS"
