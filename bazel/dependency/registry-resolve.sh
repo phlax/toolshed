@@ -5,8 +5,8 @@ set -euo pipefail
 usage() {
     cat <<'EOUSAGE'
 Usage:
-  registry-resolve.sh resolve --repo=<repo> --url=<url> --branch=<branch> [--release-tags=<glob>] [--requested-sha=<sha>] [--allow-unsafe] [--format=json|markdown] [--json-out=<path>] [--markdown-out=<path>] [--sha-out=<path>] [--git-bin=<path>] [--jq-bin=<path>] [--jq-root=<path>]
-  registry-resolve.sh check --repo=<repo> --url=<url> --branch=<branch> --bazelrc=<path> [--allow-unsafe] [--format=json|markdown] [--json-out=<path>] [--markdown-out=<path>] [--sha-out=<path>] [--git-bin=<path>] [--jq-bin=<path>] [--jq-root=<path>]
+  registry-resolve.sh resolve --repo=<repo> --url=<url> --branch=<branch> [--release-tags=<glob>] [--requested-sha=<sha>] [--allow-unsafe] [--format=json|markdown] [--json-out=<path>] [--markdown-out=<path>] [--sha-out=<path>] [--git-bin=<path>] [--jq-bin=<path>]
+  registry-resolve.sh check --repo=<repo> --url=<url> --branch=<branch> --bazelrc=<path> [--allow-unsafe] [--format=json|markdown] [--json-out=<path>] [--markdown-out=<path>] [--sha-out=<path>] [--git-bin=<path>] [--jq-bin=<path>]
 EOUSAGE
 }
 
@@ -28,7 +28,7 @@ normalize_bool() {
 }
 
 run_jq() {
-    "$JQ_BIN" -L "$JQ_DIR" "$@"
+    "$JQ_BIN" "$@"
 }
 
 git_cmd() {
@@ -185,7 +185,6 @@ SHA_OUT=""
 SETTINGS_FILE=""
 GIT_BIN="${GIT_BIN:-git}"
 JQ_BIN="${JQ_BIN:-jq}"
-JQ_ROOT="${TOOLSHED_JQ_ROOT:-}"
 
 [[ $# -gt 0 ]] || {
     usage >&2
@@ -224,8 +223,6 @@ while (($#)); do
         --git-bin) GIT_BIN="$2"; shift ;;
         --jq-bin=*) JQ_BIN="${1#*=}" ;;
         --jq-bin) JQ_BIN="$2"; shift ;;
-        --jq-root=*) JQ_ROOT="${1#*=}" ;;
-        --jq-root) JQ_ROOT="$2"; shift ;;
         --help|-h) usage; exit 0 ;;
         *) fail "Unknown option: $1" 1 ;;
     esac
@@ -253,7 +250,6 @@ TMPDIR_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_ROOT"' EXIT
 GIT_HOME="$TMPDIR_ROOT/git-home"
 mkdir -p "$GIT_HOME"
-JQ_DIR="$(dirname "${JQ_ROOT:?--jq-root is required}")"
 TARGET_TAGS_JSON='[]'
 LATEST=""
 TARGET_SHA=""
