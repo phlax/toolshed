@@ -103,9 +103,14 @@ configuration boolean expressions.
 
 ### `toolshed_jq`
 
-`defs.bzl`'s `toolshed_jq()` wraps `@aspect_bazel_lib//lib:jq.bzl`'s `jq()`,
-adding the `-L <modules root>` flag (and the modules themselves as `data`)
-automatically, so any filter can `import`/`include` the scoped modules above:
+`defs.bzl`'s `toolshed_jq()` runs jq at build time through
+[`rules_jq`](../rules_jq): a `jq_binary` over this module's `jq_library`
+(`//:library`), run by a genrule that writes `out` (default `<name>.json`). Any
+filter can `import`/`include` the scoped modules above. `args` follow the filter
+and get genrule expansions such as `$(location)`; `srcs` follow `args`, and with
+none jq runs with `--null-input`.
+
+Rules using `rules_jq` directly can depend on `@envoy_toolshed_jq//:library`.
 
 ```starlark
 load("@envoy_toolshed_jq//:defs.bzl", "toolshed_jq")
