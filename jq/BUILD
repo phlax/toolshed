@@ -1,4 +1,5 @@
 load("@bazel_skylib//rules:diff_test.bzl", "diff_test")
+load("@rules_jq//jq:defs.bzl", "jq_binary", "jq_library")
 load(":defs.bzl", "jq_module_test", "test_modules", "toolshed_jq")
 
 exports_files(glob(["**/*.jq"]) + [
@@ -10,6 +11,22 @@ exports_files(glob(["**/*.jq"]) + [
 filegroup(
     name = "modules",
     srcs = glob(["**/*.jq"]),
+    visibility = ["//visibility:public"],
+)
+
+# The modules as a `rules_jq` library, importable by their scoped path, eg
+# `import "github/gfm" as gfm;`.
+jq_library(
+    name = "library",
+    srcs = [":modules"],
+    visibility = ["//visibility:public"],
+)
+
+# jq with the modules importable: run it in place of jq, eg
+# `"$JQ_BIN" -n 'import "str" as str; ...'`.
+jq_binary(
+    name = "jq",
+    deps = [":library"],
     visibility = ["//visibility:public"],
 )
 
