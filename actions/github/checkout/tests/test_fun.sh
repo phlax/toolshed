@@ -13,14 +13,24 @@ test_checkout () {
 
 test_depth () {
     local depth="${1}"
-    local commit_count
+    local commit_count max_count parents
     # Only count first-parent history: on a PR merge ref the merge commit
     # has a second parent (the PR head) whose commits are also reachable,
-    # which would inflate the count. fetch-depth applies to first-parent.
+    # which would inflate the count.
     commit_count=$(git rev-list --count --first-parent HEAD)
     echo "Commit count: $commit_count"
-    if [[ "$commit_count" -ne "${depth}" ]]; then
-        echo "fail:Expected fetch-depth ${depth}, but got $commit_count commits" >> "$TEST_OUTPUT"
+    # The shallow boundary is "within <depth> commits of the tip along any
+    # path", so on a merge ref a base commit the PR side reaches within the
+    # depth is fetched even when it is deeper on the first-parent side, and
+    # the first-parent chain runs past <depth>: by up to depth-2 commits (the
+    # PR head is at depth 2 and can at most reach depth-2 base commits).
+    parents=$(git rev-list --parents -n 1 HEAD | wc -w)
+    max_count="${depth}"
+    if [[ "$parents" -gt 2 && "$depth" -gt 2 ]]; then
+        max_count=$((depth * 2 - 2))
+    fi
+    if [[ "$commit_count" -lt "${depth}" || "$commit_count" -gt "${max_count}" ]]; then
+        echo "fail:Expected fetch-depth ${depth} (${depth}..${max_count} commits), but got $commit_count commits" >> "$TEST_OUTPUT"
     else
         echo "success:fetch-depth ${depth} applied correctly, got $commit_count commits" >> "$TEST_OUTPUT"
         git log --oneline --first-parent
