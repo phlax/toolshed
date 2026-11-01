@@ -60,7 +60,7 @@ if [[ "$scan_nvd" == true ]]; then
         "$JQ_BIN" -s '{matches: [.[].matches[]], analyzed: [.[].analyzed[]]}' \
             > "$tmpdir/nvd.json"
 else
-    echo '{"matches": []}' > "$tmpdir/nvd.json"
+    echo '{"matches": [], "analyzed": null}' > "$tmpdir/nvd.json"
 fi
 if [[ "$scan_cna" == true ]]; then
     "$JQ_BIN" -f "$JQ_CNA_MATCHER" \

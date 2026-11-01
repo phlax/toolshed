@@ -159,13 +159,21 @@ def cna_wildcard_limit(limit):
       | try (.[-1] |= ((tonumber + 1) | tostring) | join(".")) catch $limit
     else $limit end;
 
+def cna_wildcard(limit):
+  (limit | type) == "string" and (limit | test("\\.\\*$"));
+
 def cna_versions(entry):
   # normalize a CNA `versions[]` entry to the start/end bounds used for NVD
-  # cpe matching, or `{exact}` for a single version
-  (if entry.lessThan != null then
+  # cpe matching, or `{exact}` for a single version; git (commit) ranges
+  # cannot be compared and are ignored
+  (if entry.versionType == "git" then {invalid: true}
+   elif entry.lessThan != null then
      {start_inc: entry.version, end_exc: cna_wildcard_limit(entry.lessThan)}
+   elif cna_wildcard(entry.lessThanOrEqual) then
+     # up to and including the whole series: below the next one
+     {start_inc: entry.version, end_exc: cna_wildcard_limit(entry.lessThanOrEqual)}
    elif entry.lessThanOrEqual != null then
-     {start_inc: entry.version, end_inc: cna_wildcard_limit(entry.lessThanOrEqual)}
+     {start_inc: entry.version, end_inc: entry.lessThanOrEqual}
    else
      cna_version_text(entry.version // "*")
    end)
@@ -352,7 +360,7 @@ def report(matches):
 def merge_sources(nvd; cna):
   nvd.matches as $nvd
   | cna as $cna
-  | (nvd.analyzed // []) as $analyzed
+  | nvd.analyzed as $analyzed
   | ([$nvd[] | .matched[] |= (.source = "nvd")]
      + [$cna[] | .matched[] |= (.source = "cna") | {id, matched, cna: .cve}])
   | group_by(.id)
@@ -364,6 +372,6 @@ def merge_sources(nvd; cna):
          matched: (map(.matched[])),
          cve: ($from_nvd.cve // $from_cna.cna),
          cna: $from_cna.cna}
-      + (if $from_nvd == null then
+      + (if $from_nvd == null and $analyzed != null then
            {nvd_analyzed: ($analyzed | index($from_cna.id) | . != null)}
          else {} end));

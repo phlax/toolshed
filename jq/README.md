@@ -119,7 +119,8 @@ matches the CNA/ADP asserted `affected[]` entries instead:
 Versions come from the `versions[]` entries, as `lessThan` /
 `lessThanOrEqual` ranges starting at `version` (a trailing `.*` on a limit
 covers the rest of that series), free-text constraints (`< 1.34.7`,
-`>= 2.0, < 2.1.3`) or single versions. The dependency is affected when an
+`>= 2.0, < 2.1.3`) or single versions; `versionType: git` entries (commit
+ranges) and constraints that do not parse are ignored. The dependency is affected when an
 entry covering its version says so, after applying any `changes[]` at or
 below it (the last applicable change wins): a single-version entry overrides
 ranges covering the same version, otherwise an affected entry wins over an

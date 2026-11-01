@@ -84,6 +84,14 @@ input:
       published: "2026-09-18T00:00:00.000Z"
       affected:
       - {vendor: zlib, product: zlib, versions: [{version: "1.2.0", lessThan: "1.2.*", status: affected}], provider: cna}
+    - id: CVE-WILDCARD-INCLUSIVE
+      published: "2026-09-18T00:00:00.000Z"
+      affected:
+      - {vendor: zlib, product: zlib, versions: [{version: "1.0", lessThanOrEqual: "1.2.*", status: affected}], provider: cna}
+    - id: CVE-GIT-RANGE
+      published: "2026-09-18T00:00:00.000Z"
+      affected:
+      - {vendor: zlib, product: zlib, versions: [{version: "0", lessThan: "ffffffffffff", status: affected, versionType: git}], provider: cna}
     - id: CVE-CPE-VERSION
       published: "2026-09-18T00:00:00.000Z"
       affected:
