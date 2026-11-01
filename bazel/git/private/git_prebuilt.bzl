@@ -228,10 +228,10 @@ def _git_toolchains_hub_impl(ctx):
         "linux-x86_64": _repo_name(ctx.attr.linux_x86_64) if ctx.attr.linux_x86_64 else None,
     }
 
-    # On a host platform that never has a prebuilt (macOS), fall back to the host's git so
-    # consumers that require the toolchain type still resolve. A prebuilt disabled with
-    # `setup(<platform>_sha256 = "")` does not qualify: that keeps the source fallback, and a
-    # Linux-constrained host toolchain could be selected for remote Linux workers.
+    # On a host platform that never has a prebuilt (macOS, or Linux on eg ppc64le), fall back to
+    # the host's git so consumers that require the toolchain type still resolve. A prebuilt
+    # disabled with `setup(<platform>_sha256 = "")` does not qualify: that keeps the source
+    # fallback, and a Linux x86_64/aarch64 host toolchain could be selected for remote workers.
     host = None
     if ctx.attr.host_fallback:
         host = host_fallback_platform(host_platform(ctx.os.name, ctx.os.arch))

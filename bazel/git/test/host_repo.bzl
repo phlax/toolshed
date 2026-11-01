@@ -1,6 +1,7 @@
 """Test-only repository exercising the hub's host git fallback on the current host.
 
-The hub only renders the fallback for macOS, so this repo links the host's git exactly as
+The hub only renders the fallback on hosts without a prebuilt (macOS, Linux on eg ppc64le),
+not on CI's Linux x86_64/aarch64, so this repo links the host's git exactly as
 the hub does (`link_host_git`) and renders the same targets (`render_host_git_build`), but
 constrained to the actual host platform, so the mechanism can be tested on Linux CI by
 forcing the toolchain with `--extra_toolchains`.
