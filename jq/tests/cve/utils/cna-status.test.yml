@@ -91,7 +91,10 @@ input:
     - id: CVE-GIT-RANGE
       published: "2026-09-18T00:00:00.000Z"
       affected:
-      - {vendor: zlib, product: zlib, versions: [{version: "0", lessThan: "ffffffffffff", status: affected, versionType: git}], provider: cna}
+      - vendor: zlib
+        product: zlib
+        versions: [{version: "0", lessThan: "ffffffffffff", status: affected, versionType: git}]
+        provider: cna
     - id: CVE-CPE-VERSION
       published: "2026-09-18T00:00:00.000Z"
       affected:
