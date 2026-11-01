@@ -8,7 +8,9 @@ input:
     analyzed: [CVE-BOTH, CVE-NVD-ONLY, CVE-CNA-ANALYZED]
   cna:
   - {id: CVE-BOTH, matched: [{dep: {name: a}, affected: {}}], cve: {id: CVE-BOTH, descriptions: [{value: cna}]}}
-  - {id: CVE-CNA-ONLY, matched: [{dep: {name: b}, affected: {}}, {dep: {name: c}, affected: {}}], cve: {id: CVE-CNA-ONLY}}
+  - id: CVE-CNA-ONLY
+    matched: [{dep: {name: b}, affected: {}}, {dep: {name: c}, affected: {}}]
+    cve: {id: CVE-CNA-ONLY}
   - {id: CVE-CNA-ANALYZED, matched: [{dep: {name: a}, affected: {}}], cve: {id: CVE-CNA-ANALYZED}}
 expression: |
   utils::merge_sources(.nvd; .cna)
