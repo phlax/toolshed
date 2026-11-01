@@ -231,7 +231,7 @@ def match_cna_name(affected; dep):
 
 def match_dep_cna(affected; cve; dep):
   match_cna_name(affected; dep)
-  and (updated_since_cve({published: cve.published}; dep) | not)
+  and (cve.published == null or (updated_since_cve({published: cve.published}; dep) | not))
   and match_cna_affected_version(affected; dep);
 
 def cna_name_key(vendor; product):

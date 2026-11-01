@@ -122,7 +122,7 @@ def cve_scan(
     for key, expression in [
         ("ignored", ".ignored_cves // []"),
         ("start_year", ".start_year"),
-        ("sources", '.sources // ["nvd", "cna"]'),
+        ("sources", '.sources // ["nvd", "cna"] | if type == "string" then [.] else . end'),
     ]:
         yq(
             name = name + "_" + key,

@@ -30,7 +30,7 @@ while IFS= read -r file; do
     fi
 done < "$CVE_FILES"
 
-sources="$("$JQ_BIN" -r 'join(" ")' "$CVES_SOURCES")"
+sources="$("$JQ_BIN" -r 'if type == "array" then join(" ") else tostring end' "$CVES_SOURCES")"
 scan_nvd=false
 scan_cna=false
 for source in $sources; do
@@ -40,6 +40,10 @@ for source in $sources; do
         *) echo >&2 "Unknown CVE source: $source (expected nvd or cna)"; exit 2 ;;
     esac
 done
+if [[ "$scan_nvd" == false && "$scan_cna" == false ]]; then
+    echo >&2 "No CVE sources selected (expected nvd and/or cna)"
+    exit 2
+fi
 if [[ "$scan_nvd" == true && ${#nvd_files[@]} -eq 0 ]]; then
     echo >&2 "No CVE data set"
     exit 1

@@ -90,6 +90,9 @@ input:
       published: "2026-09-18T00:00:00.000Z"
       affected:
       - {vendor: opaque, product: opaque, versions: [{version: "< 2.0", status: affected}], provider: cna}
+    - id: CVE-NO-PUBLISHED-DATE
+      affected:
+      - {vendor: zlib, product: zlib, versions: [{version: "< 9", status: affected}], provider: cna}
     - id: CVE-NO-AFFECTED
       published: "2026-09-18T00:00:00.000Z"
       affected: []
@@ -109,3 +112,4 @@ expected:
 - {id: CVE-ADP-CPES, names: [zlib], providers: [CISA-ADP], preserves_cve: true}
 - {id: CVE-EXACT, names: [zlib], providers: [cna], preserves_cve: true}
 - {id: CVE-DEFAULT-AFFECTED, names: [zlib], providers: [cna], preserves_cve: true}
+- {id: CVE-NO-PUBLISHED-DATE, names: [zlib], providers: [cna], preserves_cve: true}
