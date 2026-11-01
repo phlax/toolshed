@@ -16,7 +16,7 @@ grep -q "Source: NVD" "$TEST_TMPDIR/report"
 grep -q "Source: CVE Program (example)" "$TEST_TMPDIR/report"
 grep -q "CVE-2024-0006" "$TEST_TMPDIR/report"
 grep -q "NVD: not analyzed (no CPE data)" "$TEST_TMPDIR/report"
-grep -q "Affected: Example/Widget >= 1.0, < 1.3" "$TEST_TMPDIR/report"
+grep -q "Affected: Example/Widget 1.0 <= v < 1.3 affected" "$TEST_TMPDIR/report"
 grep -q "2 potential CVE vulnerabilities found" "$TEST_TMPDIR/report"
 grep -q "(0 NVD only, 1 CVE Program only, 1 both)" "$TEST_TMPDIR/report"
 

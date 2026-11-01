@@ -41,11 +41,15 @@ input:
     affected:
       vendor: c-ares
       product: c-ares
+      defaultStatus: unaffected
       versions:
       - {version: "< 1.34.7", status: affected}
       - {version: "1.0", lessThan: "1.2", status: affected}
       - {version: "2.0", lessThanOrEqual: "2.2", status: affected}
       - {version: "9.9", status: unaffected}
+      - {version: "0", lessThan: "3.0", status: unaffected, changes: [{at: "2.5", status: affected}]}
+      - {version: "0", lessThan: "1.*", status: affected}
+      - {version: "abc", lessThan: "def", status: affected, versionType: git}
   cve:
     assigner: GitHub_M
     published: "2026-09-18T17:26:52.210Z"
@@ -96,7 +100,7 @@ expected:
 - "  Source: CVE Program (example)"
 - "  Severity: MEDIUM"
 - "  Published: 2024-06-01"
-- "  Affected: Vendor/Product < 2.0"
+- "  Affected: Vendor/Product v < 2.0 affected"
 - "  CPEs: "
 - ""
 - "  ---------------------------------"
@@ -112,7 +116,9 @@ expected:
 - "  Source: CVE Program (GitHub_M)"
 - "  Severity: HIGH"
 - "  Published: 2026-09-18"
-- "  Affected: c-ares/c-ares < 1.34.7, 1.0 <= v < 1.2, 2.0 <= v <= 2.2"
+- "  Affected: c-ares/c-ares v < 1.34.7 affected; 1.0 <= v < 1.2 affected; 2.0 <= v <= 2.2 affected;\
+  \ v = 9.9 unaffected; v < 3.0 unaffected then affected at 2.5; v < 2.0.0-0 affected; (unparsed) affected;\
+  \ default unaffected"
 - "  CPEs: "
 - ""
 - "  ---------------------------------"
@@ -128,7 +134,7 @@ expected:
 - "  Source: CVE Program (unknown CNA)"
 - "  Severity: UNKNOWN"
 - "  Published: 2026-09-18"
-- "  Affected: / (all)"
+- "  Affected: / default affected"
 - "  CPEs: cpe:2.3:a:zlib:zlib:*:*:*:*:*:*:*:*"
 - ""
 - "  ---------------------------------"

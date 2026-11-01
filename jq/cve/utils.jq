@@ -133,8 +133,8 @@ def scan($deps; $ignored):
   | iterate_cves(.vulnerabilities; $dependencies; $ignored[0]);
 
 def analyzed_ids(cves):
-  # ids of NVD records that carry CPE configurations
-  [cves[] | select(.cve.configurations != null) | .cve.id];
+  # ids of NVD records that carry (non-empty) CPE configurations
+  [cves[] | select(((.cve.configurations // []) | length) > 0) | .cve.id];
 
 # As `scan`, also listing the analyzed ids, so one pass over the NVD data
 # serves both the matches and the CNA precedence check.
@@ -312,12 +312,26 @@ def nvd_dependency(cve; match):
   End (including/excluding): \(match.cpe.versions.end_inc // "")/\(match.cpe.versions.end_exc // "")
 ";
 
+def cna_bounds_string(versions):
+  # the normalized bounds of a `versions[]` entry, as `a <= v < b`
+  versions as $v
+  | if $v.invalid then "(unparsed)"
+    elif $v.exact != null then "v = \($v.exact)"
+    else
+      ([if $v.start_inc then "\($v.start_inc) <=" elif $v.start_exc then "\($v.start_exc) <" else empty end]
+       + ["v"]
+       + [if $v.end_exc then "< \($v.end_exc)" elif $v.end_inc then "<= \($v.end_inc)" else empty end])
+      | if length == 1 then "all" else join(" ") end
+    end;
+
 def cna_version_strings(affected):
-  [affected.versions[]? | select(.status == "affected")
-   | if .lessThan then "\(.version) <= v < \(.lessThan)"
-     elif .lessThanOrEqual then "\(.version) <= v <= \(.lessThanOrEqual)"
-     else .version end]
-  | if length == 0 then "(all)" else join(", ") end;
+  # every `versions[]` entry with its bounds, status and any changes, and
+  # the default, so what the report shows is what was matched against
+  ([affected.versions[]?
+    | "\(cna_bounds_string(cna_versions(.))) \(.status // "unknown")"
+      + ([.changes[]? | " then \(.status) at \(.at)"] | join(""))]
+   + (if affected.defaultStatus != null then ["default \(affected.defaultStatus)"] else [] end))
+  | if length == 0 then "(no versions)" else join("; ") end;
 
 def nvd_state(cve):
   # how NVD stands on a CVE matched from its CVE Program record
