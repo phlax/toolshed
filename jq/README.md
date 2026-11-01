@@ -118,8 +118,9 @@ matches the CNA/ADP asserted `affected[]` entries instead:
 
 Versions come from the `versions[]` entries, as `lessThan` /
 `lessThanOrEqual` ranges starting at `version` (a trailing `.*` on a limit
-covers the rest of that series), free-text constraints (`< 1.34.7`,
-`>= 2.0, < 2.1.3`) or single versions; `versionType: git` entries (commit
+covers the rest of that series, up to the next series' lowest pre-release),
+free-text constraints (`< 1.34.7`, `>= 2.0, < 2.1.3`; repeated bounds
+intersect) or single versions; `versionType: git` entries (commit
 ranges) and constraints that do not parse are ignored. As in the CVE record
 format, the first entry covering the dependency version decides its status,
 after applying that entry's `changes[]` at or below the version (the last

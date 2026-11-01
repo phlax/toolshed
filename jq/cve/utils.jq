@@ -147,15 +147,26 @@ def nvd_scan($deps; $ignored):
 # holds the CNA and ADP `affected[]` entries. These carry the affected versions
 # asserted on publication, so they cover CVEs that NVD has not (yet) analyzed.
 
+def cna_tighter_bound(current; candidate; lower):
+  # keep the tighter of two bounds on the same side: the larger lower
+  # bound, the smaller upper bound
+  if current == null then candidate
+  elif lower then
+    (if version::gt(version::parse(candidate); version::parse(current)) then candidate else current end)
+  else
+    (if version::lt(version::parse(candidate); version::parse(current)) then candidate else current end)
+  end;
+
 def cna_version_text(text):
-  # free-text constraints as used by eg the GitHub CNA: `< 1.34.7`, `>= 2.0, < 2.1.3`
+  # free-text constraints as used by eg the GitHub CNA: `< 1.34.7`, `>= 2.0, < 2.1.3`;
+  # repeated bounds intersect
   reduce (text | split(",")[] | gsub("^\\s+|\\s+$"; "")) as $constraint ({};
     (($constraint | capture("^(?<op>>=|<=|>|<|=)?\\s*(?<version>\\S+)$")?) // null) as $m
     | if $m == null then .invalid = true
-      elif $m.op == "<" then .end_exc = $m.version
-      elif $m.op == "<=" then .end_inc = $m.version
-      elif $m.op == ">" then .start_exc = $m.version
-      elif $m.op == ">=" then .start_inc = $m.version
+      elif $m.op == "<" then .end_exc = cna_tighter_bound(.end_exc; $m.version; false)
+      elif $m.op == "<=" then .end_inc = cna_tighter_bound(.end_inc; $m.version; false)
+      elif $m.op == ">" then .start_exc = cna_tighter_bound(.start_exc; $m.version; true)
+      elif $m.op == ">=" then .start_inc = cna_tighter_bound(.start_inc; $m.version; true)
       else .exact = $m.version
       end);
 
@@ -163,14 +174,14 @@ def cna_wildcard(limit):
   (limit | type) == "string" and (limit | test("\\.\\*$"));
 
 def cna_wildcard_limit(limit):
-  # a trailing `.*` on a `lessThan` limit means the rest of that series,
-  # eg `2.5.*` - the first version after it is `2.6`; a series that cannot
-  # be resolved (`3.x.*`) is null, so the entry is ignored rather than
-  # string-compared
+  # a trailing `.*` on a limit means the rest of that series, eg `2.5.*`:
+  # everything below `2.6.0-0`, the lowest pre-release of the next series,
+  # so that `2.6.0-rc.1` is outside it too. A series that cannot be resolved
+  # (`3.x.*`) is null, so the entry is ignored rather than string-compared.
   limit as $limit
   | if cna_wildcard($limit) then
       ($limit | sub("\\.\\*$"; "") | split("."))
-      | try (.[-1] |= ((tonumber + 1) | tostring) | join(".")) catch null
+      | try ((.[-1] |= ((tonumber + 1) | tostring)) + ["0", "0"] | .[0:3] | join(".") + "-0") catch null
     else $limit end;
 
 def cna_versions(entry):

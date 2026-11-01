@@ -4,6 +4,7 @@ import pathlib
 import sys
 import zipfile
 from collections import defaultdict
+from datetime import datetime, timezone
 from functools import cached_property
 
 import aiohttp
@@ -84,8 +85,21 @@ def compact(record: dict) -> dict | None:
 
 
 def record_month(record: dict, year: int) -> str:
-    """Publication month (`YYYY-MM`), falling back to the identifier year."""
-    return (record.get("published") or f"{year}-01")[:7]
+    """UTC publication month (`YYYY-MM`), falling back to the identifier year.
+
+    Timestamps may carry a `Z` or an offset; the month is taken in UTC, as the
+    scanner normalizes publication dates.
+    """
+    published = record.get("published")
+    if not published:
+        return f"{year}-01"
+    try:
+        parsed = datetime.fromisoformat(published.replace("Z", "+00:00"))
+    except ValueError:
+        return published[:7]
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m")
 
 
 def inner_archive(outer: pathlib.Path, tempdir: pathlib.Path) -> pathlib.Path:

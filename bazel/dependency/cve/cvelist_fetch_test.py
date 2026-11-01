@@ -117,8 +117,16 @@ class RecordTest(unittest.TestCase):
         self.assertEqual(cvelist_fetch.compact_descriptions([]), [])
 
     def test_record_month(self):
-        self.assertEqual(
-            cvelist_fetch.record_month({"published": "2024-03-05T00:00:00Z"}, 2024), "2024-03")
+        for published, expected in (
+                ("2024-03-05T00:00:00Z", "2024-03"),
+                ("2024-03-05T00:00:00.123", "2024-03"),
+                ("2024-03-05T00:00:00.123+00:00", "2024-03"),
+                ("2023-12-31T23:30:00-02:00", "2024-01"),
+                ("2024-01-01T01:30:00+05:30", "2023-12"),
+                ("2024-03", "2024-03")):
+            with self.subTest(published=published):
+                self.assertEqual(
+                    cvelist_fetch.record_month({"published": published}, 2024), expected)
         self.assertEqual(cvelist_fetch.record_month({"published": None}, 2023), "2023-01")
 
 
@@ -143,6 +151,8 @@ class ExtractTest(unittest.TestCase):
                 "cves/2023/1xxx/CVE-2023-1001.json": published("CVE-2023-1001", "2024-03-01"),
                 "cves/2024/9xxx/CVE-2024-9000.json": published(
                     "CVE-2024-9000", "2023-12-31"),
+                "cves/2023/9xxx/CVE-2023-9001.json": record(
+                    "CVE-2023-9001", "2023-12-31T23:30:00-02:00", affected),
                 "cves/2024/1xxx/CVE-2024-1000.json": published("CVE-2024-1000", "2024-01-20"),
                 "cves/2024/1xxx/CVE-2024-1001.json": published("CVE-2024-1001", "2024-01-21"),
                 "cves/2024/2xxx/CVE-2024-2000.json": published("CVE-2024-2000", "2024-02-01"),
@@ -176,7 +186,7 @@ class ExtractTest(unittest.TestCase):
         (self.path / "out").mkdir()
         (self.path / "out" / "2020-01.json").write_text("stale")
         counts = downloader.extract(inner)
-        self.assertEqual(counts, {"2024-01": 2, "2024-02": 1, "2024-03": 1, "2025-01": 1})
+        self.assertEqual(counts, {"2024-01": 3, "2024-02": 1, "2024-03": 1, "2025-01": 1})
         self.assertEqual(
             sorted(p.name for p in (self.path / "out").glob("*.json")),
             ["2024-01.json", "2024-02.json", "2024-03.json", "2025-01.json"])
@@ -189,7 +199,7 @@ class ExtractTest(unittest.TestCase):
                 for line in stream.read().replace("}{", "}\n{").splitlines()]
         self.assertEqual(
             [r["id"] for document in documents for r in document["records"]],
-            ["CVE-2024-1000", "CVE-2024-1001"])
+            ["CVE-2023-9001", "CVE-2024-1000", "CVE-2024-1001"])
         self.assertEqual(documents[0]["records"][0]["affected"][0]["provider"], "cna")
 
     def test_extract_chunks(self):
@@ -200,7 +210,7 @@ class ExtractTest(unittest.TestCase):
         self.addCleanup(setattr, cvelist_fetch, "CHUNK_SIZE", original)
         downloader.extract(inner)
         text = (self.path / "out" / "2024-01.json").read_text()
-        self.assertEqual(text.count('{"records": ['), 2)
+        self.assertEqual(text.count('{"records": ['), 3)
 
     def test_run(self):
         self.assertFalse(self.downloader()())
