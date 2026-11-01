@@ -10,7 +10,7 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 _JQ = Label("@envoy_toolshed_jq//:jq")
 _MATCHER = Label("@envoy_toolshed_jq//:cve/matcher.jq")
 _CNA_MATCHER = Label("@envoy_toolshed_jq//:cve/cna_matcher.jq")
-_ANALYZED = Label("@envoy_toolshed_jq//:cve/analyzed.jq")
+_NVD_SCAN = Label("@envoy_toolshed_jq//:cve/nvd_scan.jq")
 _REPORT = Label("@envoy_toolshed_jq//:cve/report.jq")
 _SCAN = Label("//dependency/cve:scan.sh")
 _TEST = Label("//dependency/cve:test.sh")
@@ -102,7 +102,7 @@ def cve_scan(
         name: Scan binary name; also prefixes generated helpers.
         deps: Raw dependency JSON, keyed by dependency name.
         config: YAML containing start_year, ignored_cves and optionally
-            pending (`warn`, the default, or `error`).
+            pending (`warn`, the default, `error` or `skip`).
         cve_data: Files (or label_flag) containing NVD 2.0 month JSON pages, and
             optionally CVE Program (cvelistV5) month files under `cvelist/`.
         cve_data_dir: Package-relative directory written by <name>.update.
@@ -121,7 +121,7 @@ def cve_scan(
     for key, expression in [
         ("ignored", ".ignored_cves // []"),
         ("start_year", ".start_year"),
-        ("pending", '.pending // "warn"'),
+        ("pending", '.pending // "warn"'),  # warn | error | skip
     ]:
         yq(
             name = name + "_" + key,
@@ -136,7 +136,7 @@ def cve_scan(
         data = cve_data,
         **helpers
     )
-    data = [_JQ, _MATCHER, _CNA_MATCHER, _ANALYZED, _REPORT, cve_data, ":" + name + "_data"]
+    data = [_JQ, _MATCHER, _CNA_MATCHER, _NVD_SCAN, _REPORT, cve_data, ":" + name + "_data"]
     env = {
         "JQ_BIN": "$(rlocationpath %s)" % _JQ,
         "CVE_FILES": "$(rlocationpath :%s_data)" % name,
@@ -144,14 +144,15 @@ def cve_scan(
     sh_binary(
         name = name,
         srcs = [_SCAN],
-        data = data + [":" + name + "_deps", ":" + name + "_ignored"],
+        data = data + [":" + name + "_deps", ":" + name + "_ignored", ":" + name + "_pending"],
         deps = [_RUNFILES],
         env = dict(env, **{
             "CPE_DEPS": "$(rlocationpath :%s_deps)" % name,
             "CVES_IGNORED": "$(rlocationpath :%s_ignored)" % name,
+            "CVES_PENDING": "$(rlocationpath :%s_pending)" % name,
             "JQ_CVE_MATCHER": "$(rlocationpath %s)" % _MATCHER,
             "JQ_CNA_MATCHER": "$(rlocationpath %s)" % _CNA_MATCHER,
-            "JQ_CVE_ANALYZED": "$(rlocationpath %s)" % _ANALYZED,
+            "JQ_NVD_SCAN": "$(rlocationpath %s)" % _NVD_SCAN,
         }),
         **common
     )

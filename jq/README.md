@@ -27,7 +27,7 @@ which consumer happens to call it. The directory name is the scope:
 | `github/` | GitHub API / Actions / GFM-shaped input or output (`actions.jq`, `gfm.jq`) |
 | `bazel/` | Bazel `aquery`/BEP/`BUILD`-shaped data (`aquery.jq`, `dep.jq`, `registry.jq`, `version.jq`) |
 | `clang/` | clang tooling output (`tidy.jq`, clang-tidy stdout parsing) |
-| `cve/` | NVD and CVE Program CVE matching and terminal reports (`utils.jq`, `matcher.jq`, `cna_matcher.jq`, `analyzed.jq`, `report.jq`) |
+| `cve/` | NVD and CVE Program CVE matching and terminal reports (`utils.jq`, `matcher.jq`, `nvd_scan.jq`, `cna_matcher.jq`, `report.jq`) |
 | `envoy/` | reserved for Envoy release/archive policy filters (not added yet) |
 | root | generic helpers with no domain-specific knowledge (`args.jq`, `bash.jq`, `str.jq`, `utils.jq`, `validate.jq`) |
 
@@ -127,10 +127,12 @@ unaffected one, and `defaultStatus` applies only when no entry covers the
 version. The release-date policy applies as for NVD. The records returned
 have the shape `{id, matched: [{affected, dep}], cve}`.
 
-`cve/analyzed.jq` lists the ids of NVD records that have CPE configurations.
-The scan script keeps CNA matches only for CVEs not in that list, so NVD stays
-authoritative wherever it has analyzed a CVE, and marks them `status:
-pending`. `utils::report` renders those in a separate `Pending NVD analysis`
+`utils::nvd_scan($deps; $ignored)` (executable: `cve/nvd_scan.jq`) returns
+`{matches, analyzed}` from one pass over NVD data: the `scan` matches and the
+ids of records that have CPE configurations. The scan script keeps CNA matches
+only for CVEs not in that list, so NVD stays authoritative wherever it has
+analyzed a CVE, and marks them `status: pending`. Deps are indexed by their
+candidate names, so the CNA pass costs little more than parsing the records. `utils::report` renders those in a separate `Pending NVD analysis`
 section and counts them in the summary.
 
 ## Consuming from Bazel

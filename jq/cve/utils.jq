@@ -127,6 +127,12 @@ def analyzed_ids(cves):
   # ids of NVD records that carry CPE configurations
   [cves[] | select(.cve.configurations != null) | .cve.id];
 
+# As `scan`, also listing the analyzed ids, so one pass over the NVD data
+# serves both the matches and the CNA precedence check.
+def nvd_scan($deps; $ignored):
+  {matches: scan($deps; $ignored),
+   analyzed: analyzed_ids(.vulnerabilities)};
+
 # CVE Program (cvelistV5) records, as compacted by `dependency/cve:cvelist_fetch`:
 # `{id, assigner, published, descriptions, metrics, affected}`, where `affected`
 # holds the CNA and ADP `affected[]` entries. These carry the affected versions
@@ -220,9 +226,26 @@ def match_dep_cna(affected; cve; dep):
   and (updated_since_cve({published: cve.published}; dep) | not)
   and match_cna_affected_version(affected; dep);
 
-def matching_cna_deps(affected; cve; deps):
+def cna_name_key(vendor; product):
+  "\((vendor // "") | ascii_downcase)/\((product // "") | ascii_downcase)";
+
+def cna_dep_index(deps):
+  # deps by candidate `vendor/product` name, for O(1) lookup per affected
+  # entry, plus the deps to try for entries matched on `cpes`
+  {names: (reduce deps[] as $dep ({};
+             reduce $dep.names[] as $name (.;
+               .[cna_name_key($name.vendor; $name.product)] += [$dep]))),
+   cpes: [deps[] | select((.cpes // []) != [])]};
+
+def cna_candidate_deps(affected; index):
+  if (affected.cpes // []) != [] then index.cpes[]
+  else (index.names[cna_name_key(affected.vendor; affected.product)] // [])[]
+  end;
+
+def matching_cna_deps(affected; cve; index):
+  # `index` is `cna_dep_index(deps)`
   [affected[] as $affected
-   | deps[] as $dep
+   | cna_candidate_deps($affected; index) as $dep
    | select(match_dep_cna($affected; cve; $dep))
    | {affected: $affected, dep: $dep}];
 
@@ -232,12 +255,13 @@ def get_cna_severity(cve):
   | first // "UNKNOWN";
 
 def iterate_cna_cves(cves; deps; ignored):
-  [cves[]
-   | . as $cve
-   | select(ignored | index($cve.id) | not)
-   | matching_cna_deps($cve.affected; $cve; deps)
-   | select(length > 0)
-   | {id: $cve.id, matched: ., cve: $cve}];
+  cna_dep_index(deps) as $index
+  | [cves[]
+     | . as $cve
+     | select(ignored | index($cve.id) | not)
+     | matching_cna_deps($cve.affected; $cve; $index)
+     | select(length > 0)
+     | {id: $cve.id, matched: ., cve: $cve}];
 
 # As `scan`, over cvelist records (`.records`).
 def scan_cna($deps; $ignored):

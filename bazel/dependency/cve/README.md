@@ -88,8 +88,9 @@ analyzed a CVE its CPE match is authoritative, so
 CNA matches are only reported for CVEs NVD has not, with `status: "pending"`
 (NVD matches carry `status: "analyzed"`). The report lists them under
 `Pending NVD analysis`. By default they are reported as a warning and do not
-fail `<name>.test`; set `pending: error` in the config to fail on them. Use
-`ignored_cves` for false positives either way.
+fail `<name>.test`; set `pending: error` in the config to fail on them, or
+`pending: skip` to scan the NVD data only. Use `ignored_cves` for false
+positives either way.
 
 ## Configuration and data
 
@@ -104,8 +105,9 @@ pending: warn
 
 `start_year` is an integer, the first publication year fetched.
 `ignored_cves` is a list of CVE IDs (defaults to empty).
-`pending` is `warn` (the default) or `error`: whether matches pending NVD
-analysis (see above) fail `<name>.test` or are only reported.
+`pending` is `warn` (the default), `error` or `skip`: whether matches pending
+NVD analysis (see above) are only reported, fail `<name>.test`, or are not
+scanned for at all (NVD data only, for a quicker run).
 
 `cve_data` supplies NVD 2.0 JSON files. A file may contain multiple consecutive
 NVD page objects. Updates use filenames `YYYY-MM.json`. Non-JSON placeholders

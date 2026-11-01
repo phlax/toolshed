@@ -52,6 +52,27 @@ cve_scan(
     deps = "deps.json",
 )
 
+cve_scan(
+    name = "pending_skip",
+    config = "pending_skip.yaml",
+    cve_data = ":cve-data",
+    deps = "deps.json",
+)
+
+sh_test(
+    name = "pending_skip_test",
+    srcs = ["pending_skip_test.sh"],
+    data = [
+        ":pending_skip.scanned",
+        "@envoy_toolshed_jq//:jq",
+    ],
+    env = {
+        "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
+        "SCANNED": "$(rlocationpath :pending_skip.scanned)",
+    },
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+)
+
 filegroup(
     name = "placeholder",
     srcs = ["cve.yaml"],
@@ -74,9 +95,9 @@ sh_test(
         ":empty_data",
         ":empty_deps",
         ":empty_ignored",
-        "@envoy_toolshed_jq//:cve/analyzed.jq",
         "@envoy_toolshed_jq//:cve/cna_matcher.jq",
         "@envoy_toolshed_jq//:cve/matcher.jq",
+        "@envoy_toolshed_jq//:cve/nvd_scan.jq",
         "@envoy_toolshed_jq//:cve/report.jq",
         "@envoy_toolshed_jq//:jq",
     ],
@@ -88,9 +109,9 @@ sh_test(
         "CVES_IGNORED": "$(rlocationpath :empty_ignored)",
         "CVES_PENDING": "$(rlocationpath :cves_pending)",
         "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
-        "JQ_CVE_ANALYZED": "$(rlocationpath @envoy_toolshed_jq//:cve/analyzed.jq)",
         "JQ_CNA_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/cna_matcher.jq)",
         "JQ_CVE_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/matcher.jq)",
+        "JQ_NVD_SCAN": "$(rlocationpath @envoy_toolshed_jq//:cve/nvd_scan.jq)",
         "JQ_REPORT": "$(rlocationpath @envoy_toolshed_jq//:cve/report.jq)",
         "SCANNED": "$(rlocationpath :cves.scanned)",
     },

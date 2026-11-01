@@ -14,10 +14,11 @@ SCANNED="$(rlocation "$SCANNED")"
 CVES_PENDING="$(rlocation "$CVES_PENDING")"
 
 # Matches pending NVD analysis (CNA-asserted only) fail the test only with
-# `pending: error` in the config, otherwise they are reported as a warning.
+# `pending: error` in the config, otherwise they are reported as a warning
+# (`skip` does not scan for them at all).
 pending="$("$JQ_BIN" -r '.' "$CVES_PENDING")"
-if [[ "$pending" != "warn" && "$pending" != "error" ]]; then
-    echo >&2 "Expected \`pending\` to be \`warn\` or \`error\`, got: $pending"
+if [[ "$pending" != "warn" && "$pending" != "error" && "$pending" != "skip" ]]; then
+    echo >&2 "Expected \`pending\` to be \`warn\`, \`error\` or \`skip\`, got: $pending"
     exit 2
 fi
 
