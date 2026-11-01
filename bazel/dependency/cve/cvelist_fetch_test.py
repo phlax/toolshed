@@ -70,13 +70,17 @@ class RecordTest(unittest.TestCase):
                     "affected": [{"cpes": ["cpe:2.3:a:example:widget:*:*:*:*:*:*:*:*"]}],
                     "metrics": [{
                         "cvssV3_1": {
-                            "baseSeverity": "HIGH", "baseScore": 7.5, "vectorString": "x"}}],
+                            "baseSeverity": "HIGH",
+                            "baseScore": 7.5,
+                            "vectorString": "x"}}],
                 }],
                 metrics=[
                     {"other": {"type": "ssvc", "content": {}}},
                     {"cvssV4_0": {"baseSeverity": "LOW", "baseScore": 2.0},
                      "format": "CVSS"}],
-                descriptions=[{"lang": "es", "value": "hola"}, {"lang": "en-US", "value": "hello"}]))
+                descriptions=[
+                    {"lang": "es", "value": "hola"},
+                    {"lang": "en-US", "value": "hello"}]))
         self.assertEqual(
             compacted,
             {
@@ -136,6 +140,9 @@ class ExtractTest(unittest.TestCase):
             self.path / "release.zip",
             {
                 "cves/2023/1xxx/CVE-2023-1000.json": published("CVE-2023-1000", "2023-05-01"),
+                "cves/2023/1xxx/CVE-2023-1001.json": published("CVE-2023-1001", "2024-03-01"),
+                "cves/2024/9xxx/CVE-2024-9000.json": published(
+                    "CVE-2024-9000", "2023-12-31"),
                 "cves/2024/1xxx/CVE-2024-1000.json": published("CVE-2024-1000", "2024-01-20"),
                 "cves/2024/1xxx/CVE-2024-1001.json": published("CVE-2024-1001", "2024-01-21"),
                 "cves/2024/2xxx/CVE-2024-2000.json": published("CVE-2024-2000", "2024-02-01"),
@@ -169,10 +176,13 @@ class ExtractTest(unittest.TestCase):
         (self.path / "out").mkdir()
         (self.path / "out" / "2020-01.json").write_text("stale")
         counts = downloader.extract(inner)
-        self.assertEqual(counts, {"2024-01": 2, "2024-02": 1, "2025-01": 1})
+        self.assertEqual(counts, {"2024-01": 2, "2024-02": 1, "2024-03": 1, "2025-01": 1})
         self.assertEqual(
             sorted(p.name for p in (self.path / "out").glob("*.json")),
-            ["2024-01.json", "2024-02.json", "2025-01.json"])
+            ["2024-01.json", "2024-02.json", "2024-03.json", "2025-01.json"])
+        with (self.path / "out" / "2024-03.json").open() as stream:
+            self.assertEqual(
+                [r["id"] for r in json.load(stream)["records"]], ["CVE-2023-1001"])
         with (self.path / "out" / "2024-01.json").open() as stream:
             documents = [
                 json.loads(line)
@@ -196,6 +206,7 @@ class ExtractTest(unittest.TestCase):
         self.assertFalse(self.downloader()())
         self.assertTrue((self.path / "out" / "2024-01.json").exists())
         self.assertFalse((self.path / "out" / "2023-05.json").exists())
+        self.assertFalse((self.path / "out" / "2023-12.json").exists())
 
 
 if __name__ == "__main__":

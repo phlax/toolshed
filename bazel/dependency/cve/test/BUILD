@@ -38,6 +38,20 @@ cve_scan(
     deps = "deps.json",
 )
 
+cve_scan(
+    name = "pending",
+    config = "pending.yaml",
+    cve_data = ":cve-data",
+    deps = "deps.json",
+)
+
+cve_scan(
+    name = "pending_error",
+    config = "pending_error.yaml",
+    cve_data = ":cve-data",
+    deps = "deps.json",
+)
+
 filegroup(
     name = "placeholder",
     srcs = ["cve.yaml"],
@@ -55,6 +69,7 @@ sh_test(
     data = [
         ":cves.scanned",
         ":cves.test",
+        ":cves_pending",
         ":empty",
         ":empty_data",
         ":empty_deps",
@@ -71,6 +86,7 @@ sh_test(
         "CPE_DEPS": "$(rlocationpath :empty_deps)",
         "CVE_FILES": "$(rlocationpath :empty_data)",
         "CVES_IGNORED": "$(rlocationpath :empty_ignored)",
+        "CVES_PENDING": "$(rlocationpath :cves_pending)",
         "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
         "JQ_CVE_ANALYZED": "$(rlocationpath @envoy_toolshed_jq//:cve/analyzed.jq)",
         "JQ_CNA_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/cna_matcher.jq)",
@@ -80,6 +96,33 @@ sh_test(
     },
     deps = ["@bazel_tools//tools/bash/runfiles"],
 )
+
+[
+    sh_test(
+        name = "pending_%s_test" % mode,
+        srcs = ["pending_test.sh"],
+        data = [
+            ":%s.scanned" % target,
+            ":%s.test" % target,
+            ":%s_pending" % target,
+            "@envoy_toolshed_jq//:cve/report.jq",
+            "@envoy_toolshed_jq//:jq",
+        ],
+        env = {
+            "CVE_TEST": "$(rlocationpath :%s.test)" % target,
+            "CVES_PENDING": "$(rlocationpath :%s_pending)" % target,
+            "EXPECTED_STATUS": status,
+            "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
+            "JQ_REPORT": "$(rlocationpath @envoy_toolshed_jq//:cve/report.jq)",
+            "SCANNED": "$(rlocationpath :%s.scanned)" % target,
+        },
+        deps = ["@bazel_tools//tools/bash/runfiles"],
+    )
+    for mode, target, status in [
+        ("warn", "pending", "0"),
+        ("error", "pending_error", "1"),
+    ]
+]
 
 fetch_action_test(
     name = "fetch_action_test",

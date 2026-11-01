@@ -11,8 +11,24 @@ source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null ||
 JQ_BIN="$(rlocation "$JQ_BIN")"
 JQ_REPORT="$(rlocation "$JQ_REPORT")"
 SCANNED="$(rlocation "$SCANNED")"
+CVES_PENDING="$(rlocation "$CVES_PENDING")"
 
-if [[ $("$JQ_BIN" 'length' "$SCANNED") -gt 0 ]]; then
-    "$JQ_BIN" -r -f "$JQ_REPORT" "$SCANNED"
+# Matches pending NVD analysis (CNA-asserted only) fail the test only with
+# `pending: error` in the config, otherwise they are reported as a warning.
+pending="$("$JQ_BIN" -r '.' "$CVES_PENDING")"
+if [[ "$pending" != "warn" && "$pending" != "error" ]]; then
+    echo >&2 "Expected \`pending\` to be \`warn\` or \`error\`, got: $pending"
+    exit 2
+fi
+
+total="$("$JQ_BIN" 'length' "$SCANNED")"
+if [[ "$total" -eq 0 ]]; then
+    exit 0
+fi
+"$JQ_BIN" -r -f "$JQ_REPORT" "$SCANNED"
+analyzed="$("$JQ_BIN" '[.[] | select(.status != "pending")] | length' "$SCANNED")"
+if [[ "$analyzed" -gt 0 || "$pending" == "error" ]]; then
     exit 1
 fi
+echo
+echo "WARNING: only matches pending NVD analysis were found (set \`pending: error\` to fail on these)"

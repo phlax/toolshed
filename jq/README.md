@@ -116,12 +116,16 @@ matches the CNA/ADP asserted `affected[]` entries instead:
   and the github `owner`/`repo` of the first `github.com` url in the
   dependency's `urls`, `project_url` or `license_url`.
 
-Versions come from the `affected` status entries, as `lessThan` /
-`lessThanOrEqual` ranges starting at `version`, free-text constraints
-(`< 1.34.7`, `>= 2.0, < 2.1.3`) or single versions, and `defaultStatus:
-affected` with no versions matches all. The release-date policy applies as for
-NVD. The records returned have the shape `{id, matched: [{affected, dep}],
-cve}`.
+Versions come from the `versions[]` entries, as `lessThan` /
+`lessThanOrEqual` ranges starting at `version` (a trailing `.*` on a limit
+covers the rest of that series), free-text constraints (`< 1.34.7`,
+`>= 2.0, < 2.1.3`) or single versions. The dependency is affected when an
+entry covering its version says so, after applying any `changes[]` at or
+below it (the last applicable change wins): a single-version entry overrides
+ranges covering the same version, otherwise an affected entry wins over an
+unaffected one, and `defaultStatus` applies only when no entry covers the
+version. The release-date policy applies as for NVD. The records returned
+have the shape `{id, matched: [{affected, dep}], cve}`.
 
 `cve/analyzed.jq` lists the ids of NVD records that have CPE configurations.
 The scan script keeps CNA matches only for CVEs not in that list, so NVD stays

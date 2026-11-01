@@ -25,7 +25,10 @@ class CvelistDownloaderError(Exception):
 
 
 def record_year(name: str) -> int | None:
-    """Publication year from an archive member name (`cves/YYYY/Nxxx/CVE-YYYY-N.json`)."""
+    """Identifier year from an archive member name (`cves/YYYY/Nxxx/CVE-YYYY-N.json`).
+
+    This is the year the id was assigned, not necessarily the publication year.
+    """
     parts = name.split("/")
     if len(parts) != 4 or parts[0] != "cves" or not parts[3].endswith(".json"):
         return None
@@ -81,6 +84,7 @@ def compact(record: dict) -> dict | None:
 
 
 def record_month(record: dict, year: int) -> str:
+    """Publication month (`YYYY-MM`), falling back to the identifier year."""
     return (record.get("published") or f"{year}-01")[:7]
 
 
@@ -153,10 +157,12 @@ class CvelistDownloader(runner.Runner):
             json.dump({"records": records}, stream)
 
     def extract(self, archive: pathlib.Path) -> dict[str, int]:
-        """Write compacted records (from `start_year`) to `YYYY-MM.json` month files.
+        """Write compacted records published from `start_year` to `YYYY-MM.json` month files.
 
         Each month file holds consecutive `{"records": [...]}` objects, as the
-        NVD month files hold consecutive page objects.
+        NVD month files hold consecutive page objects. The cutoff applies to
+        the publication date: an id assigned in an earlier year may be
+        published later.
         """
         for existing in self.output_path.glob("*.json"):
             existing.unlink()
@@ -165,13 +171,15 @@ class CvelistDownloader(runner.Runner):
         with zipfile.ZipFile(archive) as zipped:
             for info in zipped.infolist():
                 year = record_year(info.filename)
-                if year is None or year < self.start_year:
+                if year is None:
                     continue
                 with zipped.open(info) as stream:
                     record = compact(json.load(stream))
                 if not record:
                     continue
                 month = record_month(record, year)
+                if int(month[:4]) < self.start_year:
+                    continue
                 months[month].append(record)
                 counts[month] += 1
                 if len(months[month]) >= CHUNK_SIZE:

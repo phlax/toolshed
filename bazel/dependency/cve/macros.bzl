@@ -101,7 +101,8 @@ def cve_scan(
     Args:
         name: Scan binary name; also prefixes generated helpers.
         deps: Raw dependency JSON, keyed by dependency name.
-        config: YAML containing start_year and ignored_cves.
+        config: YAML containing start_year, ignored_cves and optionally
+            pending (`warn`, the default, or `error`).
         cve_data: Files (or label_flag) containing NVD 2.0 month JSON pages, and
             optionally CVE Program (cvelistV5) month files under `cvelist/`.
         cve_data_dir: Package-relative directory written by <name>.update.
@@ -117,7 +118,11 @@ def cve_scan(
         filter = 'import "cve/utils" as utils; utils::parse_deps(.)',
         **helpers
     )
-    for key, expression in [("ignored", ".ignored_cves // []"), ("start_year", ".start_year")]:
+    for key, expression in [
+        ("ignored", ".ignored_cves // []"),
+        ("start_year", ".start_year"),
+        ("pending", '.pending // "warn"'),
+    ]:
         yq(
             name = name + "_" + key,
             srcs = [config],
@@ -160,12 +165,13 @@ def cve_scan(
         name = name + ".test",
         tags = ["manual"],
         srcs = [_TEST],
-        data = [_JQ, _REPORT, ":" + name + ".scanned"],
+        data = [_JQ, _REPORT, ":" + name + ".scanned", ":" + name + "_pending"],
         deps = [_RUNFILES],
         env = {
             "JQ_BIN": "$(rlocationpath %s)" % _JQ,
             "JQ_REPORT": "$(rlocationpath %s)" % _REPORT,
             "SCANNED": "$(rlocationpath :%s.scanned)" % name,
+            "CVES_PENDING": "$(rlocationpath :%s_pending)" % name,
         },
         **common
     )

@@ -61,9 +61,9 @@ carries the affected versions from day one, so the scanner also matches those.
 
 `<name>.update` fetches the latest
 [cvelistV5](https://github.com/CVEProject/cvelistV5/releases) release archive
-and writes compacted `PUBLISHED` records (from `start_year`) to
-`cvelist/YYYY-MM.json` under the data directory, keyed by publication month
-like the NVD files. The whole set is refetched on every update: records are
+and writes compacted `PUBLISHED` records published from `start_year` (by
+publication date, not the year in the id) to `cvelist/YYYY-MM.json` under the
+data directory, keyed by publication month like the NVD files. The whole set is refetched on every update: records are
 amended in place and the archive is a single download. Consumers must glob
 the subdirectory into `cve_data` (and sync it, eg `gsutil rsync -r`):
 
@@ -79,13 +79,17 @@ filegroup(
 
 Records match on the CNA/ADP asserted `vendor`/`product` (against the CPE
 vendor/product, the CPE vendor without any `_project` suffix, or the github
-owner/repo) or on `cpes` where an ADP has supplied them, and on the asserted
-version ranges (`lessThan`/`lessThanOrEqual`, or free-text `< x` / `>= x, < y`
-constraints). Where NVD has analyzed a CVE its CPE match is authoritative, so
+owner/repo) or on `cpes` where an ADP has supplied them (including any
+version in the CPE), and on the asserted version entries
+(`lessThan`/`lessThanOrEqual` ranges, wildcard limits such as `2.5.*`,
+free-text `< x` / `>= x, < y` constraints, single versions, `changes[]` and
+`defaultStatus`; see the jq README for the precedence rules). Where NVD has
+analyzed a CVE its CPE match is authoritative, so
 CNA matches are only reported for CVEs NVD has not, with `status: "pending"`
 (NVD matches carry `status: "analyzed"`). The report lists them under
-`Pending NVD analysis`. They fail `<name>.test` like any other match; use
-`ignored_cves` for false positives.
+`Pending NVD analysis`. By default they are reported as a warning and do not
+fail `<name>.test`; set `pending: error` in the config to fail on them. Use
+`ignored_cves` for false positives either way.
 
 ## Configuration and data
 
@@ -95,10 +99,13 @@ CNA matches are only reported for CVEs NVD has not, with `status: "pending"`
 start_year: 2024
 ignored_cves:
 - CVE-2024-1234
+pending: warn
 ```
 
 `start_year` is an integer, the first publication year fetched.
 `ignored_cves` is a list of CVE IDs (defaults to empty).
+`pending` is `warn` (the default) or `error`: whether matches pending NVD
+analysis (see above) fail `<name>.test` or are only reported.
 
 `cve_data` supplies NVD 2.0 JSON files. A file may contain multiple consecutive
 NVD page objects. Updates use filenames `YYYY-MM.json`. Non-JSON placeholders
@@ -120,7 +127,8 @@ Envoy can put this selection in `--config=cves`.
 - `<name>.scanned`: generates `<name>.scanned.json`. Missing data or invalid
   JSON fails the build; scan errors are deliberately not suppressed.
 - `<name>.test`: passes for an empty array; otherwise prints the coloured
-  report and exits 1.
+  report and exits 1, unless only pending matches were found and `pending`
+  is `warn`.
 - `<name>.update`: fetches data, then uses `write_source_files` to write the
   directory to package-relative `cve_data_dir`.
 

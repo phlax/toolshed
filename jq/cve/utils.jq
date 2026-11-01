@@ -144,37 +144,70 @@ def cna_version_text(text):
       else .exact = $m.version
       end);
 
+def cna_wildcard_limit(limit):
+  # a trailing `.*` on a `lessThan` limit means the rest of that series,
+  # eg `2.5.*` - the first version after it is `2.6`
+  limit as $limit
+  | if ($limit | type) == "string" and ($limit | test("\\.\\*$")) then
+      ($limit | sub("\\.\\*$"; "") | split("."))
+      | try (.[-1] |= ((tonumber + 1) | tostring) | join(".")) catch $limit
+    else $limit end;
+
 def cna_versions(entry):
   # normalize a CNA `versions[]` entry to the start/end bounds used for NVD
   # cpe matching, or `{exact}` for a single version
   (if entry.lessThan != null then
-     {start_inc: entry.version, end_exc: entry.lessThan}
+     {start_inc: entry.version, end_exc: cna_wildcard_limit(entry.lessThan)}
    elif entry.lessThanOrEqual != null then
-     {start_inc: entry.version, end_inc: entry.lessThanOrEqual}
+     {start_inc: entry.version, end_inc: cna_wildcard_limit(entry.lessThanOrEqual)}
    else
      cna_version_text(entry.version // "*")
    end)
   | with_entries(select(.value != "0" and .value != "*" and .value != "unspecified"));
 
 def match_cna_version(versions; dep):
+  # whether the dep version is covered by the normalized versions
   versions as $v
   | if $v.invalid then false
     elif $v.exact != null then version::eq(dep.version; version::parse($v.exact))
     else match_cpe_version({versions: $v}; dep)
     end;
 
-def cna_affected_versions(affected):
-  # the affected ranges asserted by an `affected[]` entry
-  [affected.versions[]? | select(.status == "affected") | cna_versions(.)]
-  | if length == 0 and affected.defaultStatus == "affected" then [{}] else . end;
+def cna_entry_status(entry; dep):
+  # the entry's status for the dep version, after any `changes[]` at or
+  # below that version (the last such change wins)
+  reduce (entry.changes[]? | select(.at != null and .status != null)
+          | select(version::lte(version::parse(.at); dep.version))) as $change
+    (null;
+     if . == null or version::gt(version::parse($change.at); version::parse(.at))
+     then $change else . end)
+  | (.status // entry.status);
+
+def cna_covering(affected; dep):
+  # the `versions[]` entries covering the dep version, with the effective status
+  [affected.versions[]? as $entry
+   | cna_versions($entry) as $v
+   | select($v.invalid | not)
+   | select(match_cna_version($v; dep))
+   | {exact: ($v.exact != null), status: cna_entry_status($entry; dep)}];
+
+def match_cna_affected_version(affected; dep):
+  # covered and affected: a single-version entry overrides ranges covering
+  # the same version, otherwise an affected entry wins over an unaffected
+  # one, and `defaultStatus` applies only when no entry covers the version
+  cna_covering(affected; dep) as $covering
+  | if ($covering | length) == 0 then affected.defaultStatus == "affected"
+    else
+      ([$covering[] | select(.exact)]
+       | if length > 0 then . else $covering end)
+      | any(.[]; .status == "affected")
+    end;
 
 def match_cna_name(affected; dep):
-  # match on the entry's cpes where given, otherwise on vendor/product
+  # match on the entry's cpes where given (including any cpe version),
+  # otherwise on vendor/product
   if (affected.cpes // []) != [] then
-    any(affected.cpes[] | parse_cpe_tag(.) as $cpe
-        | dep.cpes[]
-        | select(.vendor == $cpe.vendor and .product == $cpe.product);
-        true)
+    any(affected.cpes[]; match_cpe_tag(parse_cpe_tag(.); dep))
   else
     {vendor: ((affected.vendor // "") | ascii_downcase),
      product: ((affected.product // "") | ascii_downcase)} as $name
@@ -185,7 +218,7 @@ def match_cna_name(affected; dep):
 def match_dep_cna(affected; cve; dep):
   match_cna_name(affected; dep)
   and (updated_since_cve({published: cve.published}; dep) | not)
-  and any(cna_affected_versions(affected)[]; match_cna_version(.; dep));
+  and match_cna_affected_version(affected; dep);
 
 def matching_cna_deps(affected; cve; deps):
   [affected[] as $affected
