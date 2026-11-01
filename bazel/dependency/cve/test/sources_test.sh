@@ -10,5 +10,9 @@ source "${RUNFILES_DIR:-/dev/null}/$f" 2>/dev/null ||
 JQ_BIN="$(rlocation "$JQ_BIN")"
 SCANNED="$(rlocation "$SCANNED")"
 
-# `pending: skip`: NVD matches only, no CNA pass
-[[ "$("$JQ_BIN" -c 'map([.id, .status])' "$SCANNED")" == '[["CVE-2024-0001","analyzed"]]' ]]
+actual="$("$JQ_BIN" -c 'map([.id, .sources, (.matched | map(.source))])' "$SCANNED")"
+if [[ "$actual" != "$EXPECTED" ]]; then
+    echo >&2 "expected: $EXPECTED"
+    echo >&2 "actual:   $actual"
+    exit 1
+fi

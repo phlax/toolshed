@@ -39,38 +39,17 @@ cve_scan(
 )
 
 cve_scan(
-    name = "pending",
-    config = "pending.yaml",
+    name = "nvd_only",
+    config = "nvd_only.yaml",
     cve_data = ":cve-data",
     deps = "deps.json",
 )
 
 cve_scan(
-    name = "pending_error",
-    config = "pending_error.yaml",
+    name = "cna_only",
+    config = "cna_only.yaml",
     cve_data = ":cve-data",
     deps = "deps.json",
-)
-
-cve_scan(
-    name = "pending_skip",
-    config = "pending_skip.yaml",
-    cve_data = ":cve-data",
-    deps = "deps.json",
-)
-
-sh_test(
-    name = "pending_skip_test",
-    srcs = ["pending_skip_test.sh"],
-    data = [
-        ":pending_skip.scanned",
-        "@envoy_toolshed_jq//:jq",
-    ],
-    env = {
-        "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
-        "SCANNED": "$(rlocationpath :pending_skip.scanned)",
-    },
-    deps = ["@bazel_tools//tools/bash/runfiles"],
 )
 
 filegroup(
@@ -90,13 +69,14 @@ sh_test(
     data = [
         ":cves.scanned",
         ":cves.test",
-        ":cves_pending",
+        ":cves_sources",
         ":empty",
         ":empty_data",
         ":empty_deps",
         ":empty_ignored",
         "@envoy_toolshed_jq//:cve/cna_matcher.jq",
         "@envoy_toolshed_jq//:cve/matcher.jq",
+        "@envoy_toolshed_jq//:cve/merge.jq",
         "@envoy_toolshed_jq//:cve/nvd_scan.jq",
         "@envoy_toolshed_jq//:cve/report.jq",
         "@envoy_toolshed_jq//:jq",
@@ -107,10 +87,11 @@ sh_test(
         "CPE_DEPS": "$(rlocationpath :empty_deps)",
         "CVE_FILES": "$(rlocationpath :empty_data)",
         "CVES_IGNORED": "$(rlocationpath :empty_ignored)",
-        "CVES_PENDING": "$(rlocationpath :cves_pending)",
+        "CVES_SOURCES": "$(rlocationpath :cves_sources)",
         "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
         "JQ_CNA_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/cna_matcher.jq)",
         "JQ_CVE_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/matcher.jq)",
+        "JQ_MERGE": "$(rlocationpath @envoy_toolshed_jq//:cve/merge.jq)",
         "JQ_NVD_SCAN": "$(rlocationpath @envoy_toolshed_jq//:cve/nvd_scan.jq)",
         "JQ_REPORT": "$(rlocationpath @envoy_toolshed_jq//:cve/report.jq)",
         "SCANNED": "$(rlocationpath :cves.scanned)",
@@ -120,28 +101,22 @@ sh_test(
 
 [
     sh_test(
-        name = "pending_%s_test" % mode,
-        srcs = ["pending_test.sh"],
+        name = "sources_%s_test" % target,
+        srcs = ["sources_test.sh"],
         data = [
             ":%s.scanned" % target,
-            ":%s.test" % target,
-            ":%s_pending" % target,
-            "@envoy_toolshed_jq//:cve/report.jq",
             "@envoy_toolshed_jq//:jq",
         ],
         env = {
-            "CVE_TEST": "$(rlocationpath :%s.test)" % target,
-            "CVES_PENDING": "$(rlocationpath :%s_pending)" % target,
-            "EXPECTED_STATUS": status,
+            "EXPECTED": expected,
             "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
-            "JQ_REPORT": "$(rlocationpath @envoy_toolshed_jq//:cve/report.jq)",
             "SCANNED": "$(rlocationpath :%s.scanned)" % target,
         },
         deps = ["@bazel_tools//tools/bash/runfiles"],
     )
-    for mode, target, status in [
-        ("warn", "pending", "0"),
-        ("error", "pending_error", "1"),
+    for target, expected in [
+        ("nvd_only", '[["CVE-2024-0001",["nvd"],["nvd"]]]'),
+        ("cna_only", '[["CVE-2024-0001",["cna"],["cna"]],["CVE-2024-0006",["cna"],["cna"]]]'),
     ]
 ]
 

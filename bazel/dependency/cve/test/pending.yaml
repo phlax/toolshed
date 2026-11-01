@@ -1,5 +1,0 @@
-start_year: 2024
-pending: warn
-ignored_cves:
-- CVE-2024-0001
-- CVE-2024-0004

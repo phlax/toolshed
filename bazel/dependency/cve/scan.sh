@@ -14,7 +14,8 @@ CVES_IGNORED="$(rlocation "$CVES_IGNORED")"
 JQ_CVE_MATCHER="$(rlocation "$JQ_CVE_MATCHER")"
 JQ_CNA_MATCHER="$(rlocation "$JQ_CNA_MATCHER")"
 JQ_NVD_SCAN="$(rlocation "$JQ_NVD_SCAN")"
-CVES_PENDING="$(rlocation "$CVES_PENDING")"
+JQ_MERGE="$(rlocation "$JQ_MERGE")"
+CVES_SOURCES="$(rlocation "$CVES_SOURCES")"
 CVE_FILES="$(rlocation "$CVE_FILES")"
 
 # NVD month files are at the root of the data directory, CVE Program
@@ -28,33 +29,45 @@ while IFS= read -r file; do
         nvd_files+=("$(rlocation "$file")")
     fi
 done < "$CVE_FILES"
-if [[ ${#nvd_files[@]} -eq 0 ]]; then
+
+sources="$("$JQ_BIN" -r 'join(" ")' "$CVES_SOURCES")"
+scan_nvd=false
+scan_cna=false
+for source in $sources; do
+    case "$source" in
+        nvd) scan_nvd=true ;;
+        cna) scan_cna=true ;;
+        *) echo >&2 "Unknown CVE source: $source (expected nvd or cna)"; exit 2 ;;
+    esac
+done
+if [[ "$scan_nvd" == true && ${#nvd_files[@]} -eq 0 ]]; then
     echo >&2 "No CVE data set"
     exit 1
 fi
-
-# `pending: skip` scans NVD data only.
-pending="$("$JQ_BIN" -r '.' "$CVES_PENDING")"
-if [[ "$pending" == "skip" || ${#cna_files[@]} -eq 0 ]]; then
-    "$JQ_BIN" -f "$JQ_CVE_MATCHER" \
-        --slurpfile deps "$CPE_DEPS" --slurpfile ignored "$CVES_IGNORED" "${nvd_files[@]}" |
-        "$JQ_BIN" -s '[.[][] | .status = "analyzed"]'
-    exit 0
+if [[ "$scan_cna" == true && ${#cna_files[@]} -eq 0 ]]; then
+    echo >&2 "No CVE Program data set (cvelist/)"
+    exit 1
 fi
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
 # One pass over the NVD data: the matches, and the ids NVD has analyzed
-# (ie that have CPE configurations). Where NVD has analyzed a CVE it is
-# authoritative, so CNA matches are only kept for CVEs it has not.
-"$JQ_BIN" -f "$JQ_NVD_SCAN" \
-    --slurpfile deps "$CPE_DEPS" --slurpfile ignored "$CVES_IGNORED" "${nvd_files[@]}" |
-    "$JQ_BIN" -s '{matches: [.[].matches[] | .status = "analyzed"], analyzed: [.[].analyzed[]]}' \
-        > "$tmpdir/nvd.json"
-# shellcheck disable=SC2016
-"$JQ_BIN" -f "$JQ_CNA_MATCHER" \
-    --slurpfile deps "$CPE_DEPS" --slurpfile ignored "$CVES_IGNORED" "${cna_files[@]}" |
-    "$JQ_BIN" -s --slurpfile nvd "$tmpdir/nvd.json" \
-        '$nvd[0].matches
-         + [.[][] | select(.id as $id | $nvd[0].analyzed | index($id) | not) | .status = "pending"]'
+# (ie that have CPE configurations).
+if [[ "$scan_nvd" == true ]]; then
+    "$JQ_BIN" -f "$JQ_NVD_SCAN" \
+        --slurpfile deps "$CPE_DEPS" --slurpfile ignored "$CVES_IGNORED" "${nvd_files[@]}" |
+        "$JQ_BIN" -s '{matches: [.[].matches[]], analyzed: [.[].analyzed[]]}' \
+            > "$tmpdir/nvd.json"
+else
+    echo '{"matches": []}' > "$tmpdir/nvd.json"
+fi
+if [[ "$scan_cna" == true ]]; then
+    "$JQ_BIN" -f "$JQ_CNA_MATCHER" \
+        --slurpfile deps "$CPE_DEPS" --slurpfile ignored "$CVES_IGNORED" "${cna_files[@]}" |
+        "$JQ_BIN" -s '[.[][]]' > "$tmpdir/cna.json"
+else
+    echo '[]' > "$tmpdir/cna.json"
+fi
+# Union of both, tagged by source
+"$JQ_BIN" -f "$JQ_MERGE" --slurpfile nvd "$tmpdir/nvd.json" "$tmpdir/cna.json"

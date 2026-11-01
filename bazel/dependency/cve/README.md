@@ -51,7 +51,7 @@ This is a potential-vulnerability detector, not a proof of exploitability:
 it matches vendor/product/version and publication dates, rather than
 evaluating the complete NVD configuration logic.
 
-## CVE Program records (pending NVD analysis)
+## CVE Program records
 
 NVD only adds CPE configurations when it analyzes a CVE. A large share of
 recently published CVEs never get there (`Awaiting Analysis`, `Received`, or
@@ -83,15 +83,15 @@ owner/repo) or on `cpes` where an ADP has supplied them (including any
 version in the CPE), and on the asserted version entries
 (`lessThan`/`lessThanOrEqual` ranges, wildcard limits such as `2.5.*`,
 free-text `< x` / `>= x, < y` constraints, single versions, `changes[]` and
-`defaultStatus`; see the jq README for the precedence rules). Where NVD has
-analyzed a CVE its CPE match is authoritative, so
-CNA matches are only reported for CVEs NVD has not, with `status: "pending"`
-(NVD matches carry `status: "analyzed"`). The report lists them under
-`Pending NVD analysis`. They are published CVEs with a CNA-asserted range,
-only lacking NVD enrichment, so by default they fail `<name>.test` like any
-other match; set `pending: warn` in the config to only report them, or
-`pending: skip` to scan the NVD data only. Use `ignored_cves` for false
-positives either way.
+`defaultStatus`; see the jq README for the precedence rules).
+
+The scan is the union of both sources: matches are merged by CVE id, each
+carries `sources` (`nvd`, `cna`) and each matched dependency its `source`.
+A CVE matched only from its CVE Program record also records whether NVD has
+analyzed it (`nvd_analyzed`): `false` means NVD has no CPE data for it yet
+(or, if `Deferred`, ever); `true` means NVD's CPE configurations did not
+match the tracked tags, which may be worth checking. Both fail `<name>.test`
+like any match; use `ignored_cves` for false positives.
 
 ## Configuration and data
 
@@ -101,14 +101,13 @@ positives either way.
 start_year: 2024
 ignored_cves:
 - CVE-2024-1234
-pending: error
+sources: [nvd, cna]
 ```
 
 `start_year` is an integer, the first publication year fetched.
 `ignored_cves` is a list of CVE IDs (defaults to empty).
-`pending` is `error` (the default), `warn` or `skip`: whether matches pending
-NVD analysis (see above) fail `<name>.test`, are only reported, or are not
-scanned for at all (NVD data only, for a quicker run).
+`sources` selects the data scanned, `nvd` (NVD CPE configurations) and/or
+`cna` (CVE Program records, see above); default both.
 
 `cve_data` supplies NVD 2.0 JSON files. A file may contain multiple consecutive
 NVD page objects. Updates use filenames `YYYY-MM.json`. Non-JSON placeholders
@@ -130,8 +129,7 @@ Envoy can put this selection in `--config=cves`.
 - `<name>.scanned`: generates `<name>.scanned.json`. Missing data or invalid
   JSON fails the build; scan errors are deliberately not suppressed.
 - `<name>.test`: passes for an empty array; otherwise prints the coloured
-  report and exits 1, unless only pending matches were found and the config
-  sets `pending: warn`.
+  report and exits 1.
 - `<name>.update`: fetches data, then uses `write_source_files` to write the
   directory to package-relative `cve_data_dir`.
 

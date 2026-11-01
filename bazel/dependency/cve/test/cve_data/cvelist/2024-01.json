@@ -6,7 +6,7 @@
       "assigner": "example",
       "published": "2024-01-15T00:00:00.000Z",
       "updated": "2024-01-15T00:00:00.000Z",
-      "descriptions": [{"lang": "en", "value": "Already analyzed by NVD: the NVD match is authoritative"}],
+      "descriptions": [{"lang": "en", "value": "Also matched from NVD"}],
       "metrics": [{"cvssV3_1": {"baseSeverity": "HIGH", "baseScore": 7.5}}],
       "affected": [{
         "vendor": "example",
@@ -36,7 +36,7 @@
       "assigner": "example",
       "published": "2024-01-20T00:00:00.000Z",
       "updated": "2024-01-20T00:00:00.000Z",
-      "descriptions": [{"lang": "en", "value": "Widget fixture vulnerability pending NVD analysis"}],
+      "descriptions": [{"lang": "en", "value": "Widget fixture vulnerability not analyzed by NVD"}],
       "metrics": [{"cvssV3_1": {"baseSeverity": "MEDIUM", "baseScore": 5.3}}],
       "affected": [{
         "vendor": "Example",

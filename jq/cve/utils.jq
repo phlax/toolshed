@@ -268,23 +268,17 @@ def scan_cna($deps; $ignored):
   deps_list($deps[0]) as $dependencies
   | iterate_cna_cves(.records; $dependencies; $ignored[0]);
 
-def matched_dependencies(cve):
-  cve as $cve
-  | cve.matched[]
-  | "Dep: \(ansi::green)\(ansi::bold)\(.dep.name)@\(.dep.version.string)\(ansi::reset) \(ansi::green)(\(.dep.release_date)\(ansi::reset))
+def nvd_dependency(cve; match):
+  "Dep: \(ansi::green)\(ansi::bold)\(match.dep.name)@\(match.dep.version.string)\(ansi::reset) \(ansi::green)(\(match.dep.release_date)\(ansi::reset))
 
-  Severity: \(get_severity($cve.cve.metrics))
-  Published: \(to_date_string($cve.cve.published))
-  CPE: \(first(matching_cpe_tags(.cpe.cpe; .dep)).match // "")
-  Version: \(.cpe.cpe.version)
-  Start (including/excluding): \(.cpe.versions.start_inc // "")/\(.cpe.versions.start_exc // "")
-  End (including/excluding): \(.cpe.versions.end_inc // "")/\(.cpe.versions.end_exc // "")
-
-  ---------------------------------
-
-  \($cve.cve.descriptions[0].value)
-
-  ";
+  Source: NVD
+  Severity: \(get_severity(cve.metrics))
+  Published: \(to_date_string(cve.published))
+  CPE: \(first(matching_cpe_tags(match.cpe.cpe; match.dep)).match // "")
+  Version: \(match.cpe.cpe.version)
+  Start (including/excluding): \(match.cpe.versions.start_inc // "")/\(match.cpe.versions.start_exc // "")
+  End (including/excluding): \(match.cpe.versions.end_inc // "")/\(match.cpe.versions.end_exc // "")
+";
 
 def cna_version_strings(affected):
   [affected.versions[]? | select(.status == "affected")
@@ -293,48 +287,83 @@ def cna_version_strings(affected):
      else .version end]
   | if length == 0 then "(all)" else join(", ") end;
 
-def pending_dependencies(cve):
-  cve as $cve
-  | cve.matched[]
-  | "Dep: \(ansi::green)\(ansi::bold)\(.dep.name)@\(.dep.version.string)\(ansi::reset) \(ansi::green)(\(.dep.release_date)\(ansi::reset))
+def nvd_state(cve):
+  # how NVD stands on a CVE matched from its CVE Program record
+  if cve.nvd_analyzed == true then "analyzed, no CPE match for the tracked tags"
+  elif cve.nvd_analyzed == false then "not analyzed (no CPE data)"
+  else "unknown" end;
 
-  Severity: \(get_cna_severity($cve.cve))
-  Published: \(to_date_string($cve.cve.published))
-  Assigner: \($cve.cve.assigner // "")
-  Affected: \(.affected.vendor // "")/\(.affected.product // "") \(cna_version_strings(.affected))
-  CPEs: \((.affected.cpes // []) | join(", "))
+def cna_dependency(cve; match):
+  "Dep: \(ansi::green)\(ansi::bold)\(match.dep.name)@\(match.dep.version.string)\(ansi::reset) \(ansi::green)(\(match.dep.release_date)\(ansi::reset))
 
+  Source: CVE Program (\(cve.assigner // "unknown CNA"))
+  Severity: \(get_cna_severity(cve))
+  Published: \(to_date_string(cve.published))
+  Affected: \(match.affected.vendor // "")/\(match.affected.product // "") \(cna_version_strings(match.affected))
+  CPEs: \((match.affected.cpes // []) | join(", "))
+";
+
+def matched_dependency(cve; match):
+  (if match.source == "cna" then cna_dependency(cve.cna; match)
+   else nvd_dependency(cve.cve; match) end)
+  + "
   ---------------------------------
 
-  \($cve.cve.descriptions[0].value)
+  \((cve.cve // cve.cna).descriptions[0].value)
 
   ";
+
+def matched_dependencies(cve):
+  cve as $cve
+  | [cve.matched[] | matched_dependency($cve; .)]
+  | join("");
+
+def cve_header(cve):
+  "================ \(ansi::red)\(ansi::bold)\(ansi::underline)\(cve.id)\(ansi::reset) ================"
+  + (if cve.nvd_analyzed != null then "
+  NVD: \(nvd_state(cve))" else "" end);
 
 def cve_report(cve):
-  "================ \(ansi::red)\(ansi::bold)\(ansi::underline)\(cve.id)\(ansi::reset) ================
-  \(if cve.status == "pending" then pending_dependencies(cve) else matched_dependencies(cve) end)
-  ";
-
-def pending_header:
-  "
-  \(ansi::bold)Pending NVD analysis\(ansi::reset)
-  Matched on the affected versions asserted by the CNA, not (yet) confirmed by NVD CPE analysis.
-
+  "\(cve_header(cve))
+  \(matched_dependencies(cve))
   ";
 
 def summary(matches):
-  ([matches[] | select(.status == "pending")] | length) as $pending
+  ([matches[] | select(.sources == ["cna"])] | length) as $cna_only
+  | ([matches[] | select(.sources == ["nvd"])] | length) as $nvd_only
+  | ([matches[] | select((.sources // []) | length > 1)] | length) as $both
   | "
   ==========================================
   \(ansi::red)\(ansi::bold)\(matches | length) potential CVE vulnerabilities found\(ansi::reset)"
-    + (if $pending > 0 then " (\($pending) pending NVD analysis)" else "" end);
+    + (if ($cna_only + $both) > 0
+       then " (\($nvd_only) NVD only, \($cna_only) CVE Program only, \($both) both)"
+       else "" end);
 
 def report(matches):
   matches as $matches
-  | [$matches[] | select(.status != "pending")] as $analyzed
-  | [$matches[] | select(.status == "pending")] as $pending
-  | ($analyzed | map(cve_report(.)) | join("\n"))
-    + (if ($pending | length) > 0
-       then pending_header + ($pending | map(cve_report(.)) | join("\n"))
-       else "" end)
-    + summary($matches);
+  | (matches | map(cve_report(.)) | join("\n")) + summary($matches);
+
+# Merge NVD and CVE Program matches by id, tagging the sources.
+#   nvd: `{matches, analyzed}` from `nvd_scan`
+#   cna: `scan_cna` matches
+# The result keeps `cve` (the NVD record where there is one, else the CVE
+# Program record), `cna` (the CVE Program record), `sources`, and for
+# records only matched from the CVE Program whether NVD has analyzed them.
+def merge_sources(nvd; cna):
+  nvd.matches as $nvd
+  | cna as $cna
+  | (nvd.analyzed // []) as $analyzed
+  | ([$nvd[] | .matched[] |= (.source = "nvd")]
+     + [$cna[] | .matched[] |= (.source = "cna") | {id, matched, cna: .cve}])
+  | group_by(.id)
+  | map(
+      (map(select(.cve)) | first) as $from_nvd
+      | (map(select(.cna)) | first) as $from_cna
+      | {id: .[0].id,
+         sources: ([if $from_nvd then "nvd" else empty end, if $from_cna then "cna" else empty end]),
+         matched: (map(.matched[])),
+         cve: ($from_nvd.cve // $from_cna.cna),
+         cna: $from_cna.cna}
+      + (if $from_nvd == null then
+           {nvd_analyzed: ($analyzed | index($from_cna.id) | . != null)}
+         else {} end));
