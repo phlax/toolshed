@@ -1,4 +1,4 @@
-name: cve utils resolves CNA affected status from covering entries, changes and the default
+name: cve utils resolves CNA affected status from the first covering entry, its changes, or the default
 imports: [cve/utils]
 input:
   deps:
@@ -118,8 +118,7 @@ expression: |
   | map(.id)
 expected:
 - CVE-DEFAULT-WITH-OTHER-UNAFFECTED
-- CVE-UNAFFECTED-RANGE-WITH-AFFECTED-VERSION
-- CVE-OVERLAPPING-RANGES
+- CVE-RANGE-WITH-UNAFFECTED-VERSION
 - CVE-CHANGE-TO-AFFECTED
 - CVE-CHANGE-LAST-WINS
 - CVE-WILDCARD-LIMIT

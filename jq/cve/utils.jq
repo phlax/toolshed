@@ -2,13 +2,19 @@ import "version" as version;
 import "ansi" as ansi;
 
 def to_date_string(datestring):
+  # `YYYY-MM-DDTHH:MM:SS[.fff][Z|+HH:MM]` (NVD omits the zone, CVE Program
+  # records may carry an offset) to the UTC date
   datestring
   | if . == null then "unknown"
     else
       sub("\\.[0-9]+"; "")
-      | sub("Z$"; "")
-      | . + "Z"
-      | fromdateiso8601
+      | capture("^(?<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})"
+                + "(?:Z|(?<sign>[+-])(?<hh>[0-9]{2}):?(?<mm>[0-9]{2}))?$")
+      | ((.base + "Z") | fromdateiso8601)
+        - (if .sign == null then 0
+           else (if .sign == "-" then -1 else 1 end)
+                * (((.hh // "0") | tonumber) * 3600 + ((.mm // "0") | tonumber) * 60)
+           end)
       | strftime("%Y-%m-%d")
     end;
 
@@ -207,24 +213,20 @@ def cna_entry_status(entry; dep):
   | (.status // entry.status);
 
 def cna_covering(affected; dep):
-  # the `versions[]` entries covering the dep version, with the effective status
+  # the `versions[]` entries covering the dep version, in order, with the
+  # effective status
   [affected.versions[]? as $entry
    | cna_versions($entry) as $v
    | select($v.invalid | not)
    | select(match_cna_version($v; dep))
-   | {exact: ($v.exact != null), status: cna_entry_status($entry; dep)}];
+   | {status: cna_entry_status($entry; dep)}];
 
 def match_cna_affected_version(affected; dep):
-  # covered and affected: a single-version entry overrides ranges covering
-  # the same version, otherwise an affected entry wins over an unaffected
-  # one, and `defaultStatus` applies only when no entry covers the version
-  cna_covering(affected; dep) as $covering
-  | if ($covering | length) == 0 then affected.defaultStatus == "affected"
-    else
-      ([$covering[] | select(.exact)]
-       | if length > 0 then . else $covering end)
-      | any(.[]; .status == "affected")
-    end;
+  # as the CVE record format: the first entry covering the version decides
+  # (after its `changes[]`), `defaultStatus` applies when none does
+  cna_covering(affected; dep)
+  | if length == 0 then affected.defaultStatus == "affected"
+    else .[0].status == "affected" end;
 
 def match_cna_name(affected; dep):
   # match on the entry's cpes where given (including any cpe version),

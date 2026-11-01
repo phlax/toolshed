@@ -120,12 +120,10 @@ Versions come from the `versions[]` entries, as `lessThan` /
 `lessThanOrEqual` ranges starting at `version` (a trailing `.*` on a limit
 covers the rest of that series), free-text constraints (`< 1.34.7`,
 `>= 2.0, < 2.1.3`) or single versions; `versionType: git` entries (commit
-ranges) and constraints that do not parse are ignored. The dependency is affected when an
-entry covering its version says so, after applying any `changes[]` at or
-below it (the last applicable change wins): a single-version entry overrides
-ranges covering the same version, otherwise an affected entry wins over an
-unaffected one, and `defaultStatus` applies only when no entry covers the
-version. The release-date policy applies as for NVD. The records returned
+ranges) and constraints that do not parse are ignored. As in the CVE record
+format, the first entry covering the dependency version decides its status,
+after applying that entry's `changes[]` at or below the version (the last
+applicable change wins); `defaultStatus` applies when no entry covers it. The release-date policy applies as for NVD. The records returned
 have the shape `{id, matched: [{affected, dep}], cve}`.
 
 `utils::nvd_scan($deps; $ignored)` (executable: `cve/nvd_scan.jq`) returns

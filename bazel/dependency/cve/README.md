@@ -160,8 +160,15 @@ bazel run //tools/dependency:cves.update \
 Select the data label on subsequent updates to preserve previous months.
 No repository paths or `BUILD_WORKSPACE_DIRECTORY` are needed.
 
-The cvelist fetcher resolves the latest release through the GitHub API; set
-`GITHUB_TOKEN` in the environment to avoid unauthenticated rate limits.
+The cvelist fetcher resolves the latest release through the GitHub API. To
+authenticate (avoiding the unauthenticated rate limits) pass a token into
+the fetch action, which does not inherit the shell environment:
+
+```bash
+GITHUB_TOKEN=... bazel run //tools/dependency:cves.update \
+  --action_env=CVE_UPDATE_NONCE="$(date +%s%N)" \
+  --action_env=GITHUB_TOKEN
+```
 
 The fetchers use `aiohttp` and `aio.run.runner` via the `cve_pip3` hub.
 TODO(phlax): Decide its long-term home: Python brings a toolchain into
