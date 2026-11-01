@@ -95,6 +95,14 @@ input:
         product: zlib
         versions: [{version: "0", lessThan: "ffffffffffff", status: affected, versionType: git}]
         provider: cna
+    - id: CVE-WILDCARD-UNRESOLVED
+      published: "2026-09-18T00:00:00.000Z"
+      affected:
+      - {vendor: zlib, product: zlib, versions: [{version: "1.0", lessThan: "1.x.*", status: affected}], provider: cna}
+    - id: CVE-EXACT-ZERO
+      published: "2026-09-18T00:00:00.000Z"
+      affected:
+      - {vendor: zlib, product: zlib, versions: [{version: "0", status: affected}], provider: cna}
     - id: CVE-CPE-VERSION
       published: "2026-09-18T00:00:00.000Z"
       affected:

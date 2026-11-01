@@ -3,11 +3,14 @@ import "ansi" as ansi;
 
 def to_date_string(datestring):
   datestring
-  | sub("\\.[0-9]+"; "")
-  | sub("Z$"; "")
-  | . + "Z"
-  | fromdateiso8601
-  | strftime("%Y-%m-%d");
+  | if . == null then "unknown"
+    else
+      sub("\\.[0-9]+"; "")
+      | sub("Z$"; "")
+      | . + "Z"
+      | fromdateiso8601
+      | strftime("%Y-%m-%d")
+    end;
 
 def deps_list(deps):
   [deps | to_entries[] | {name: .key} + .value];
@@ -150,17 +153,19 @@ def cna_version_text(text):
       else .exact = $m.version
       end);
 
-def cna_wildcard_limit(limit):
-  # a trailing `.*` on a `lessThan` limit means the rest of that series,
-  # eg `2.5.*` - the first version after it is `2.6`
-  limit as $limit
-  | if ($limit | type) == "string" and ($limit | test("\\.\\*$")) then
-      ($limit | sub("\\.\\*$"; "") | split("."))
-      | try (.[-1] |= ((tonumber + 1) | tostring) | join(".")) catch $limit
-    else $limit end;
-
 def cna_wildcard(limit):
   (limit | type) == "string" and (limit | test("\\.\\*$"));
+
+def cna_wildcard_limit(limit):
+  # a trailing `.*` on a `lessThan` limit means the rest of that series,
+  # eg `2.5.*` - the first version after it is `2.6`; a series that cannot
+  # be resolved (`3.x.*`) is null, so the entry is ignored rather than
+  # string-compared
+  limit as $limit
+  | if cna_wildcard($limit) then
+      ($limit | sub("\\.\\*$"; "") | split("."))
+      | try (.[-1] |= ((tonumber + 1) | tostring) | join(".")) catch null
+    else $limit end;
 
 def cna_versions(entry):
   # normalize a CNA `versions[]` entry to the start/end bounds used for NVD
@@ -177,7 +182,11 @@ def cna_versions(entry):
    else
      cna_version_text(entry.version // "*")
    end)
-  | with_entries(select(.value != "0" and .value != "*" and .value != "unspecified"));
+  # `*`/`unspecified` are unbounded, as is `0` as a range start; an
+  # unresolved (null) bound makes the entry unusable
+  | with_entries(select(.value != "*" and .value != "unspecified"))
+  | with_entries(select((.key == "start_inc" and .value == "0") | not))
+  | if any(.[]; . == null) then {invalid: true} else . end;
 
 def match_cna_version(versions; dep):
   # whether the dep version is covered by the normalized versions
@@ -258,8 +267,10 @@ def matching_cna_deps(affected; cve; index):
    | {affected: $affected, dep: $dep}];
 
 def get_cna_severity(cve):
-  [cve.metrics[]?
-   | ((.cvssV4_0 // .cvssV3_1 // .cvssV3_0)? | .baseSeverity?) // empty]
+  # the highest cvss version with a severity, across all metrics entries
+  [cve.metrics[]?] as $metrics
+  | [("cvssV4_0", "cvssV3_1", "cvssV3_0") as $key
+     | $metrics[] | .[$key]? | .baseSeverity? // empty]
   | first // "UNKNOWN";
 
 def iterate_cna_cves(cves; deps; ignored):
