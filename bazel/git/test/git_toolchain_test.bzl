@@ -226,7 +226,19 @@ def _render_hub_build_test_impl(ctx):
     asserts.false(env, "name = \"host\"" in content)
     asserts.false(env, "git_toolchain(" in content)
 
-    # Only macOS hosts fall back.
+    # A Linux host on a CPU without a prebuilt falls back, constrained to that CPU.
+    content = render_git_toolchains_build(
+        {"linux-aarch64": "git_prebuilt_linux_aarch64", "linux-x86_64": "git_prebuilt_linux_x86_64"},
+        "@" + "@envoy_toolshed+//git:defs.bzl",
+        "@" + "@envoy_toolshed+//git:toolchain_type",
+        host = "linux-ppc64le",
+    )
+    asserts.true(env, "name = \"host\"" in content)
+    asserts.true(env, "\"@platforms//os:linux\"" in content)
+    asserts.true(env, "\"@platforms//cpu:ppc64le\"" in content)
+    asserts.true(env, "name = \"linux_x86_64\"" in content)
+
+    # Windows hosts do not fall back.
     content = render_git_toolchains_build(
         {"linux-x86_64": "git_prebuilt_linux_x86_64"},
         "@" + "@envoy_toolshed+//git:defs.bzl",
@@ -246,12 +258,16 @@ def _host_platform_test_impl(ctx):
     asserts.equals(env, "linux-aarch64", host_platform("Linux", "arm64"))
     asserts.equals(env, "windows-x86_64", host_platform("windows 11", "amd64"))
     asserts.equals(env, None, host_platform("freebsd", "x86_64"))
-    asserts.equals(env, None, host_platform("linux", "ppc64le"))
+    asserts.equals(env, "linux-ppc64le", host_platform("linux", "ppc64le"))
+    asserts.equals(env, "linux-s390x", host_platform("Linux", "s390x"))
+    asserts.equals(env, None, host_platform("linux", "riscv64"))
 
     asserts.equals(env, "macos-aarch64", host_fallback_platform("macos-aarch64"))
     asserts.equals(env, "macos-x86_64", host_fallback_platform("macos-x86_64"))
     asserts.equals(env, None, host_fallback_platform("linux-x86_64"))
     asserts.equals(env, None, host_fallback_platform("linux-aarch64"))
+    asserts.equals(env, "linux-ppc64le", host_fallback_platform("linux-ppc64le"))
+    asserts.equals(env, "linux-s390x", host_fallback_platform("linux-s390x"))
     asserts.equals(env, None, host_fallback_platform("windows-x86_64"))
     asserts.equals(env, None, host_fallback_platform(None))
     return unittest.end(env)

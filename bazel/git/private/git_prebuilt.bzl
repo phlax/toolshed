@@ -14,14 +14,17 @@ _PLATFORM_TARGETS = {
     },
 }
 
-# Host platforms the hub may fall back to the host's git on. Linux always has a
-# prebuilt (or the source fallback), and Windows is untested.
+# Host platforms the hub may fall back to the host's git on, when no prebuilt is published for
+# them: macOS, and Linux on CPUs without a prebuilt (eg ppc64le, s390x). Windows is untested.
 _HOST_FALLBACK_OS_CONSTRAINTS = {
+    "linux": "@platforms//os:linux",
     "macos": "@platforms//os:macos",
 }
 
 _CPU_CONSTRAINTS = {
     "aarch64": "@platforms//cpu:aarch64",
+    "ppc64le": "@platforms//cpu:ppc64le",
+    "s390x": "@platforms//cpu:s390x",
     "x86_64": "@platforms//cpu:x86_64",
 }
 
@@ -29,6 +32,8 @@ _CPU_ALIASES = {
     "aarch64": "aarch64",
     "amd64": "x86_64",
     "arm64": "aarch64",
+    "ppc64le": "ppc64le",
+    "s390x": "s390x",
     "x86_64": "x86_64",
 }
 
