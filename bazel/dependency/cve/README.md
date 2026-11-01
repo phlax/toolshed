@@ -87,8 +87,9 @@ free-text `< x` / `>= x, < y` constraints, single versions, `changes[]` and
 analyzed a CVE its CPE match is authoritative, so
 CNA matches are only reported for CVEs NVD has not, with `status: "pending"`
 (NVD matches carry `status: "analyzed"`). The report lists them under
-`Pending NVD analysis`. By default they are reported as a warning and do not
-fail `<name>.test`; set `pending: error` in the config to fail on them, or
+`Pending NVD analysis`. They are published CVEs with a CNA-asserted range,
+only lacking NVD enrichment, so by default they fail `<name>.test` like any
+other match; set `pending: warn` in the config to only report them, or
 `pending: skip` to scan the NVD data only. Use `ignored_cves` for false
 positives either way.
 
@@ -100,13 +101,13 @@ positives either way.
 start_year: 2024
 ignored_cves:
 - CVE-2024-1234
-pending: warn
+pending: error
 ```
 
 `start_year` is an integer, the first publication year fetched.
 `ignored_cves` is a list of CVE IDs (defaults to empty).
-`pending` is `warn` (the default), `error` or `skip`: whether matches pending
-NVD analysis (see above) are only reported, fail `<name>.test`, or are not
+`pending` is `error` (the default), `warn` or `skip`: whether matches pending
+NVD analysis (see above) fail `<name>.test`, are only reported, or are not
 scanned for at all (NVD data only, for a quicker run).
 
 `cve_data` supplies NVD 2.0 JSON files. A file may contain multiple consecutive
@@ -129,8 +130,8 @@ Envoy can put this selection in `--config=cves`.
 - `<name>.scanned`: generates `<name>.scanned.json`. Missing data or invalid
   JSON fails the build; scan errors are deliberately not suppressed.
 - `<name>.test`: passes for an empty array; otherwise prints the coloured
-  report and exits 1, unless only pending matches were found and `pending`
-  is `warn`.
+  report and exits 1, unless only pending matches were found and the config
+  sets `pending: warn`.
 - `<name>.update`: fetches data, then uses `write_source_files` to write the
   directory to package-relative `cve_data_dir`.
 

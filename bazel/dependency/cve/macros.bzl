@@ -102,7 +102,7 @@ def cve_scan(
         name: Scan binary name; also prefixes generated helpers.
         deps: Raw dependency JSON, keyed by dependency name.
         config: YAML containing start_year, ignored_cves and optionally
-            pending (`warn`, the default, `error` or `skip`).
+            pending (`error`, the default, `warn` or `skip`).
         cve_data: Files (or label_flag) containing NVD 2.0 month JSON pages, and
             optionally CVE Program (cvelistV5) month files under `cvelist/`.
         cve_data_dir: Package-relative directory written by <name>.update.
@@ -121,7 +121,7 @@ def cve_scan(
     for key, expression in [
         ("ignored", ".ignored_cves // []"),
         ("start_year", ".start_year"),
-        ("pending", '.pending // "warn"'),  # warn | error | skip
+        ("pending", '.pending // "error"'),  # error | warn | skip
     ]:
         yq(
             name = name + "_" + key,

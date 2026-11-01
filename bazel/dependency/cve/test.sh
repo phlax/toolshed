@@ -13,9 +13,9 @@ JQ_REPORT="$(rlocation "$JQ_REPORT")"
 SCANNED="$(rlocation "$SCANNED")"
 CVES_PENDING="$(rlocation "$CVES_PENDING")"
 
-# Matches pending NVD analysis (CNA-asserted only) fail the test only with
-# `pending: error` in the config, otherwise they are reported as a warning
-# (`skip` does not scan for them at all).
+# Matches pending NVD analysis (CNA-asserted only) fail the test unless the
+# config sets `pending: warn`, which only reports them (`skip` does not scan
+# for them at all).
 pending="$("$JQ_BIN" -r '.' "$CVES_PENDING")"
 if [[ "$pending" != "warn" && "$pending" != "error" && "$pending" != "skip" ]]; then
     echo >&2 "Expected \`pending\` to be \`warn\`, \`error\` or \`skip\`, got: $pending"
@@ -32,4 +32,4 @@ if [[ "$analyzed" -gt 0 || "$pending" == "error" ]]; then
     exit 1
 fi
 echo
-echo "WARNING: only matches pending NVD analysis were found (set \`pending: error\` to fail on these)"
+echo "WARNING: only matches pending NVD analysis were found (\`pending: warn\` is set, so not failing)"
