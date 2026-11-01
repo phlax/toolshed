@@ -1,0 +1,104 @@
+name: cve report renders pending CNA matches in their own section and counts them
+imports: [cve/utils]
+input:
+- id: CVE-EXAMPLE
+  status: analyzed
+  matched:
+  - dep:
+      name: example
+      version: {string: "1.2.3"}
+      release_date: "2024-01-01"
+      cpe: {match: "cpe:2.3:a:vendor:product:*", vendor: vendor, product: product, version: "*"}
+    cpe:
+      cpe: {vendor: vendor, product: product, version: "*"}
+      versions: {start_inc: "1.0", start_exc: null, end_inc: null, end_exc: "2.0"}
+  cve:
+    published: "2024-06-01T12:00:00.000"
+    descriptions: [{value: Example description}]
+    metrics: {cvssMetricV31: [{cvssData: {baseSeverity: HIGH}}]}
+- id: CVE-PENDING
+  status: pending
+  matched:
+  - dep:
+      name: cares
+      version: {string: "1.34.6"}
+      release_date: "2025-02-24"
+    affected:
+      vendor: c-ares
+      product: c-ares
+      versions:
+      - {version: "< 1.34.7", status: affected}
+      - {version: "1.0", lessThan: "1.2", status: affected}
+      - {version: "2.0", lessThanOrEqual: "2.2", status: affected}
+      - {version: "9.9", status: unaffected}
+      provider: cna
+  cve:
+    assigner: GitHub_M
+    published: "2026-09-18T17:26:52.210Z"
+    descriptions: [{value: Pending description}]
+    metrics: [{cvssV3_1: {baseSeverity: HIGH}}]
+- id: CVE-PENDING-CPES
+  status: pending
+  matched:
+  - dep:
+      name: zlib
+      version: {string: "1.3.1"}
+      release_date: "2024-01-22"
+    affected: {cpes: ["cpe:2.3:a:zlib:zlib:*:*:*:*:*:*:*:*"], defaultStatus: affected, provider: CISA-ADP}
+  cve:
+    published: "2026-09-18T00:00:00.000Z"
+    descriptions: [{value: ADP description}]
+    metrics: []
+expression: 'utils::report(.) | gsub("\u001b\\[[0-9;]*m"; "") | split("\n")'
+expected:
+- "================ CVE-EXAMPLE ================"
+- "  Dep: example@1.2.3 (2024-01-01)"
+- ""
+- "  Severity: HIGH"
+- "  Published: 2024-06-01"
+- "  CPE: cpe:2.3:a:vendor:product:*"
+- "  Version: *"
+- "  Start (including/excluding): 1.0/"
+- "  End (including/excluding): /2.0"
+- ""
+- "  ---------------------------------"
+- ""
+- "  Example description"
+- ""
+- "  "
+- "  "
+- "  Pending NVD analysis"
+- "  Matched on the affected versions asserted by the CNA, not (yet) confirmed by NVD CPE analysis."
+- ""
+- "  ================ CVE-PENDING ================"
+- "  Dep: cares@1.34.6 (2025-02-24)"
+- ""
+- "  Severity: HIGH"
+- "  Published: 2026-09-18"
+- "  Assigner: GitHub_M"
+- "  Affected: c-ares/c-ares < 1.34.7, 1.0 <= v < 1.2, 2.0 <= v <= 2.2"
+- "  CPEs: "
+- ""
+- "  ---------------------------------"
+- ""
+- "  Pending description"
+- ""
+- "  "
+- "  "
+- "================ CVE-PENDING-CPES ================"
+- "  Dep: zlib@1.3.1 (2024-01-22)"
+- ""
+- "  Severity: UNKNOWN"
+- "  Published: 2026-09-18"
+- "  Assigner: "
+- "  Affected: / (all)"
+- "  CPEs: cpe:2.3:a:zlib:zlib:*:*:*:*:*:*:*:*"
+- ""
+- "  ---------------------------------"
+- ""
+- "  ADP description"
+- ""
+- "  "
+- "  "
+- "  =========================================="
+- "  3 potential CVE vulnerabilities found (2 pending NVD analysis)"

@@ -78,6 +78,22 @@ def get_severity(metrics):
   elif metrics.cvssMetricV30 then metrics.cvssMetricV30[0].cvssData.baseSeverity
   else "UNKNOWN" end;
 
+def github_name(dep):
+  # (owner, repo) from the first github url in the dependency metadata, if any
+  [((dep.urls // []) + [dep.project_url // empty, dep.license_url // empty])[]
+   | capture("^https?://github\\.com/(?<vendor>[^/]+)/(?<product>[^/]+)")?
+   | .product |= sub("\\.git$"; "")]
+  | first // empty;
+
+def dep_names(dep; cpes):
+  # candidate (vendor, product) pairs for matching CNA-asserted vendor/product:
+  # the CPE tags, the same with any `_project` vendor suffix removed, and the
+  # github owner/repo
+  [cpes[] | {vendor, product}, {vendor: (.vendor | sub("_project$"; "")), product}]
+  + [github_name(dep)]
+  | map({vendor: (.vendor | ascii_downcase), product: (.product | ascii_downcase)})
+  | unique;
+
 def parse_deps(deps):
   deps
   | with_entries(
@@ -89,7 +105,8 @@ def parse_deps(deps):
           | {release_date,
              version: version::parse(.version),
              cpe: $cpes[0],
-             cpes: $cpes}));
+             cpes: $cpes,
+             names: dep_names(.; $cpes)}));
 
 def iterate_cves(cves; deps; ignored):
   [cves[]
@@ -105,6 +122,94 @@ def iterate_cves(cves; deps; ignored):
 def scan($deps; $ignored):
   deps_list($deps[0]) as $dependencies
   | iterate_cves(.vulnerabilities; $dependencies; $ignored[0]);
+
+def analyzed_ids(cves):
+  # ids of NVD records that carry CPE configurations
+  [cves[] | select(.cve.configurations != null) | .cve.id];
+
+# CVE Program (cvelistV5) records, as compacted by `dependency/cve:cvelist_fetch`:
+# `{id, assigner, published, descriptions, metrics, affected}`, where `affected`
+# holds the CNA and ADP `affected[]` entries. These carry the affected versions
+# asserted on publication, so they cover CVEs that NVD has not (yet) analyzed.
+
+def cna_version_text(text):
+  # free-text constraints as used by eg the GitHub CNA: `< 1.34.7`, `>= 2.0, < 2.1.3`
+  reduce (text | split(",")[] | gsub("^\\s+|\\s+$"; "")) as $constraint ({};
+    (($constraint | capture("^(?<op>>=|<=|>|<|=)?\\s*(?<version>\\S+)$")?) // null) as $m
+    | if $m == null then .invalid = true
+      elif $m.op == "<" then .end_exc = $m.version
+      elif $m.op == "<=" then .end_inc = $m.version
+      elif $m.op == ">" then .start_exc = $m.version
+      elif $m.op == ">=" then .start_inc = $m.version
+      else .exact = $m.version
+      end);
+
+def cna_versions(entry):
+  # normalize a CNA `versions[]` entry to the start/end bounds used for NVD
+  # cpe matching, or `{exact}` for a single version
+  (if entry.lessThan != null then
+     {start_inc: entry.version, end_exc: entry.lessThan}
+   elif entry.lessThanOrEqual != null then
+     {start_inc: entry.version, end_inc: entry.lessThanOrEqual}
+   else
+     cna_version_text(entry.version // "*")
+   end)
+  | with_entries(select(.value != "0" and .value != "*" and .value != "unspecified"));
+
+def match_cna_version(versions; dep):
+  versions as $v
+  | if $v.invalid then false
+    elif $v.exact != null then version::eq(dep.version; version::parse($v.exact))
+    else match_cpe_version({versions: $v}; dep)
+    end;
+
+def cna_affected_versions(affected):
+  # the affected ranges asserted by an `affected[]` entry
+  [affected.versions[]? | select(.status == "affected") | cna_versions(.)]
+  | if length == 0 and affected.defaultStatus == "affected" then [{}] else . end;
+
+def match_cna_name(affected; dep):
+  # match on the entry's cpes where given, otherwise on vendor/product
+  if (affected.cpes // []) != [] then
+    any(affected.cpes[] | parse_cpe_tag(.) as $cpe
+        | dep.cpes[]
+        | select(.vendor == $cpe.vendor and .product == $cpe.product);
+        true)
+  else
+    {vendor: ((affected.vendor // "") | ascii_downcase),
+     product: ((affected.product // "") | ascii_downcase)} as $name
+    | $name.product != ""
+      and any(dep.names[]; . == $name)
+  end;
+
+def match_dep_cna(affected; cve; dep):
+  match_cna_name(affected; dep)
+  and (updated_since_cve({published: cve.published}; dep) | not)
+  and any(cna_affected_versions(affected)[]; match_cna_version(.; dep));
+
+def matching_cna_deps(affected; cve; deps):
+  [affected[] as $affected
+   | deps[] as $dep
+   | select(match_dep_cna($affected; cve; $dep))
+   | {affected: $affected, dep: $dep}];
+
+def get_cna_severity(cve):
+  [cve.metrics[]?
+   | ((.cvssV4_0 // .cvssV3_1 // .cvssV3_0)? | .baseSeverity?) // empty]
+  | first // "UNKNOWN";
+
+def iterate_cna_cves(cves; deps; ignored):
+  [cves[]
+   | . as $cve
+   | select(ignored | index($cve.id) | not)
+   | matching_cna_deps($cve.affected; $cve; deps)
+   | select(length > 0)
+   | {id: $cve.id, matched: ., cve: $cve}];
+
+# As `scan`, over cvelist records (`.records`).
+def scan_cna($deps; $ignored):
+  deps_list($deps[0]) as $dependencies
+  | iterate_cna_cves(.records; $dependencies; $ignored[0]);
 
 def matched_dependencies(cve):
   cve as $cve
@@ -124,16 +229,55 @@ def matched_dependencies(cve):
 
   ";
 
+def cna_version_strings(affected):
+  [affected.versions[]? | select(.status == "affected")
+   | if .lessThan then "\(.version) <= v < \(.lessThan)"
+     elif .lessThanOrEqual then "\(.version) <= v <= \(.lessThanOrEqual)"
+     else .version end]
+  | if length == 0 then "(all)" else join(", ") end;
+
+def pending_dependencies(cve):
+  cve as $cve
+  | cve.matched[]
+  | "Dep: \(ansi::green)\(ansi::bold)\(.dep.name)@\(.dep.version.string)\(ansi::reset) \(ansi::green)(\(.dep.release_date)\(ansi::reset))
+
+  Severity: \(get_cna_severity($cve.cve))
+  Published: \(to_date_string($cve.cve.published))
+  Assigner: \($cve.cve.assigner // "")
+  Affected: \(.affected.vendor // "")/\(.affected.product // "") \(cna_version_strings(.affected))
+  CPEs: \((.affected.cpes // []) | join(", "))
+
+  ---------------------------------
+
+  \($cve.cve.descriptions[0].value)
+
+  ";
+
 def cve_report(cve):
   "================ \(ansi::red)\(ansi::bold)\(ansi::underline)\(cve.id)\(ansi::reset) ================
-  \(matched_dependencies(cve))
+  \(if cve.status == "pending" then pending_dependencies(cve) else matched_dependencies(cve) end)
+  ";
+
+def pending_header:
+  "
+  \(ansi::bold)Pending NVD analysis\(ansi::reset)
+  Matched on the affected versions asserted by the CNA, not (yet) confirmed by NVD CPE analysis.
+
   ";
 
 def summary(matches):
-  "
+  ([matches[] | select(.status == "pending")] | length) as $pending
+  | "
   ==========================================
-  \(ansi::red)\(ansi::bold)\(matches | length) potential CVE vulnerabilities found\(ansi::reset)";
+  \(ansi::red)\(ansi::bold)\(matches | length) potential CVE vulnerabilities found\(ansi::reset)"
+    + (if $pending > 0 then " (\($pending) pending NVD analysis)" else "" end);
 
 def report(matches):
   matches as $matches
-  | (matches | map(cve_report(.)) | join("\n")) + summary($matches);
+  | [$matches[] | select(.status != "pending")] as $analyzed
+  | [$matches[] | select(.status == "pending")] as $pending
+  | ($analyzed | map(cve_report(.)) | join("\n"))
+    + (if ($pending | length) > 0
+       then pending_header + ($pending | map(cve_report(.)) | join("\n"))
+       else "" end)
+    + summary($matches);

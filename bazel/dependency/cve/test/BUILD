@@ -6,7 +6,10 @@ load(":analysis_test.bzl", "fetch_action_test", "update_analysis_test")
 
 filegroup(
     name = "data",
-    srcs = glob(["cve_data/*.json"]),
+    srcs = glob([
+        "cve_data/*.json",
+        "cve_data/cvelist/*.json",
+    ]),
 )
 
 label_flag(
@@ -56,6 +59,8 @@ sh_test(
         ":empty_data",
         ":empty_deps",
         ":empty_ignored",
+        "@envoy_toolshed_jq//:cve/analyzed.jq",
+        "@envoy_toolshed_jq//:cve/cna_matcher.jq",
         "@envoy_toolshed_jq//:cve/matcher.jq",
         "@envoy_toolshed_jq//:cve/report.jq",
         "@envoy_toolshed_jq//:jq",
@@ -67,6 +72,8 @@ sh_test(
         "CVE_FILES": "$(rlocationpath :empty_data)",
         "CVES_IGNORED": "$(rlocationpath :empty_ignored)",
         "JQ_BIN": "$(rlocationpath @envoy_toolshed_jq//:jq)",
+        "JQ_CVE_ANALYZED": "$(rlocationpath @envoy_toolshed_jq//:cve/analyzed.jq)",
+        "JQ_CNA_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/cna_matcher.jq)",
         "JQ_CVE_MATCHER": "$(rlocationpath @envoy_toolshed_jq//:cve/matcher.jq)",
         "JQ_REPORT": "$(rlocationpath @envoy_toolshed_jq//:cve/report.jq)",
         "SCANNED": "$(rlocationpath :cves.scanned)",
@@ -94,6 +101,11 @@ sh_binary(
     srcs = ["fake_fetch.sh"],
 )
 
+sh_binary(
+    name = "fake_cvelist_fetch",
+    srcs = ["fake_cvelist_fetch.sh"],
+)
+
 sh_test(
     name = "update_test",
     srcs = ["update_test.sh"],
@@ -102,11 +114,13 @@ sh_test(
         ":cves_data",
         ":cves_start_year",
         ":data",
+        ":fake_cvelist_fetch",
         ":fake_fetch",
         "//dependency/cve:update.sh",
     ],
     env = {
         "CVE_FILES": "$(rlocationpath :cves_data)",
+        "CVELIST_FETCHER": "$(rlocationpath :fake_cvelist_fetch)",
         "FETCHER": "$(rlocationpath :fake_fetch)",
         "FIXTURE": "$(rlocationpath cve_data/2024-01.json)",
         "START_YEAR_PATH": "$(rlocationpath :cves_start_year)",

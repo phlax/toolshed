@@ -1,4 +1,4 @@
-"""Reusable NVD CVE scanning and source-data updates."""
+"""Reusable CVE scanning (NVD and CVE Program data) and source-data updates."""
 
 load("@aspect_bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@aspect_bazel_lib//lib:yq.bzl", "yq")
@@ -9,11 +9,14 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 # jq with the toolshed modules importable.
 _JQ = Label("@envoy_toolshed_jq//:jq")
 _MATCHER = Label("@envoy_toolshed_jq//:cve/matcher.jq")
+_CNA_MATCHER = Label("@envoy_toolshed_jq//:cve/cna_matcher.jq")
+_ANALYZED = Label("@envoy_toolshed_jq//:cve/analyzed.jq")
 _REPORT = Label("@envoy_toolshed_jq//:cve/report.jq")
 _SCAN = Label("//dependency/cve:scan.sh")
 _TEST = Label("//dependency/cve:test.sh")
 _UPDATE = Label("//dependency/cve:update.sh")
 _FETCH = Label("//dependency/cve:fetch")
+_CVELIST_FETCH = Label("//dependency/cve:cvelist_fetch")
 _RUNFILES = Label("@bazel_tools//tools/bash/runfiles")
 
 def _data_manifest_impl(ctx):
@@ -73,7 +76,7 @@ def _fetch_data_impl(ctx):
             "requires-network": "1",
         },
         mnemonic = "CveFetch",
-        progress_message = "Fetching NVD CVE data for %{label}",
+        progress_message = "Fetching CVE data for %{label}",
     )
     return [DefaultInfo(files = depset([output]))]
 
@@ -99,7 +102,8 @@ def cve_scan(
         name: Scan binary name; also prefixes generated helpers.
         deps: Raw dependency JSON, keyed by dependency name.
         config: YAML containing start_year and ignored_cves.
-        cve_data: Files (or label_flag) containing NVD 2.0 month JSON pages.
+        cve_data: Files (or label_flag) containing NVD 2.0 month JSON pages, and
+            optionally CVE Program (cvelistV5) month files under `cvelist/`.
         cve_data_dir: Package-relative directory written by <name>.update.
         visibility: Visibility of generated targets.
         target_compatible_with: Update target constraints; defaults to Linux.
@@ -127,7 +131,7 @@ def cve_scan(
         data = cve_data,
         **helpers
     )
-    data = [_JQ, _MATCHER, _REPORT, cve_data, ":" + name + "_data"]
+    data = [_JQ, _MATCHER, _CNA_MATCHER, _ANALYZED, _REPORT, cve_data, ":" + name + "_data"]
     env = {
         "JQ_BIN": "$(rlocationpath %s)" % _JQ,
         "CVE_FILES": "$(rlocationpath :%s_data)" % name,
@@ -141,6 +145,8 @@ def cve_scan(
             "CPE_DEPS": "$(rlocationpath :%s_deps)" % name,
             "CVES_IGNORED": "$(rlocationpath :%s_ignored)" % name,
             "JQ_CVE_MATCHER": "$(rlocationpath %s)" % _MATCHER,
+            "JQ_CNA_MATCHER": "$(rlocationpath %s)" % _CNA_MATCHER,
+            "JQ_CVE_ANALYZED": "$(rlocationpath %s)" % _ANALYZED,
         }),
         **common
     )
@@ -167,11 +173,12 @@ def cve_scan(
     sh_binary(
         name = name + "_fetcher",
         srcs = [_UPDATE],
-        data = [cve_data, ":" + name + "_data", _FETCH, ":" + name + "_start_year"],
+        data = [cve_data, ":" + name + "_data", _FETCH, _CVELIST_FETCH, ":" + name + "_start_year"],
         deps = [_RUNFILES],
         env = {
             "CVE_FILES": "$(rlocationpath :%s_data)" % name,
             "FETCHER": "$(rlocationpath %s)" % _FETCH,
+            "CVELIST_FETCHER": "$(rlocationpath %s)" % _CVELIST_FETCH,
             "START_YEAR_PATH": "$(rlocationpath :%s_start_year)" % name,
         },
         **update_kwargs

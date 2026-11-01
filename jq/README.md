@@ -27,7 +27,7 @@ which consumer happens to call it. The directory name is the scope:
 | `github/` | GitHub API / Actions / GFM-shaped input or output (`actions.jq`, `gfm.jq`) |
 | `bazel/` | Bazel `aquery`/BEP/`BUILD`-shaped data (`aquery.jq`, `dep.jq`, `registry.jq`, `version.jq`) |
 | `clang/` | clang tooling output (`tidy.jq`, clang-tidy stdout parsing) |
-| `cve/` | NVD CVE matching and terminal reports (`utils.jq`, `matcher.jq`, `report.jq`) |
+| `cve/` | NVD and CVE Program CVE matching and terminal reports (`utils.jq`, `matcher.jq`, `cna_matcher.jq`, `analyzed.jq`, `report.jq`) |
 | `envoy/` | reserved for Envoy release/archive policy filters (not added yet) |
 | root | generic helpers with no domain-specific knowledge (`args.jq`, `bash.jq`, `str.jq`, `utils.jq`, `validate.jq`) |
 
@@ -99,6 +99,35 @@ importable rendering function; `cve/matcher.jq` and `cve/report.jq` are executab
 filters, not importable modules. Matching preserves the upstream vendor/product,
 version-bound, and release-date policy; it is not an evaluator of NVD's full
 configuration boolean expressions.
+
+### CVE Program records
+
+NVD only adds CPE configurations when it analyzes a CVE, and most recently
+published CVEs are unanalyzed (`Awaiting Analysis`, `Received`) or will never
+be (`Deferred`), so they can never match above. `utils::scan_cna($deps;
+$ignored)` (executable: `cve/cna_matcher.jq`) reads compacted CVE Program
+(cvelistV5) records, `{records: [{id, assigner, published, descriptions,
+metrics, affected}]}` as written by `dependency/cve:cvelist_fetch`, and
+matches the CNA/ADP asserted `affected[]` entries instead:
+
+- on `cpes`, where an entry carries them, against the dependency CPE tags, or
+- on `vendor`/`product` (case-insensitively) against the dependency's
+  `names`: the CPE tags, the same with any `_project` vendor suffix removed,
+  and the github `owner`/`repo` of the first `github.com` url in the
+  dependency's `urls`, `project_url` or `license_url`.
+
+Versions come from the `affected` status entries, as `lessThan` /
+`lessThanOrEqual` ranges starting at `version`, free-text constraints
+(`< 1.34.7`, `>= 2.0, < 2.1.3`) or single versions, and `defaultStatus:
+affected` with no versions matches all. The release-date policy applies as for
+NVD. The records returned have the shape `{id, matched: [{affected, dep}],
+cve}`.
+
+`cve/analyzed.jq` lists the ids of NVD records that have CPE configurations.
+The scan script keeps CNA matches only for CVEs not in that list, so NVD stays
+authoritative wherever it has analyzed a CVE, and marks them `status:
+pending`. `utils::report` renders those in a separate `Pending NVD analysis`
+section and counts them in the summary.
 
 ## Consuming from Bazel
 
