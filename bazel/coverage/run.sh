@@ -90,6 +90,8 @@ run_coverage() {
     fi
     local archive="${report%.dat}.tar.zst"
     mv -f "$report" "$archive"
+    # Replace any previous report so a run with a different target set cannot leave stale pages.
+    rm -rf "$OUTPUT_DIR"
     mkdir -p "$OUTPUT_DIR"
     bazel run "${BUILD_OPTIONS[@]}" --nobuild_tests_only "$ZSTD_TARGET" -- -d -c "$archive" \
         | tar -xf - -C "$OUTPUT_DIR"
