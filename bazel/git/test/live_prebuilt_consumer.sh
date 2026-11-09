@@ -76,7 +76,7 @@ EOF
         --repo_env=ANDROID_HOME= \
         --incompatible_default_to_explicit_init_py \
         --registry=https://bcr.bazel.build/ \
-        --registry=https://raw.githubusercontent.com/envoyproxy/bazel-registry/1aaaccb88f2950bfdebb9f4d25965f5536165401 \
+        --registry=https://raw.githubusercontent.com/envoyproxy/bazel-registry/99aa31e2d4adaf1c58e12532ff14d29e81c62609 \
         --repo_contents_cache= \
         --nobuild \
         //:git_version \
