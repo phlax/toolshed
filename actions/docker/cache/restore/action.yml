@@ -23,6 +23,9 @@ runs:
       key: ${{ inputs.image-tag }}${{ inputs.key-suffix }}
       command: |
         systemctl stop docker docker.socket
+        # The runner's Docker state is set aside as DOCKER_DIR.orig, where DOCKER_DIR is either
+        # /var/lib/docker or the directory mounted on it.
+        DOCKER_DIR=/var/lib/docker
         if mountpoint -q /var/lib/docker; then
             MOUNT_SOURCE=$(findmnt -n -o SOURCE --mountpoint /var/lib/docker)
             MOUNT_SOURCE=$(echo "$MOUNT_SOURCE" | sed -E 's/.*\[([^]]+)\].*/\1/')
@@ -32,6 +35,7 @@ runs:
 
             umount /var/lib/docker
             if [[ -n "$MOUNT_SOURCE" && -d "$MOUNT_SOURCE" ]]; then
+                DOCKER_DIR="$MOUNT_SOURCE"
                 mv "$MOUNT_SOURCE" "${MOUNT_SOURCE}.orig"
                 mkdir -p "$MOUNT_SOURCE"
                 mount -o bind "$MOUNT_SOURCE" /var/lib/docker
@@ -50,6 +54,25 @@ runs:
             mount -o bind "${{ inputs.bind-mount }}" /var/lib/docker
         fi
         zstd --stdout -d docker.tar.zst | tar -xf - -C /var/lib/docker
+        if systemctl start docker; then
+            exit 0
+        fi
+        # Docker would not start on the restored state. Say why, then put the runner's own state
+        # back so the job can pull the image instead of failing.
+        echo "::warning::Docker failed to start with the restored image cache, falling back to pulling"
+        systemctl status docker.service --no-pager -l || true
+        journalctl -u docker.service --no-pager -n 100 || true
+        findmnt /var/lib/docker || true
+        df -h /var/lib/docker || true
+        while mountpoint -q /var/lib/docker; do
+            umount /var/lib/docker
+        done
+        mv "$DOCKER_DIR" "${DOCKER_DIR}.failed"
+        mv "${DOCKER_DIR}.orig" "$DOCKER_DIR"
+        if [[ "$DOCKER_DIR" != /var/lib/docker ]]; then
+            mount -o bind "$DOCKER_DIR" /var/lib/docker
+        fi
+        echo "${DOCKER_DIR}.failed" > /tmp/NEEDS_DELETE
         systemctl start docker
       mount-tmpfs: ${{ inputs.mount-tmpfs }}
       run-as-sudo: true
