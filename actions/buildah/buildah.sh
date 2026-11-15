@@ -8,6 +8,7 @@ set -o pipefail
 : "${BUILDAH_RETRY_DELAY:=5}"        # base delay (seconds), doubled each attempt
 : "${BUILDAH_LOG_LEVEL:=warn}"       # buildah --log-level; bump to info/debug for triage
 : "${BUILDAH_ERROR_TAIL_LINES:=40}"  # max lines of buildah output in annotation tail
+: "${BUILDAH_PUSH_JOBS:=1}"          # concurrent `manifest push`es (1: each in turn)
 
 # Subcommands we are willing to retry. `create`/`add` are local and not worth
 # retrying; `push` talks to a registry and is the one that flakes.
@@ -123,11 +124,58 @@ _buildah_command () {
     return "${rc}"
 }
 
+# Concurrent pushes (`BUILDAH_PUSH_JOBS` > 1): each runs in the background, with its output (and
+# any failure annotation) captured, and printed when it completes. A push only follows the
+# `create`/`add`s of its manifest list, which run in turn before it.
+_PUSH_PIDS=()
+declare -A _PUSH_LOGS=()
+_PUSH_RC=0
+
+# Wait for a push to complete, print its output, and record any failure.
+_push_reap () {
+    local pid="" rc=0 remaining=() p
+    wait -n -p pid "${_PUSH_PIDS[@]}" || rc=$?
+    cat "${_PUSH_LOGS[${pid}]}"
+    rm -f "${_PUSH_LOGS[${pid}]}"
+    unset "_PUSH_LOGS[${pid}]"
+    for p in "${_PUSH_PIDS[@]}"; do
+        [[ "${p}" != "${pid}" ]] && remaining+=("${p}")
+    done
+    _PUSH_PIDS=("${remaining[@]}")
+    if (( rc != 0 )); then
+        _PUSH_RC="${rc}"
+    fi
+}
+
+_push_background () {
+    local logfile
+    while (( ${#_PUSH_PIDS[@]} >= BUILDAH_PUSH_JOBS )); do
+        _push_reap
+    done
+    logfile="$(mktemp -t buildah-push.XXXXXX)"
+    _buildah_command manifest "${@}" > "${logfile}" 2>&1 &
+    _PUSH_PIDS+=("$!")
+    _PUSH_LOGS[$!]="${logfile}"
+    echo "Started: manifest ${*}"
+}
+
+# Wait for the concurrent pushes, and fail if any did.
+handle_manifest_wait () {
+    while (( ${#_PUSH_PIDS[@]} > 0 )); do
+        _push_reap
+    done
+    return "${_PUSH_RC}"
+}
+
 handle_manifest () {
     local subcommand="${1}"
     if [[ "${subcommand}" == "push" && "${DRY_RUN}" == "true" ]]; then
         _print_command "[DRY RUN] manifest" "${@}"
         _end_command
+        return
+    fi
+    if [[ "${subcommand}" == "push" ]] && (( BUILDAH_PUSH_JOBS > 1 )); then
+        _push_background "${@}"
         return
     fi
     _buildah_command manifest "${@}"
@@ -140,4 +188,4 @@ if ! buildah version; then
 fi
 _end_command
 
-export -f handle_manifest
+export -f handle_manifest handle_manifest_wait
